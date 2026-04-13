@@ -2,7 +2,7 @@
 
 import { motion } from "framer-motion";
 import { useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   type UserProfile,
   isProfileFormValid,
@@ -20,12 +20,91 @@ const activities: { id: ActivityLevel; label: string }[] = [
   { id: "active", label: "גבוהה" },
 ];
 
+function stripLeadingZeros(raw: string): string {
+  // Keep "0." and "0," patterns (even though we normalize to ".")
+  if (/^0[.,]/.test(raw)) return raw;
+  return raw.replace(/^0+(?=\d)/, "");
+}
+
+function sanitizeDecimal(raw: string, allowDecimal: boolean): string {
+  const trimmed = raw.trim();
+  if (trimmed === "") return "";
+  const normalized = trimmed.replace(",", ".");
+  let out = "";
+  let dotSeen = false;
+  for (const ch of normalized) {
+    if (ch >= "0" && ch <= "9") {
+      out += ch;
+      continue;
+    }
+    if (allowDecimal && ch === "." && !dotSeen) {
+      dotSeen = true;
+      out += ".";
+    }
+  }
+  return stripLeadingZeros(out);
+}
+
+function parseOrNull(s: string): number | null {
+  if (!s.trim()) return null;
+  const n = Number(s);
+  return Number.isFinite(n) ? n : null;
+}
+
 export default function TdeePage() {
   const router = useRouter();
   const [p, setP] = useState<UserProfile | null>(null);
+  const [ageText, setAgeText] = useState("");
+  const [heightText, setHeightText] = useState("");
+  const [weightText, setWeightText] = useState("");
+  const [goalWeightText, setGoalWeightText] = useState("");
+  const [deficitText, setDeficitText] = useState("");
+
+  const t = useMemo(() => {
+    if (!p) return 0;
+    return tdee(p.gender, p.weightKg, p.heightCm, p.age, p.activity);
+  }, [p]);
+
+  const target = useMemo(() => {
+    if (!p) return 0;
+    return dailyCalorieTarget(
+      p.gender,
+      p.weightKg,
+      p.heightCm,
+      p.age,
+      p.deficit,
+      p.activity
+    );
+  }, [p]);
 
   useEffect(() => {
-    setP(loadProfile());
+    const loaded = loadProfile();
+    const registered = loaded.onboardingComplete === true;
+
+    if (!registered) {
+      // On first entry: show empty fields (no "0" and no defaults).
+      setP({
+        ...loaded,
+        age: 0,
+        heightCm: 0,
+        weightKg: 0,
+        goalWeightKg: 0,
+        deficit: 0,
+      });
+      setAgeText("");
+      setHeightText("");
+      setWeightText("");
+      setGoalWeightText("");
+      setDeficitText("");
+      return;
+    }
+
+    setP(loaded);
+    setAgeText(String(loaded.age ?? ""));
+    setHeightText(String(loaded.heightCm ?? ""));
+    setWeightText(String(loaded.weightKg ?? ""));
+    setGoalWeightText(String(loaded.goalWeightKg ?? ""));
+    setDeficitText(String(loaded.deficit ?? ""));
   }, []);
 
   if (!p) {
@@ -36,16 +115,6 @@ export default function TdeePage() {
       </div>
     );
   }
-
-  const t = tdee(p.gender, p.weightKg, p.heightCm, p.age, p.activity);
-  const target = dailyCalorieTarget(
-    p.gender,
-    p.weightKg,
-    p.heightCm,
-    p.age,
-    p.deficit,
-    p.activity
-  );
 
   const registered = p.onboardingComplete === true;
   const formValid = isProfileFormValid(p);
@@ -58,6 +127,16 @@ export default function TdeePage() {
       saveProfile(next);
       return next;
     });
+  }
+
+  function focusClearZero(e: React.FocusEvent<HTMLInputElement>) {
+    if (e.currentTarget.value.trim() === "0") {
+      // Clear is more convenient than forcing delete.
+      e.currentTarget.value = "";
+      e.currentTarget.select();
+    } else {
+      e.currentTarget.select();
+    }
   }
 
   function finishRegistration() {
@@ -144,12 +223,25 @@ export default function TdeePage() {
         <label className="block">
           <span className="text-sm font-semibold text-[#333333]">גיל</span>
           <input
-            type="number"
-            min={12}
-            max={120}
-            value={p.age}
-            onChange={(e) => update("age", Number(e.target.value) || 0)}
+            type="text"
+            inputMode="numeric"
+            value={ageText}
+            onFocus={focusClearZero}
+            onChange={(e) => {
+              const next = sanitizeDecimal(e.target.value, false);
+              setAgeText(next);
+              const n = parseOrNull(next);
+              if (n == null) return;
+              update("age", Math.max(12, Math.min(120, Math.round(n))) as any);
+            }}
+            onBlur={() => {
+              const n = parseOrNull(ageText);
+              if (n == null) return;
+              const clamped = Math.max(12, Math.min(120, Math.round(n)));
+              setAgeText(String(clamped));
+            }}
             className="input-luxury-dark mt-1 w-full"
+            placeholder="הזיני גיל…"
           />
         </label>
 
@@ -158,12 +250,28 @@ export default function TdeePage() {
             גובה (ס״מ)
           </span>
           <input
-            type="number"
-            min={100}
-            max={230}
-            value={p.heightCm}
-            onChange={(e) => update("heightCm", Number(e.target.value) || 0)}
+            type="text"
+            inputMode="numeric"
+            value={heightText}
+            onFocus={focusClearZero}
+            onChange={(e) => {
+              const next = sanitizeDecimal(e.target.value, false);
+              setHeightText(next);
+              const n = parseOrNull(next);
+              if (n == null) return;
+              update(
+                "heightCm",
+                Math.max(100, Math.min(230, Math.round(n))) as any
+              );
+            }}
+            onBlur={() => {
+              const n = parseOrNull(heightText);
+              if (n == null) return;
+              const clamped = Math.max(100, Math.min(230, Math.round(n)));
+              setHeightText(String(clamped));
+            }}
             className="input-luxury-dark mt-1 w-full"
+            placeholder="הזיני גובה…"
           />
         </label>
 
@@ -172,13 +280,25 @@ export default function TdeePage() {
             משקל נוכחי (ק״ג)
           </span>
           <input
-            type="number"
-            min={30}
-            max={250}
-            step={0.1}
-            value={p.weightKg}
-            onChange={(e) => update("weightKg", Number(e.target.value) || 0)}
+            type="text"
+            inputMode="numeric"
+            value={weightText}
+            onFocus={focusClearZero}
+            onChange={(e) => {
+              const next = sanitizeDecimal(e.target.value, false);
+              setWeightText(next);
+              const n = parseOrNull(next);
+              if (n == null) return;
+              update("weightKg", Math.max(30, Math.min(250, n)) as any);
+            }}
+            onBlur={() => {
+              const n = parseOrNull(weightText);
+              if (n == null) return;
+              const clamped = Math.max(30, Math.min(250, n));
+              setWeightText(String(clamped));
+            }}
             className="input-luxury-dark mt-1 w-full"
+            placeholder="הזיני משקל…"
           />
         </label>
 
@@ -187,13 +307,25 @@ export default function TdeePage() {
             יעד משקל (ק״ג)
           </span>
           <input
-            type="number"
-            min={30}
-            max={250}
-            step={0.1}
-            value={p.goalWeightKg}
-            onChange={(e) => update("goalWeightKg", Number(e.target.value) || 0)}
+            type="text"
+            inputMode="numeric"
+            value={goalWeightText}
+            onFocus={focusClearZero}
+            onChange={(e) => {
+              const next = sanitizeDecimal(e.target.value, false);
+              setGoalWeightText(next);
+              const n = parseOrNull(next);
+              if (n == null) return;
+              update("goalWeightKg", Math.max(30, Math.min(250, n)) as any);
+            }}
+            onBlur={() => {
+              const n = parseOrNull(goalWeightText);
+              if (n == null) return;
+              const clamped = Math.max(30, Math.min(250, n));
+              setGoalWeightText(String(clamped));
+            }}
             className="input-luxury-dark mt-1 w-full"
+            placeholder="הזיני יעד…"
           />
         </label>
 
@@ -221,13 +353,25 @@ export default function TdeePage() {
             גירעון יומי מטרה (קק״ל)
           </span>
           <input
-            type="number"
-            min={100}
-            max={1500}
-            step={50}
-            value={p.deficit}
-            onChange={(e) => update("deficit", Number(e.target.value) || 0)}
+            type="text"
+            inputMode="numeric"
+            value={deficitText}
+            onFocus={focusClearZero}
+            onChange={(e) => {
+              const next = sanitizeDecimal(e.target.value, false);
+              setDeficitText(next);
+              const n = parseOrNull(next);
+              if (n == null) return;
+              update("deficit", Math.max(100, Math.min(1500, Math.round(n))) as any);
+            }}
+            onBlur={() => {
+              const n = parseOrNull(deficitText);
+              if (n == null) return;
+              const clamped = Math.max(100, Math.min(1500, Math.round(n)));
+              setDeficitText(String(clamped));
+            }}
             className="input-luxury-dark mt-1 w-full"
+            placeholder="הזיני יעד…"
           />
         </label>
       </motion.section>
