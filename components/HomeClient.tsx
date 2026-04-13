@@ -472,12 +472,6 @@ export function HomeClient() {
       setGeminiInsight({ kind: "idle" });
       return;
     }
-    // Only ask Gemini if local dictionary has no matches.
-    if (homeSearchLoading) return;
-    if (homeLocalRows.length > 0) {
-      setGeminiInsight({ kind: "idle" });
-      return;
-    }
     const ac = new AbortController();
     setGeminiInsight({ kind: "loading" });
     void (async () => {
@@ -521,7 +515,7 @@ export function HomeClient() {
       }
     })();
     return () => ac.abort();
-  }, [debouncedFoodSearch, homeSearchLoading, homeLocalRows.length]);
+  }, [debouncedFoodSearch]);
 
   const starredForMealCount = useMemo(
     () => entries.filter((e) => e.mealStarred).length,

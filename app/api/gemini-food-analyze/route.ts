@@ -15,6 +15,22 @@ export type GeminiFoodResult = {
   fat: number;
 };
 
+export async function GET() {
+  const hasKey = Boolean(process.env.GOOGLE_GENERATIVE_AI_API_KEY?.trim());
+  return NextResponse.json(
+    {
+      ok: true,
+      hasKey,
+      hint: hasKey
+        ? "Key detected on server"
+        : "Missing GOOGLE_GENERATIVE_AI_API_KEY in this deploy context",
+    },
+    // Always return 200 so the browser doesn't show a generic "page not working"
+    // error page for diagnostics.
+    { status: 200 }
+  );
+}
+
 function num(v: unknown): number | null {
   if (typeof v === "number" && Number.isFinite(v)) return v;
   if (typeof v === "string") {
