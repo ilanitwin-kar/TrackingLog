@@ -117,6 +117,11 @@ export function CalorieBoardGrid({ profileRev = 0 }: { profileRev?: number }) {
     board;
 
   /** כל המשבצות — אותו גודל (ריבוע), תוכן בתוך המסגרת בלי הרחבה */
+  const plannedDailyDeficitKcal = Math.max(
+    0,
+    Math.round(loadProfile().deficit || 0)
+  );
+
   const cellFixed =
     "aspect-square w-full min-h-0 min-w-0 max-w-full shrink-0 overflow-hidden";
 
@@ -127,7 +132,7 @@ export function CalorieBoardGrid({ profileRev = 0 }: { profileRev?: number }) {
         dir="rtl"
       >
         <div
-          className="grid grid-cols-3 gap-3 overflow-visible sm:grid-cols-4 sm:gap-3"
+          className="grid grid-cols-2 gap-3 overflow-visible sm:grid-cols-3 sm:gap-3 md:grid-cols-4"
           role="list"
           aria-label={`מפת התקדמות, ${daysRemaining} משבצות`}
         >
@@ -138,6 +143,10 @@ export function CalorieBoardGrid({ profileRev = 0 }: { profileRev?: number }) {
             const consumed = entries.reduce((s, e) => s + e.calories, 0);
             /** גירעון בפועל ליום: TDEE − צריכה (רק כשיש רישום לאותו תאריך) */
             const actualDeficitKcal = hasData ? tdeeKcal - consumed : null;
+            const revealedDeficitKcal =
+              actualDeficitKcal != null
+                ? actualDeficitKcal
+                : plannedDailyDeficitKcal;
 
             const isGold = goldMap[String(i)] === true;
             const isLastSquare = i === dateKeys.length - 1;
@@ -148,17 +157,12 @@ export function CalorieBoardGrid({ profileRev = 0 }: { profileRev?: number }) {
               i
             );
 
-            const deficitGoldOnly =
-              showReveal && hasData && actualDeficitKcal !== null ? (
-                <span className="text-[9px] font-semibold tabular-nums leading-none text-[#78350f]/90 sm:text-[10px]">
-                  {actualDeficitKcal > 0 ? "+" : ""}
-                  {Math.round(actualDeficitKcal)} קק״ל
-                </span>
-              ) : showReveal ? (
-                <span className="text-[9px] font-medium tabular-nums text-[#92400e]/75 sm:text-[10px]">
-                  —
-                </span>
-              ) : null;
+            const deficitGoldOnly = showReveal ? (
+              <span className="text-[10px] font-bold tabular-nums leading-none text-[#78350f]/90 sm:text-[11px]">
+                {revealedDeficitKcal > 0 ? "+" : ""}
+                {Math.round(revealedDeficitKcal)} kcal
+              </span>
+            ) : null;
 
             const goldMainText =
               isLastSquare && showReveal
@@ -168,7 +172,7 @@ export function CalorieBoardGrid({ profileRev = 0 }: { profileRev?: number }) {
             const lockedMuted = (
               <span
                 dir="rtl"
-                className="line-clamp-4 w-full max-h-full overflow-hidden text-center text-[10px] font-bold leading-snug text-black sm:text-[11px]"
+                className="line-clamp-5 w-full max-h-full overflow-hidden text-center text-[11px] font-bold leading-snug text-black sm:text-[12px]"
               >
                 {milestoneMsg ?? JOURNEY_LOCKED_PLACEHOLDER}
               </span>
@@ -179,7 +183,7 @@ export function CalorieBoardGrid({ profileRev = 0 }: { profileRev?: number }) {
                 {showReveal ? (
                   <span
                     dir="rtl"
-                    className="line-clamp-3 w-full max-h-full overflow-hidden text-center text-[clamp(1.05rem,3.4vw,1.55rem)] font-black leading-tight tracking-tight text-[#1a1200] sm:text-[clamp(1.05rem,3vw,1.5rem)] sm:leading-tight"
+                    className="line-clamp-3 w-full max-h-full overflow-hidden text-center text-[clamp(1.15rem,4.2vw,1.8rem)] font-black leading-tight tracking-tight text-[#1a1200] sm:text-[clamp(1.05rem,3vw,1.5rem)] sm:leading-tight"
                   >
                     {goldMainText}
                   </span>
@@ -196,7 +200,7 @@ export function CalorieBoardGrid({ profileRev = 0 }: { profileRev?: number }) {
                   role="listitem"
                   aria-disabled
                   tabIndex={-1}
-                  className={`relative flex ${cellFixed} flex-col items-stretch justify-between gap-1 rounded-2xl border-2 px-2 py-2 text-center ${fontBoard} ${futureGrey3d}`}
+                  className={`relative flex ${cellFixed} flex-col items-stretch justify-between gap-1 rounded-2xl border-2 px-2.5 py-2.5 text-center ${fontBoard} ${futureGrey3d}`}
                 >
                   <span className="shrink-0 truncate text-xs font-bold tracking-tight text-[#374151] sm:text-sm">
                     {formatDayMonth(dateKey)}
@@ -218,11 +222,17 @@ export function CalorieBoardGrid({ profileRev = 0 }: { profileRev?: number }) {
                 transition={{ type: "spring", stiffness: 520, damping: 30 }}
                 aria-pressed={isGold}
                 aria-label={`${formatDayMonth(dateKey)}${
-                  showReveal && hasData
-                    ? `, גירעון ${Math.round(actualDeficitKcal!)} קק״ל`
+                  showReveal
+                    ? hasData
+                      ? `, גירעון בפועל ${Math.round(
+                          actualDeficitKcal!
+                        )} kcal (TDEE מינוס צריכה)`
+                      : `, גירעון מתוכנן ${Math.round(
+                          plannedDailyDeficitKcal
+                        )} kcal (אין רישום ביומן)`
                     : ""
                 }${isLastSquare && isGold ? ", חגיגת סיום" : ""}`}
-                className={`relative flex ${cellFixed} flex-col items-stretch justify-between gap-1 rounded-2xl border-2 px-2 py-2 text-center transition-shadow focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:ring-offset-2 active:shadow-[inset_0_4px_10px_rgba(0,0,0,0.15)] ${fontBoard} ${
+                className={`relative flex ${cellFixed} flex-col items-stretch justify-between gap-1 rounded-2xl border-2 px-2.5 py-2.5 text-center transition-shadow focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:ring-offset-2 active:shadow-[inset_0_4px_10px_rgba(0,0,0,0.15)] ${fontBoard} ${
                   isGold ? gold3d : grey3d
                 } `}
                 onClick={() => {
