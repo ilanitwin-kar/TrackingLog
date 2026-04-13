@@ -7,10 +7,9 @@ import { BackToMenuButton } from "@/components/BackToMenuButton";
 import { IconCart, IconHeart, IconVerified } from "@/components/Icons";
 import {
   addToShopping,
-  loadFavoriteIds,
   loadShoppingFoodIds,
-  toggleFavorite,
 } from "@/lib/explorerStorage";
+import { isFoodStarred, upsertDictionaryFromScan } from "@/lib/storage";
 
 const fontFood =
   "font-[Calibri,'Segoe_UI','Helvetica_Neue',system-ui,sans-serif]";
@@ -38,17 +37,15 @@ export default function ExplorerPage() {
   const [page, setPage] = useState(1);
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
-  const [favTick, setFavTick] = useState(0);
   const [shopTick, setShopTick] = useState(0);
-  const [toast, setToast] = useState(false);
-
-  const refreshFavs = useCallback(() => setFavTick((x) => x + 1), []);
+  const [dictTick, setDictTick] = useState(0);
+  const [toastMsg, setToastMsg] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!toast) return;
-    const t = window.setTimeout(() => setToast(false), 2400);
+    if (!toastMsg) return;
+    const t = window.setTimeout(() => setToastMsg(null), 2400);
     return () => window.clearTimeout(t);
-  }, [toast]);
+  }, [toastMsg]);
 
   useEffect(() => {
     const trimmed = q.trim();
@@ -121,8 +118,18 @@ export default function ExplorerPage() {
   const hasMore = items.length < total;
 
   function onHeart(row: FoodItem) {
-    toggleFavorite(row.id);
-    refreshFavs();
+    upsertDictionaryFromScan({
+      food: row.name,
+      quantity: 100,
+      unit: "גרם",
+      lastCalories: Math.round(row.calories),
+      caloriesPer100g: row.calories,
+      proteinPer100g: row.protein,
+      carbsPer100g: row.carbs,
+      fatPer100g: row.fat,
+    });
+    setDictTick((x) => x + 1);
+    setToastMsg("נשמר במילון!");
   }
 
   function onCart(row: FoodItem) {
@@ -133,13 +140,8 @@ export default function ExplorerPage() {
       calories: row.calories,
     });
     setShopTick((x) => x + 1);
-    if (added) setToast(true);
+    if (added) setToastMsg("נוסף לרשימה!");
   }
-
-  const favLookup = useMemo(() => {
-    void favTick;
-    return new Set(loadFavoriteIds());
-  }, [favTick]);
 
   const cartLookup = useMemo(() => {
     void shopTick;
@@ -255,7 +257,8 @@ export default function ExplorerPage() {
         ) : (
           <ul className="space-y-2">
             {items.map((row) => {
-              const fav = favLookup.has(row.id);
+              void dictTick;
+              const inDictionary = isFoodStarred(row.name);
               const inCart = cartLookup.has(row.id);
               return (
                 <li
@@ -283,24 +286,29 @@ export default function ExplorerPage() {
                   <div className="flex shrink-0 gap-1">
                     <button
                       type="button"
-                      className={`btn-icon-luxury transition-colors ${
-                        fav ? "bg-[#FADADD]/60 ring-2 ring-[#FADADD]" : ""
+                      className={`btn-icon-luxury flex flex-col items-center justify-center gap-1 transition-colors ${
+                        inDictionary
+                          ? "bg-[#FADADD]/60 ring-2 ring-[#FADADD]"
+                          : ""
                       }`}
-                      title="מועדפים"
-                      aria-label="מועדפים"
-                      aria-pressed={fav}
+                      title="שמירה למילון"
+                      aria-label="שמירה למילון"
+                      aria-pressed={inDictionary}
                       onClick={() => onHeart(row)}
                     >
                       <IconHeart
-                        filled={fav}
+                        filled={inDictionary}
                         className={`h-5 w-5 ${
-                          fav ? "text-[#FADADD]" : "text-[#333333]"
+                          inDictionary ? "text-[#FADADD]" : "text-[#333333]"
                         }`}
                       />
+                      <span className="text-[10px] font-semibold text-[#333333]/80">
+                        מילון
+                      </span>
                     </button>
                     <button
                       type="button"
-                      className={`btn-icon-luxury transition-colors ${
+                      className={`btn-icon-luxury flex flex-col items-center justify-center gap-1 transition-colors ${
                         inCart ? "bg-[#FADADD]/60 ring-2 ring-[#FADADD]" : ""
                       }`}
                       title="רשימת קניות"
@@ -314,6 +322,9 @@ export default function ExplorerPage() {
                           inCart ? "text-[#FADADD]" : "text-[#333333]"
                         }`}
                       />
+                      <span className="text-[10px] font-semibold text-[#333333]/80">
+                        קניות
+                      </span>
                     </button>
                   </div>
                 </li>
@@ -337,7 +348,7 @@ export default function ExplorerPage() {
       </motion.section>
 
       <AnimatePresence>
-        {toast && (
+        {toastMsg && (
           <motion.div
             role="status"
             className="fixed bottom-24 left-1/2 z-[150] -translate-x-1/2 rounded-2xl border-2 border-[#FADADD] bg-white px-5 py-3 text-center text-sm font-semibold text-[#333333] shadow-lg"
@@ -346,7 +357,7 @@ export default function ExplorerPage() {
             exit={{ opacity: 0, y: 8 }}
             transition={{ duration: 0.2 }}
           >
-            נוסף לרשימה!
+            {toastMsg}
           </motion.div>
         )}
       </AnimatePresence>
