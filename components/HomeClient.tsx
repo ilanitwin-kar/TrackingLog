@@ -1226,6 +1226,10 @@ export function HomeClient() {
               enterKeyHint="search"
               value={food}
               onChange={(e) => onFoodChange(e.target.value)}
+              onFocus={(e) => {
+                // Makes it easy to clear and type a new search.
+                if (e.currentTarget.value) e.currentTarget.select();
+              }}
               autoComplete="off"
               autoCorrect="off"
               autoCapitalize="none"

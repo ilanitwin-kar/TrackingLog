@@ -4,28 +4,6 @@ import { AnimatePresence, motion } from "framer-motion";
 import { useCallback, useEffect, useId, useRef, useState } from "react";
 import { loadDictionary } from "@/lib/storage";
 
-type Phase = "scan" | "loading" | "result" | "error";
-
-type ScanResult =
-  | {
-      kind: "local";
-      barcode: string;
-      name: string;
-      caloriesPer100g?: number;
-      proteinPer100g?: number;
-      carbsPer100g?: number;
-      fatPer100g?: number;
-    }
-  | {
-      kind: "ai";
-      barcode: string;
-      name: string;
-      calories: number;
-      protein: number;
-      carbs: number;
-      fat: number;
-    };
-
 export function BarcodeScanModal({
   open,
   onClose,
@@ -36,16 +14,17 @@ export function BarcodeScanModal({
   onApplyToHome: (name: string, note: string) => void;
 }) {
   const titleId = useId();
-  const [phase, setPhase] = useState<Phase>("scan");
-  const [result, setResult] = useState<ScanResult | null>(null);
+  const [phase, setPhase] = useState<"scan" | "loading" | "result" | "error">(
+    "scan"
+  );
+  const [resultName, setResultName] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const handledDecodeRef = useRef(false);
   const scannerRef = useRef<import("html5-qrcode").Html5Qrcode | null>(null);
-  const stopRef = useRef<(() => Promise<void>) | null>(null);
 
   const reset = useCallback(() => {
     setPhase("scan");
-    setResult(null);
+    setResultName(null);
     setErrorMessage(null);
     handledDecodeRef.current = false;
   }, []);
@@ -57,6 +36,7 @@ export function BarcodeScanModal({
   useEffect(() => {
     if (!open || phase !== "scan") return;
     let cancelled = false;
+
     void (async () => {
       try {
         const { Html5Qrcode } = await import("html5-qrcode");
@@ -65,19 +45,6 @@ export function BarcodeScanModal({
           verbose: false,
         });
         scannerRef.current = html5;
-        stopRef.current = async () => {
-          try {
-            await html5.stop();
-          } catch {
-            /* ignore */
-          }
-          try {
-            await html5.clear();
-          } catch {
-            /* ignore */
-          }
-          scannerRef.current = null;
-        };
 
         await html5.start(
           { facingMode: "environment" },
@@ -88,46 +55,42 @@ export function BarcodeScanModal({
             if (!/^\d{8,14}$/.test(cleaned)) return;
             handledDecodeRef.current = true;
             setPhase("loading");
-            await stopRef.current?.();
+            try {
+              await html5.stop();
+            } catch {
+              /* ignore */
+            }
+            try {
+              await html5.clear();
+            } catch {
+              /* ignore */
+            }
+            scannerRef.current = null;
 
             try {
               const dict = loadDictionary();
               const hit = dict.find((d) => d.barcode === cleaned);
-              if (hit) {
-                setResult({
-                  kind: "local",
-                  barcode: cleaned,
-                  name: hit.food,
-                  caloriesPer100g: hit.caloriesPer100g,
-                  proteinPer100g: hit.proteinPer100g,
-                  carbsPer100g: hit.carbsPer100g,
-                  fatPer100g: hit.fatPer100g,
-                });
+              if (hit?.food) {
+                setResultName(hit.food);
                 setPhase("result");
                 return;
               }
 
-              // Fallback: ask Gemini to identify/analyze by barcode (best effort).
+              // Fallback: ask Gemini (best effort) to identify food by barcode.
               const res = await fetch("/api/gemini-food-analyze", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({ query: `ברקוד ${cleaned}` }),
               });
               const data = (await res.json()) as {
-                result?: {
-                  name: string;
-                  calories: number;
-                  protein: number;
-                  carbs: number;
-                  fat: number;
-                } | null;
+                result?: { name: string } | null;
               };
-              if (!res.ok || !data.result) {
-                setErrorMessage("לא נמצא מוצר במאגר המקומי");
+              if (!res.ok || !data.result?.name) {
+                setErrorMessage("לא נמצא במאגר המקומי");
                 setPhase("error");
                 return;
               }
-              setResult({ kind: "ai", barcode: cleaned, ...data.result });
+              setResultName(data.result.name);
               setPhase("result");
             } catch {
               setErrorMessage("בעיית רשת — נסי שוב");
@@ -135,7 +98,7 @@ export function BarcodeScanModal({
             }
           },
           () => {
-            /* frame scan — ignore */
+            /* ignore */
           }
         );
       } catch {
@@ -148,8 +111,16 @@ export function BarcodeScanModal({
 
     return () => {
       cancelled = true;
-      void stopRef.current?.();
-      stopRef.current = null;
+      const s = scannerRef.current;
+      scannerRef.current = null;
+      if (s) {
+        void s.stop().catch(() => {});
+        try {
+          s.clear();
+        } catch {
+          /* ignore */
+        }
+      }
     };
   }, [open, phase]);
 
@@ -192,7 +163,6 @@ export function BarcodeScanModal({
                 סגירה
               </button>
             </div>
-
             {phase === "scan" && (
               <div className="space-y-3">
                 <p className="text-sm text-[#333333]/85">
@@ -217,29 +187,21 @@ export function BarcodeScanModal({
               </div>
             )}
 
-            {phase === "result" && result && (
+            {phase === "result" && resultName && (
               <div className="space-y-4">
                 <div className="rounded-xl border-2 border-[#fadadd] bg-white/90 px-4 py-3">
                   <p className="text-xs font-semibold uppercase tracking-wide text-[#333333]/60">
                     מוצר
                   </p>
                   <p className="mt-1 text-base font-bold leading-snug text-[#333333]">
-                    {result.name}
-                  </p>
-                  <p className="mt-2 text-xs text-[#333333]/65">
-                    ברקוד {result.barcode}
+                    {resultName}
                   </p>
                 </div>
-
                 <button
                   type="button"
                   className="btn-gold w-full rounded-xl py-3 text-base font-bold"
                   onClick={() => {
-                    const note =
-                      result.kind === "local"
-                        ? "נמצא במילון האישי (ברקוד)"
-                        : "זוהה ע״י AI (ברקוד)";
-                    onApplyToHome(result.name, note);
+                    onApplyToHome(resultName, "זוהה מסריקת ברקוד");
                     onClose();
                   }}
                 >

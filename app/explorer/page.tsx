@@ -165,11 +165,7 @@ export default function ExplorerPage() {
         initial={{ opacity: 0, y: 6 }}
         animate={{ opacity: 1, y: 0 }}
       >
-        חפשי כאן במאגר המקומי או חזרי ל־{" "}
-        <Link href="/" className="font-bold text-[#a9446a] underline">
-          מסך הבית
-        </Link>
-        .
+        חיפוש במאגר המקומי — ישירות ממגלה המזונות.
       </motion.div>
 
       <motion.section
@@ -194,7 +190,11 @@ export default function ExplorerPage() {
             autoCapitalize="none"
             spellCheck={false}
           />
+          <p className="mt-1 text-[11px] text-[#333333]/60">
+            התחילי להקליד (לפחות 2 אותיות)
+          </p>
         </label>
+
         <div>
           <span className="mb-1 block text-xs font-semibold text-[#333333]">
             מיון
