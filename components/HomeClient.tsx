@@ -197,7 +197,11 @@ function getRandom<T>(arr: readonly T[]): T {
 
 export function HomeClient() {
   const [food, setFood] = useState("");
-  const [quantity, setQuantity] = useState(100);
+  const [quantityText, setQuantityText] = useState("100");
+  const quantity = useMemo(() => {
+    const n = parseFloat(quantityText.replace(",", "."));
+    return Number.isFinite(n) && n > 0 ? n : 100;
+  }, [quantityText]);
   const [unit, setUnit] = useState<FoodUnit>("גרם");
   const [entries, setEntries] = useState<LogEntry[]>([]);
   const [loading, setLoading] = useState(false);
@@ -247,7 +251,11 @@ export function HomeClient() {
 
   const [editOpen, setEditOpen] = useState(false);
   const [editEntry, setEditEntry] = useState<LogEntry | null>(null);
-  const [editQty, setEditQty] = useState(1);
+  const [editQtyText, setEditQtyText] = useState("1");
+  const editQty = useMemo(() => {
+    const n = parseFloat(editQtyText.replace(",", "."));
+    return Number.isFinite(n) && n > 0 ? n : 1;
+  }, [editQtyText]);
   const [editUnit, setEditUnit] = useState<FoodUnit>("גרם");
   const [editLoading, setEditLoading] = useState(false);
 
@@ -464,6 +472,12 @@ export function HomeClient() {
       setGeminiInsight({ kind: "idle" });
       return;
     }
+    // Only ask Gemini if local dictionary has no matches.
+    if (homeSearchLoading) return;
+    if (homeLocalRows.length > 0) {
+      setGeminiInsight({ kind: "idle" });
+      return;
+    }
     const ac = new AbortController();
     setGeminiInsight({ kind: "loading" });
     void (async () => {
@@ -507,7 +521,7 @@ export function HomeClient() {
       }
     })();
     return () => ac.abort();
-  }, [debouncedFoodSearch]);
+  }, [debouncedFoodSearch, homeSearchLoading, homeLocalRows.length]);
 
   const starredForMealCount = useMemo(
     () => entries.filter((e) => e.mealStarred).length,
@@ -559,9 +573,9 @@ export function HomeClient() {
     if (mem) {
       setUnit(mem.unit);
       if (mem.unit === "גרם") {
-        setQuantity(Math.max(1, Math.round(mem.quantity)));
+        setQuantityText(String(Math.max(1, Math.round(mem.quantity))));
       } else {
-        setQuantity(snapToFraction(mem.quantity));
+        setQuantityText(String(snapToFraction(mem.quantity)));
       }
     }
   }, [debouncedFoodMemory, food]);
@@ -570,9 +584,9 @@ export function HomeClient() {
     const prev = prevUnitRef.current;
     setUnit(next);
     if (next !== "גרם") {
-      setQuantity(1);
+      setQuantityText("1");
     } else if (prev !== "גרם") {
-      setQuantity(100);
+      setQuantityText("100");
     }
   }
 
@@ -620,7 +634,7 @@ export function HomeClient() {
       return;
     }
     const q = clampQuantity(quantity, unit);
-    setQuantity(q);
+    setQuantityText(String(q));
     const fromSearchPick = addFromSearchRef.current;
     if (fromSearchPick) {
       const audio = clickAudioRef.current;
@@ -770,7 +784,7 @@ export function HomeClient() {
     foodSearchInputRef.current?.blur();
     setSuggestionsDismissed(true);
     setEditEntry(item);
-    setEditQty(item.quantity);
+    setEditQtyText(String(item.quantity));
     setEditUnit(item.unit);
     setEditOpen(true);
   }
@@ -778,7 +792,7 @@ export function HomeClient() {
   async function saveEdit() {
     if (!editEntry) return;
     const q = clampQuantity(editQty, editUnit);
-    setEditQty(q);
+    setEditQtyText(String(q));
     setEditLoading(true);
     try {
       const res = await fetch("/api/calories", {
@@ -954,21 +968,39 @@ export function HomeClient() {
                     כמות
                   </span>
                   <input
-                    type="number"
-                    min={editUnit === "גרם" ? 1 : 0.25}
-                    max={editUnit === "גרם" ? 5000 : 50}
-                    step="any"
-                    value={editQty}
+                    type="text"
+                    inputMode="decimal"
+                    value={editQtyText}
+                    onFocus={(e) => {
+                      if (e.currentTarget.value.trim() === "0") {
+                        setEditQtyText("");
+                      }
+                      e.currentTarget.select();
+                    }}
                     onChange={(e) => {
                       if ((e.nativeEvent as InputEvent).isComposing) return;
                       const raw = e.target.value;
-                      if (raw === "" || raw === "-") return;
-                      const val = parseFloat(raw);
-                      if (Number.isNaN(val)) return;
-                      setEditQty(clampQuantity(val, editUnit));
+                      if (raw.trim() === "") {
+                        setEditQtyText("");
+                        return;
+                      }
+                      const cleaned = raw
+                        .replace(",", ".")
+                        .replace(/[^\d.]/g, "")
+                        .replace(/^0+(?=\d)/, "");
+                      const parts = cleaned.split(".");
+                      const normalized =
+                        parts.length <= 1
+                          ? parts[0]
+                          : `${parts[0]}.${parts.slice(1).join("")}`;
+                      setEditQtyText(normalized);
                     }}
                     onBlur={() =>
-                      setEditQty((x) => clampQuantity(x, editUnit))
+                      setEditQtyText((x) => {
+                        const n = parseFloat(x.replace(",", "."));
+                        if (!Number.isFinite(n)) return x;
+                        return String(clampQuantity(n, editUnit));
+                      })
                     }
                     className="input-luxury-dark w-full"
                   />
@@ -982,7 +1014,11 @@ export function HomeClient() {
                     onChange={(e) => {
                       const u = e.target.value as FoodUnit;
                       setEditUnit(u);
-                      setEditQty((q) => clampQuantity(q, u));
+                      setEditQtyText((q) => {
+                        const n = parseFloat(q.replace(",", "."));
+                        if (!Number.isFinite(n)) return q;
+                        return String(clampQuantity(n, u));
+                      });
                     }}
                     className="select-luxury w-full"
                   >
@@ -1008,7 +1044,7 @@ export function HomeClient() {
                             : "border border-[#ccc] bg-white"
                         }`}
                         onClick={() =>
-                          setEditQty(clampQuantity(num, editUnit))
+                          setEditQtyText(String(clampQuantity(num, editUnit)))
                         }
                       >
                         {label}
@@ -1190,6 +1226,10 @@ export function HomeClient() {
               enterKeyHint="search"
               value={food}
               onChange={(e) => onFoodChange(e.target.value)}
+              onFocus={(e) => {
+                // Makes it easy to clear and type a new search.
+                if (e.currentTarget.value) e.currentTarget.select();
+              }}
               autoComplete="off"
               autoCorrect="off"
               autoCapitalize="none"
@@ -1198,28 +1238,6 @@ export function HomeClient() {
               className="input-luxury-search w-full ps-12 pe-14"
               aria-controls={showSuggestions ? "food-suggestions" : undefined}
             />
-            {food.length > 0 && (
-              <button
-                type="button"
-                className="absolute start-3 top-1/2 z-[12] flex h-9 w-9 -translate-y-1/2 items-center justify-center rounded-xl border-2 border-[#fadadd] bg-white text-lg font-bold leading-none text-[#333333]/70 shadow-sm transition hover:bg-[#fadadd]/35 hover:text-[#333333] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#f5c8d4]"
-                aria-label="ניקוי חיפוש"
-                title="ניקוי"
-                onMouseDown={(e) => e.preventDefault()}
-                onClick={() => {
-                  setFood("");
-                  setDebouncedFoodSearch("");
-                  setHomeLocalRows([]);
-                  setGeminiInsight({ kind: "idle" });
-                  addFromSearchRef.current = false;
-                  setSuggestionsDismissed(false);
-                  requestAnimationFrame(() =>
-                    foodSearchInputRef.current?.focus()
-                  );
-                }}
-              >
-                ×
-              </button>
-            )}
             <button
               type="button"
               className="absolute end-3 top-1/2 z-[11] flex h-10 w-10 -translate-y-1/2 items-center justify-center rounded-xl border-2 border-[#fadadd] bg-white text-[#333333] shadow-sm transition hover:bg-[#fadadd]/45 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#f5c8d4]"
@@ -1376,20 +1394,38 @@ export function HomeClient() {
               כמות
             </span>
             <input
-              type="number"
-              min={unit === "גרם" ? 1 : 0.25}
-              max={unit === "גרם" ? 5000 : 50}
-              step="any"
-              value={quantity}
+              type="text"
+              inputMode="decimal"
+              value={quantityText}
+              onFocus={(e) => {
+                if (e.currentTarget.value.trim() === "0") {
+                  setQuantityText("");
+                }
+                e.currentTarget.select();
+              }}
               onChange={(e) => {
                 if ((e.nativeEvent as InputEvent).isComposing) return;
                 const raw = e.target.value;
-                if (raw === "" || raw === "-") return;
-                const val = parseFloat(raw);
-                if (Number.isNaN(val)) return;
-                setQuantity(clampQuantity(val, unit));
+                if (raw.trim() === "") {
+                  setQuantityText("");
+                  return;
+                }
+                const cleaned = raw
+                  .replace(",", ".")
+                  .replace(/[^\d.]/g, "")
+                  .replace(/^0+(?=\d)/, "");
+                const parts = cleaned.split(".");
+                const normalized =
+                  parts.length <= 1
+                    ? parts[0]
+                    : `${parts[0]}.${parts.slice(1).join("")}`;
+                setQuantityText(normalized);
               }}
-              onBlur={() => setQuantity((q) => clampQuantity(q, unit))}
+              onBlur={() => {
+                const n = parseFloat(quantityText.replace(",", "."));
+                if (!Number.isFinite(n)) return;
+                setQuantityText(String(clampQuantity(n, unit)));
+              }}
               className="input-luxury-dark w-full"
             />
             {unit !== "גרם" && (
@@ -1406,7 +1442,7 @@ export function HomeClient() {
                           : "border border-[#ccc] bg-white"
                       }`}
                       onClick={() =>
-                        setQuantity(clampQuantity(num, unit))
+                        setQuantityText(String(clampQuantity(num, unit)))
                       }
                     >
                       {label}
@@ -1592,6 +1628,12 @@ export function HomeClient() {
       <BarcodeScanModal
         open={scanModalOpen}
         onClose={() => setScanModalOpen(false)}
+        onApplyToHome={(name, noteMsg) => {
+          setFood(name);
+          setSuggestionsDismissed(true);
+          setNote(noteMsg);
+          setError(null);
+        }}
       />
     </div>
   );

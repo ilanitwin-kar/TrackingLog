@@ -28,6 +28,8 @@ type FoodItem = {
 };
 
 export default function ExplorerPage() {
+  const [q, setQ] = useState("");
+  const [debouncedQ, setDebouncedQ] = useState("");
   const [sort, setSort] = useState<SortKey>("caloriesAsc");
   const [category, setCategory] = useState("הכל");
   const [categories, setCategories] = useState<string[]>(["הכל"]);
@@ -49,12 +51,22 @@ export default function ExplorerPage() {
   }, [toast]);
 
   useEffect(() => {
+    const trimmed = q.trim();
+    if (trimmed.length < 2) {
+      setDebouncedQ("");
+      return;
+    }
+    const t = window.setTimeout(() => setDebouncedQ(trimmed), 250);
+    return () => window.clearTimeout(t);
+  }, [q]);
+
+  useEffect(() => {
     const ac = new AbortController();
     (async () => {
       setLoading(true);
       try {
         const params = new URLSearchParams({
-          q: "",
+          q: debouncedQ,
           sort,
           category,
           page: "1",
@@ -83,14 +95,14 @@ export default function ExplorerPage() {
       }
     })();
     return () => ac.abort();
-  }, [sort, category]);
+  }, [sort, category, debouncedQ]);
 
   async function loadMore() {
     const next = page + 1;
     setLoadingMore(true);
     try {
       const params = new URLSearchParams({
-        q: "",
+        q: debouncedQ,
         sort,
         category,
         page: String(next),
@@ -153,11 +165,7 @@ export default function ExplorerPage() {
         initial={{ opacity: 0, y: 6 }}
         animate={{ opacity: 1, y: 0 }}
       >
-        חיפוש מזון (מילון מקומי) מתבצע ב־
-        <Link href="/" className="font-bold text-[#a9446a] underline">
-          מסך הבית
-        </Link>
-        בלבד.
+        חיפוש במאגר המקומי — ישירות ממגלה המזונות.
       </motion.div>
 
       <motion.section
@@ -165,6 +173,28 @@ export default function ExplorerPage() {
         initial={{ opacity: 0, y: 8 }}
         animate={{ opacity: 1, y: 0 }}
       >
+        <label className="block">
+          <span className="mb-1 block text-xs font-semibold text-[#333333]">
+            חיפוש
+          </span>
+          <input
+            type="text"
+            inputMode="search"
+            enterKeyHint="search"
+            value={q}
+            onChange={(e) => setQ(e.target.value)}
+            placeholder="חפשי מזון…"
+            className="input-luxury-search w-full"
+            autoComplete="off"
+            autoCorrect="off"
+            autoCapitalize="none"
+            spellCheck={false}
+          />
+          <p className="mt-1 text-[11px] text-[#333333]/60">
+            התחילי להקליד (לפחות 2 אותיות)
+          </p>
+        </label>
+
         <div>
           <span className="mb-1 block text-xs font-semibold text-[#333333]">
             מיון
