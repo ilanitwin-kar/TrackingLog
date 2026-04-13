@@ -68,7 +68,12 @@ export function buildCalorieAccumulationTable(): CalorieAccumulationResult {
 
     const entries = dayLogs[dateKey] ?? [];
     const consumed = entries.reduce((s, e) => s + e.calories, 0);
-    const dailyBalanceKcal = tdeeKcal - consumed;
+    // גירעון יומי מוצג:
+    // - לימים שהסתיימו: בפועל (TDEE − צריכה)
+    // - להיום/עתיד: מתוכנן (פער TDEE ליעד = deficit)
+    const dailyBalanceKcal = isPastCompleteDay
+      ? tdeeKcal - consumed
+      : plannedDailyBankKcal;
 
     accumulated += contributionKcal;
     rows.push({

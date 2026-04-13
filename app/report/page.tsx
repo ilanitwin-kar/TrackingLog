@@ -9,6 +9,7 @@ import {
 import { getDaysRemainingToGoal } from "@/lib/goalMetrics";
 import { loadProfile, loadWeights } from "@/lib/storage";
 import { BackToMenuButton } from "@/components/BackToMenuButton";
+import { getTodayKey } from "@/lib/dateKey";
 
 const KCAL_PER_KG = 7700;
 
@@ -63,6 +64,7 @@ export default function ReportPage() {
   }, [rev]);
 
   const totalFat = accumulation.totalAccumulatedKcal / FAT_KCAL_PER_G;
+  const todayKey = getTodayKey();
 
   return (
     <div className="mx-auto max-w-lg px-4 py-8 md:py-12" dir="rtl">
@@ -148,13 +150,23 @@ export default function ReportPage() {
                       </td>
                       <td
                         className={`border-b border-[#FADADD]/60 px-2 py-2.5 font-medium tabular-nums sm:px-3 ${
-                          row.dailyBalanceKcal >= 0
+                          (row.dateKey < todayKey
+                            ? row.dailyBalanceKcal
+                            : row.plannedDailyBankKcal) >= 0
                             ? "text-[#1f5f3a]"
                             : "text-[#8b2e2e]"
                         }`}
                       >
-                        {row.dailyBalanceKcal > 0 ? "+" : ""}
-                        {Math.round(row.dailyBalanceKcal).toLocaleString("he-IL")}
+                        {(row.dateKey < todayKey
+                          ? row.dailyBalanceKcal
+                          : row.plannedDailyBankKcal) > 0
+                          ? "+"
+                          : ""}
+                        {Math.round(
+                          row.dateKey < todayKey
+                            ? row.dailyBalanceKcal
+                            : row.plannedDailyBankKcal
+                        ).toLocaleString("he-IL")}
                       </td>
                       <td className="border-b border-[#FADADD]/60 px-2 py-2.5 font-semibold tabular-nums text-[#333333] sm:px-3">
                         {Math.round(row.accumulatedKcal).toLocaleString("he-IL")}
