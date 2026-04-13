@@ -472,12 +472,6 @@ export function HomeClient() {
       setGeminiInsight({ kind: "idle" });
       return;
     }
-    // Only ask Gemini if local dictionary has no matches.
-    if (homeSearchLoading) return;
-    if (homeLocalRows.length > 0) {
-      setGeminiInsight({ kind: "idle" });
-      return;
-    }
     const ac = new AbortController();
     setGeminiInsight({ kind: "loading" });
     void (async () => {
@@ -521,7 +515,7 @@ export function HomeClient() {
       }
     })();
     return () => ac.abort();
-  }, [debouncedFoodSearch, homeSearchLoading, homeLocalRows.length]);
+  }, [debouncedFoodSearch]);
 
   const starredForMealCount = useMemo(
     () => entries.filter((e) => e.mealStarred).length,
@@ -1538,7 +1532,7 @@ export function HomeClient() {
                   transition={{
                     layout: { type: "spring", damping: 28, stiffness: 400 },
                   }}
-                  className={`flex flex-wrap items-center gap-2 rounded-xl border-2 border-[#FADADD] bg-white px-3 py-3 ${
+                  className={`flex flex-col gap-2 rounded-xl border-2 border-[#FADADD] bg-white px-3 py-3 sm:flex-row sm:flex-wrap sm:items-center sm:gap-2 ${
                     glowEntryId === item.id ? "glow-effect" : ""
                   }`}
                 >
@@ -1560,10 +1554,10 @@ export function HomeClient() {
                       {item.calories} קק״ל
                     </p>
                   </div>
-                  <div className="flex shrink-0 flex-wrap items-center gap-2">
+                  <div className="flex w-full flex-wrap items-start justify-start gap-2 sm:w-auto sm:shrink-0 sm:items-center sm:justify-end">
                     <button
                       type="button"
-                      className="btn-icon-luxury"
+                      className="btn-icon-luxury flex flex-col items-center justify-center gap-1"
                       title="סימון לשמירה כארוחה במילון"
                       aria-label="סימון לשמירה כארוחה במילון"
                       aria-pressed={mealOn}
@@ -1573,10 +1567,13 @@ export function HomeClient() {
                         filled={mealOn}
                         className="h-5 w-5 text-[#333333]"
                       />
+                      <span className="text-[10px] font-semibold text-[#333333]/80 sm:hidden">
+                        ארוחה
+                      </span>
                     </button>
                     <button
                       type="button"
-                      className="btn-icon-luxury"
+                      className="btn-icon-luxury flex flex-col items-center justify-center gap-1"
                       title="שמירה למילון"
                       aria-label="שמירה למילון"
                       aria-pressed={inDictionary}
@@ -1589,33 +1586,45 @@ export function HomeClient() {
                         filled={inDictionary}
                         className="h-5 w-5 text-[#333333]"
                       />
+                      <span className="text-[10px] font-semibold text-[#333333]/80 sm:hidden">
+                        מילון
+                      </span>
                     </button>
                     <button
                       type="button"
-                      className="btn-icon-luxury"
+                      className="btn-icon-luxury flex flex-col items-center justify-center gap-1"
                       title="עריכת כמות"
                       aria-label="עריכת כמות"
                       onClick={() => openEdit(item)}
                     >
                       <IconPencil className="h-5 w-5 text-[#333333]" />
+                      <span className="text-[10px] font-semibold text-[#333333]/80 sm:hidden">
+                        עריכה
+                      </span>
                     </button>
                     <button
                       type="button"
-                      className="btn-icon-luxury"
+                      className="btn-icon-luxury flex flex-col items-center justify-center gap-1"
                       title="שכפול"
                       aria-label="שכפול"
                       onClick={() => duplicateEntry(item)}
                     >
                       <IconDuplicate className="h-5 w-5 text-[#333333]" />
+                      <span className="text-[10px] font-semibold text-[#333333]/80 sm:hidden">
+                        שכפול
+                      </span>
                     </button>
                     <button
                       type="button"
-                      className="btn-icon-luxury btn-icon-luxury-danger"
+                      className="btn-icon-luxury btn-icon-luxury-danger flex flex-col items-center justify-center gap-1"
                       title="מחיקה"
                       aria-label="מחיקה"
                       onClick={() => removeEntry(item.id)}
                     >
                       <IconTrash className="h-5 w-5" />
+                      <span className="text-[10px] font-semibold text-[#333333]/80 sm:hidden">
+                        מחיקה
+                      </span>
                     </button>
                   </div>
                 </motion.li>

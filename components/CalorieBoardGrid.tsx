@@ -127,7 +127,7 @@ export function CalorieBoardGrid({ profileRev = 0 }: { profileRev?: number }) {
         dir="rtl"
       >
         <div
-          className="grid grid-cols-4 gap-2.5 overflow-visible sm:gap-3"
+          className="grid grid-cols-3 gap-3 overflow-visible sm:grid-cols-4 sm:gap-3"
           role="list"
           aria-label={`מפת התקדמות, ${daysRemaining} משבצות`}
         >
@@ -179,7 +179,7 @@ export function CalorieBoardGrid({ profileRev = 0 }: { profileRev?: number }) {
                 {showReveal ? (
                   <span
                     dir="rtl"
-                    className="line-clamp-3 w-full max-h-full overflow-hidden text-center text-[clamp(0.95rem,2.8vw,1.35rem)] font-black leading-tight tracking-tight text-[#1a1200] sm:text-[clamp(1.05rem,3vw,1.5rem)] sm:leading-tight"
+                    className="line-clamp-3 w-full max-h-full overflow-hidden text-center text-[clamp(1.05rem,3.4vw,1.55rem)] font-black leading-tight tracking-tight text-[#1a1200] sm:text-[clamp(1.05rem,3vw,1.5rem)] sm:leading-tight"
                   >
                     {goldMainText}
                   </span>
@@ -196,7 +196,7 @@ export function CalorieBoardGrid({ profileRev = 0 }: { profileRev?: number }) {
                   role="listitem"
                   aria-disabled
                   tabIndex={-1}
-                  className={`relative flex ${cellFixed} flex-col items-stretch justify-between gap-0.5 rounded-2xl border-2 px-1.5 py-1.5 text-center ${fontBoard} ${futureGrey3d}`}
+                  className={`relative flex ${cellFixed} flex-col items-stretch justify-between gap-1 rounded-2xl border-2 px-2 py-2 text-center ${fontBoard} ${futureGrey3d}`}
                 >
                   <span className="shrink-0 truncate text-xs font-bold tracking-tight text-[#374151] sm:text-sm">
                     {formatDayMonth(dateKey)}
@@ -222,7 +222,7 @@ export function CalorieBoardGrid({ profileRev = 0 }: { profileRev?: number }) {
                     ? `, גירעון ${Math.round(actualDeficitKcal!)} קק״ל`
                     : ""
                 }${isLastSquare && isGold ? ", חגיגת סיום" : ""}`}
-                className={`relative flex ${cellFixed} flex-col items-stretch justify-between gap-0.5 rounded-2xl border-2 px-1.5 py-1.5 text-center transition-shadow focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:ring-offset-2 active:shadow-[inset_0_4px_10px_rgba(0,0,0,0.15)] ${fontBoard} ${
+                className={`relative flex ${cellFixed} flex-col items-stretch justify-between gap-1 rounded-2xl border-2 px-2 py-2 text-center transition-shadow focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:ring-offset-2 active:shadow-[inset_0_4px_10px_rgba(0,0,0,0.15)] ${fontBoard} ${
                   isGold ? gold3d : grey3d
                 } `}
                 onClick={() => {

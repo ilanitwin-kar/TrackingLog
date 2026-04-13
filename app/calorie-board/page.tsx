@@ -64,6 +64,15 @@ export default function CalorieBoardPage() {
           </span>{" "}
           <span className="text-xl font-bold text-[#333333]/90">קק״ל</span>
         </p>
+        <p className="mt-2 text-xs font-semibold text-[#333333]/70">
+          צבירה יומית מתוכננת:{" "}
+          <span className="font-[system-ui] tabular-nums">
+            {(accumulation.tdeeKcal - accumulation.dailyTargetKcal).toLocaleString(
+              "he-IL"
+            )}
+          </span>{" "}
+          קק״ל (פער בין TDEE ליעד)
+        </p>
         <p className="mt-3 text-sm font-medium text-[#333333]/85">
           {totalFat.toLocaleString("he-IL", {
             maximumFractionDigits: 1,
