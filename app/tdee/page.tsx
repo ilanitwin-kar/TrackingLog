@@ -21,6 +21,18 @@ const activities: { id: ActivityLevel; label: string }[] = [
   { id: "active", label: "גבוהה" },
 ];
 
+function parseIntField(raw: string): number {
+  if (raw.trim() === "") return 0;
+  const n = parseInt(raw, 10);
+  return Number.isFinite(n) ? n : 0;
+}
+
+function parseWeightField(raw: string): number {
+  if (raw.trim() === "" || raw === "." || raw === ",") return 0;
+  const n = parseFloat(raw.replace(",", "."));
+  return Number.isFinite(n) ? n : 0;
+}
+
 export default function TdeePage() {
   const router = useRouter();
   const [p, setP] = useState<UserProfile | null>(null);
@@ -38,15 +50,29 @@ export default function TdeePage() {
     );
   }
 
-  const t = tdee(p.gender, p.weightKg, p.heightCm, p.age, p.activity);
-  const target = dailyCalorieTarget(
-    p.gender,
-    p.weightKg,
-    p.heightCm,
-    p.age,
-    p.deficit,
-    p.activity
-  );
+  const bodyMetricsOk =
+    p.age >= 12 &&
+    p.age <= 120 &&
+    p.heightCm >= 100 &&
+    p.heightCm <= 230 &&
+    p.weightKg >= 30 &&
+    p.weightKg <= 250;
+  const deficitOk = p.deficit >= 100 && p.deficit <= 1500;
+
+  const t = bodyMetricsOk
+    ? tdee(p.gender, p.weightKg, p.heightCm, p.age, p.activity)
+    : null;
+  const target =
+    bodyMetricsOk && deficitOk
+      ? dailyCalorieTarget(
+          p.gender,
+          p.weightKg,
+          p.heightCm,
+          p.age,
+          p.deficit,
+          p.activity
+        )
+      : null;
 
   const registered = p.onboardingComplete === true;
   const formValid = isProfileFormValid(p);
@@ -102,7 +128,7 @@ export default function TdeePage() {
             value={p.email}
             onChange={(e) => update("email", e.target.value)}
             className="input-luxury-dark mt-1 w-full"
-            placeholder="you@example.com"
+            placeholder=""
           />
         </label>
 
@@ -114,7 +140,7 @@ export default function TdeePage() {
             value={p.firstName}
             onChange={(e) => update("firstName", e.target.value)}
             className="input-luxury-dark mt-1 w-full"
-            placeholder="לפרסונליזציה בלוח המפה"
+            placeholder=""
           />
         </label>
 
@@ -146,10 +172,11 @@ export default function TdeePage() {
           <span className="text-sm font-semibold text-[#333333]">גיל</span>
           <input
             type="number"
-            min={12}
+            inputMode="numeric"
+            min={0}
             max={120}
-            value={p.age}
-            onChange={(e) => update("age", Number(e.target.value) || 0)}
+            value={p.age === 0 ? "" : p.age}
+            onChange={(e) => update("age", parseIntField(e.target.value))}
             className="input-luxury-dark mt-1 w-full"
           />
         </label>
@@ -160,10 +187,11 @@ export default function TdeePage() {
           </span>
           <input
             type="number"
-            min={100}
+            inputMode="numeric"
+            min={0}
             max={230}
-            value={p.heightCm}
-            onChange={(e) => update("heightCm", Number(e.target.value) || 0)}
+            value={p.heightCm === 0 ? "" : p.heightCm}
+            onChange={(e) => update("heightCm", parseIntField(e.target.value))}
             className="input-luxury-dark mt-1 w-full"
           />
         </label>
@@ -174,26 +202,32 @@ export default function TdeePage() {
           </span>
           <input
             type="number"
-            min={30}
+            inputMode="decimal"
+            min={0}
             max={250}
             step={0.1}
-            value={p.weightKg}
-            onChange={(e) => update("weightKg", Number(e.target.value) || 0)}
+            value={p.weightKg === 0 ? "" : p.weightKg}
+            onChange={(e) =>
+              update("weightKg", parseWeightField(e.target.value))
+            }
             className="input-luxury-dark mt-1 w-full"
           />
         </label>
 
         <label className="block">
           <span className="text-sm font-semibold text-[#333333]">
-            יעד משקל (ק״ג)
+            משקל יעד (ק״ג)
           </span>
           <input
             type="number"
-            min={30}
+            inputMode="decimal"
+            min={0}
             max={250}
             step={0.1}
-            value={p.goalWeightKg}
-            onChange={(e) => update("goalWeightKg", Number(e.target.value) || 0)}
+            value={p.goalWeightKg === 0 ? "" : p.goalWeightKg}
+            onChange={(e) =>
+              update("goalWeightKg", parseWeightField(e.target.value))
+            }
             className="input-luxury-dark mt-1 w-full"
           />
         </label>
@@ -223,11 +257,12 @@ export default function TdeePage() {
           </span>
           <input
             type="number"
-            min={100}
+            inputMode="numeric"
+            min={0}
             max={1500}
             step={50}
-            value={p.deficit}
-            onChange={(e) => update("deficit", Number(e.target.value) || 0)}
+            value={p.deficit === 0 ? "" : p.deficit}
+            onChange={(e) => update("deficit", parseIntField(e.target.value))}
             className="input-luxury-dark mt-1 w-full"
           />
         </label>
@@ -241,12 +276,12 @@ export default function TdeePage() {
       >
         <p className="text-sm font-semibold text-[#333333]/85">TDEE משוער</p>
         <p className="text-3xl font-extrabold text-[#333333]">
-          {Math.round(t)} קק״ל
+          {t != null ? `${Math.round(t)} קק״ל` : "—"}
         </p>
         <p className="mt-3 text-sm font-semibold text-[#333333]/85">
           יעד צריכה יומי (אחרי גירעון)
         </p>
-        <p className="text-2xl font-bold text-[#333333]">{target} קק״ל</p>
+        <p className="text-2xl font-bold text-[#333333]">{target != null ? `${target} קק״ל` : "—"}</p>
       </motion.div>
 
       {!registered && (

@@ -145,24 +145,34 @@ const defaultProfile: UserProfile = {
   email: "",
   firstName: "",
   gender: "female",
-  age: 30,
-  heightCm: 165,
-  weightKg: 70,
+  age: 0,
+  heightCm: 0,
+  weightKg: 0,
   deficit: 500,
   activity: "light",
-  goalWeightKg: 62,
+  goalWeightKg: 0,
   onboardingComplete: false,
 };
 
+function finiteNum(v: unknown, fallback: number): number {
+  return typeof v === "number" && Number.isFinite(v) ? v : fallback;
+}
+
 function normalizeLoadedProfile(parsed: Partial<UserProfile>): UserProfile {
-  return {
+  const merged = {
     ...defaultProfile,
     ...parsed,
     email: typeof parsed.email === "string" ? parsed.email : "",
     firstName:
       typeof parsed.firstName === "string" ? parsed.firstName.trim() : "",
     onboardingComplete: parsed.onboardingComplete === true,
+    age: finiteNum(parsed.age, defaultProfile.age),
+    heightCm: finiteNum(parsed.heightCm, defaultProfile.heightCm),
+    weightKg: finiteNum(parsed.weightKg, defaultProfile.weightKg),
+    goalWeightKg: finiteNum(parsed.goalWeightKg, defaultProfile.goalWeightKg),
+    deficit: finiteNum(parsed.deficit, defaultProfile.deficit),
   };
+  return merged;
 }
 
 export function loadProfile(): UserProfile {
