@@ -1,5 +1,6 @@
 import { getTodayKey } from "./dateKey";
 import type { ActivityLevel, Gender } from "./tdee";
+import { tdee } from "./tdee";
 
 export type FoodUnit =
   | "גרם"
@@ -111,8 +112,14 @@ const KEYS = {
   mealPresets: "cj_meal_presets_v1",
   /** סימוני זהב בלוח צבירת הקלוריות (תאריך → מסומן) — ירושה */
   calorieBoardGold: "cj_calorie_board_gold_v1",
-  /** גילוי מילות סיפור (אינדקס משבצת → נפתח) */
+  /** Legacy: story tiles by square index; migrated to storyRevealByDate. */
   storyRevealUnlock: "cj_story_reveal_unlock_v1",
+  /** Story tiles unlocked by date key YYYY-MM-DD. */
+  storyRevealByDate: "cj_story_reveal_by_date_v1",
+  /** סגירת יומן: תארי�� → צריכה/TDEE/פער (צריכה − TDEE) */
+  dayJournalClosed: "cj_day_journal_closed_v1",
+  /** ימים נוספים בזנב הלוח בגלל חריגות קלוריות */
+  calorieBoardExtraDays: "cj_calorie_board_extra_days_v1",
 } as const;
 
 export type DictionaryItem = {
@@ -128,6 +135,8 @@ export type DictionaryItem = {
   fatPer100g?: number;
   barcode?: string;
   source?: string;
+  brand?: string;
+  unitGrams?: number;
   /** קישור לארוחה שמורה — הוספה ליומן מוסיפה את כל הרכיבים */
   mealPresetId?: string;
 };
@@ -177,7 +186,7 @@ export function saveProfile(p: UserProfile): void {
 
 export type FoodMemory = Record<string, { quantity: number; unit: FoodUnit }>;
 
-function normalizeFoodKey(name: string): string {
+export function normalizeFoodKey(name: string): string {
   return name.trim().toLowerCase().replace(/\s+/g, " ");
 }
 
@@ -259,6 +268,148 @@ export function getTodayEntries(): LogEntry[] {
 
 export function getEntriesForDate(dateKey: string): LogEntry[] {
   return loadDayLogs()[dateKey] ?? [];
+}
+
+export type DayJournalClosedEntry = {
+  consumedKcal: number;
+  tdeeKcal: number;
+  /** צריכה − TDEE (שלילי = מתחת ל-TDEE, חיובי = חריגה) */
+  gapKcal: number;
+  closedAt: string;
+};
+
+export function loadDayJournalClosedMap(): Record<string, DayJournalClosedEntry> {
+  if (typeof window === "undefined") return {};
+  try {
+    const raw = localStorage.getItem(KEYS.dayJournalClosed);
+    if (!raw) return {};
+    const parsed = JSON.parse(raw) as Record<string, DayJournalClosedEntry>;
+    return typeof parsed === "object" && parsed !== null ? parsed : {};
+  } catch {
+    return {};
+  }
+}
+
+function saveDayJournalClosedMap(
+  m: Record<string, DayJournalClosedEntry>
+): void {
+  if (typeof window === "undefined") return;
+  localStorage.setItem(KEYS.dayJournalClosed, JSON.stringify(m));
+}
+
+export function isDayJournalClosed(dateKey: string): boolean {
+  return Boolean(loadDayJournalClosedMap()[dateKey]);
+}
+
+export function loadBoardExtraTailDays(): number {
+  if (typeof window === "undefined") return 0;
+  try {
+    const raw = localStorage.getItem(KEYS.calorieBoardExtraDays);
+    const n = Number(raw);
+    return Number.isFinite(n) && n >= 0 ? Math.floor(n) : 0;
+  } catch {
+    return 0;
+  }
+}
+
+function saveBoardExtraTailDays(n: number): void {
+  if (typeof window === "undefined") return;
+  localStorage.setItem(
+    KEYS.calorieBoardExtraDays,
+    String(Math.max(0, Math.floor(n)))
+  );
+}
+
+export function addBoardExtraTailDays(delta: number): void {
+  if (delta <= 0) return;
+  saveBoardExtraTailDays(loadBoardExtraTailDays() + delta);
+}
+
+function pruneStoryRevealToClosedDaysOnly(): void {
+  if (typeof window === "undefined") return;
+  const closed = loadDayJournalClosedMap();
+  const m = { ...loadStoryRevealUnlock() };
+  const next: Record<string, boolean> = {};
+  let changed = false;
+  for (const [k, v] of Object.entries(m)) {
+    if (v && closed[k]) next[k] = true;
+    else if (v) changed = true;
+  }
+  if (changed || Object.keys(next).length !== Object.keys(m).length) {
+    localStorage.setItem(KEYS.storyRevealByDate, JSON.stringify(next));
+  }
+}
+
+/**
+ * סגירת יומן: נעילת צריכה מול TDEE ושמירת פער (צריכה − TDEE).
+ * חריגה (פלוס) מוסיפה ימים לזנב הלוח לפי גודל החריגה והגירעון המתוכנן.
+ */
+export function closeDayJournal(dateKey: string): {
+  ok: boolean;
+  gapKcal?: number;
+  message?: string;
+} {
+  if (typeof window === "undefined") {
+    return { ok: false, message: "לא זמין" };
+  }
+  const today = getTodayKey();
+  if (dateKey > today) {
+    return { ok: false, message: "לא ניתן לסגור יום עתידי" };
+  }
+  const prev = loadDayJournalClosedMap();
+  if (prev[dateKey]) {
+    return {
+      ok: false,
+      message: "\u05d4\u05d9\u05d5\u05de\u05df \u05db\u05d1\u05e8 \u05e0\u05e1\u05d2\u05e8 \u05dc\u05ea\u05d0\u05e8\u05d9\u05da \u05d6\u05d4",
+    };
+  }
+
+  const profile = loadProfile();
+  const tdeeKcal = Math.round(
+    tdee(
+      profile.gender,
+      profile.weightKg,
+      profile.heightCm,
+      profile.age,
+      profile.activity
+    )
+  );
+  const entries = getEntriesForDate(dateKey);
+  const consumedKcal = entries.reduce(
+    (s, e) => s + (Number(e.calories) || 0),
+    0
+  );
+  const gapKcal = Math.round(consumedKcal - tdeeKcal);
+
+  saveDayJournalClosedMap({
+    ...prev,
+    [dateKey]: {
+      consumedKcal,
+      tdeeKcal,
+      gapKcal,
+      closedAt: new Date().toISOString(),
+    },
+  });
+
+  const reveal = { ...loadStoryRevealUnlock() };
+  if (reveal[dateKey]) {
+    delete reveal[dateKey];
+    saveStoryRevealUnlock(reveal);
+    if (typeof window !== "undefined") {
+      window.dispatchEvent(new Event("cj-story-reveal-updated"));
+    }
+  }
+
+  pruneStoryRevealToClosedDaysOnly();
+
+  const planned = Math.max(1, Math.round(profile.deficit || 0));
+  if (gapKcal > 0) {
+    const addDays = Math.ceil(gapKcal / planned);
+    addBoardExtraTailDays(addDays);
+  }
+
+  window.dispatchEvent(new Event("cj-day-journal-closed"));
+  return { ok: true, gapKcal };
 }
 
 export function loadWeights(): WeightEntry[] {
@@ -414,6 +565,113 @@ function makeId(): string {
   return `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
 }
 
+export type ManualNutritionPayload = {
+  food: string;
+  brand?: string;
+  caloriesPer100g: number;
+  proteinPer100g: number;
+  fatPer100g: number;
+  carbsPer100g: number;
+  /** משקל יחידה בגרם — אם מולא: נרשם כ��1 יחידה עם ערכים מוקטנים לפי המשקל */
+  unitGrams?: number;
+};
+
+/**
+ * הוספת מזון ידני ליומן + מילון: ערכי תזונה ל��100 גרם.
+ * אם ניתן `unitGrams`, נרשמת מנה אחת ביחידה "יחידה" והקלוריות והמאקרו מחושבים לפי המשקל.
+ */
+export function addManualNutritionToToday(
+  payload: ManualNutritionPayload,
+  dateKey: string = getTodayKey()
+): LogEntry[] {
+  const name = payload.food.trim();
+  if (!name) {
+    return getEntriesForDate(dateKey);
+  }
+
+  const brand = payload.brand?.trim() || "";
+  const displayFood = brand ? `${name} (${brand})` : name;
+
+  const c100 = Math.max(0, Number(payload.caloriesPer100g) || 0);
+  const p100 = Math.max(0, Number(payload.proteinPer100g) || 0);
+  const f100 = Math.max(0, Number(payload.fatPer100g) || 0);
+  const carbs100 = Math.max(0, Number(payload.carbsPer100g) || 0);
+
+  const ugRaw = payload.unitGrams;
+  const ug =
+    ugRaw != null &&
+    String(ugRaw).trim() !== "" &&
+    Number.isFinite(Number(ugRaw)) &&
+    Number(ugRaw) > 0
+      ? Number(ugRaw)
+      : undefined;
+
+  const factor = ug != null ? ug / 100 : 1;
+
+  let quantity: number;
+  let unit: FoodUnit;
+  let kcal: number;
+  let proteinG: number | undefined;
+  let fatG: number | undefined;
+  let carbsG: number | undefined;
+
+  if (ug != null) {
+    quantity = 1;
+    unit = "יחידה";
+    kcal = Math.max(1, Math.round(c100 * factor));
+    proteinG = Math.round(p100 * factor * 10) / 10;
+    fatG = Math.round(f100 * factor * 10) / 10;
+    carbsG = Math.round(carbs100 * factor * 10) / 10;
+  } else {
+    quantity = 100;
+    unit = "גרם";
+    kcal = Math.max(1, Math.round(c100));
+    proteinG = Math.round(p100 * 10) / 10;
+    fatG = Math.round(f100 * 10) / 10;
+    carbsG = Math.round(carbs100 * 10) / 10;
+  }
+
+  const entry: LogEntry = {
+    id: makeId(),
+    food: displayFood,
+    calories: kcal,
+    quantity,
+    unit,
+    createdAt: new Date().toISOString(),
+    mealStarred: false,
+    verified: true,
+    proteinG,
+    carbsG,
+    fatG,
+  };
+
+  const existing = getEntriesForDate(dateKey);
+  const merged = [entry, ...existing];
+  saveDayLogEntries(dateKey, merged);
+
+  const items = loadDictionary();
+  const n = normalizeFoodKey(displayFood);
+  const without = items.filter((d) => normalizeFoodKey(d.food) !== n);
+  const dictRow: DictionaryItem = {
+    id: makeId(),
+    food: displayFood,
+    brand: brand || undefined,
+    quantity,
+    unit,
+    lastCalories: kcal,
+    caloriesPer100g: c100,
+    proteinPer100g: p100,
+    fatPer100g: f100,
+    carbsPer100g: carbs100,
+    unitGrams: ug,
+    source: "manual-home",
+  };
+  without.unshift(dictRow);
+  saveDictionary(without);
+
+  return merged;
+}
+
 export function loadMealPresets(): MealPreset[] {
   if (typeof window === "undefined") return [];
   try {
@@ -486,6 +744,43 @@ export function applyMealPresetToToday(preset: MealPreset): LogEntry[] {
   return merged;
 }
 
+/** הוספת פריט מילון ליומן היום — או כל רכיבי preset אם קיים */
+export function appendDictionaryItemToToday(
+  d: DictionaryItem,
+  preset: MealPreset | null
+): LogEntry[] {
+  if (preset) {
+    return applyMealPresetToToday(preset);
+  }
+  const dateKey = getTodayKey();
+  const existing = getTodayEntries();
+  let kcal =
+    typeof d.lastCalories === "number" && Number.isFinite(d.lastCalories)
+      ? Math.round(d.lastCalories)
+      : 0;
+  if (kcal <= 0 && typeof d.caloriesPer100g === "number") {
+    kcal = Math.max(1, Math.round((d.caloriesPer100g * d.quantity) / 100));
+  }
+  const factor = d.quantity / 100;
+  const entry: LogEntry = {
+    id: makeId(),
+    food: d.food,
+    calories: kcal,
+    quantity: d.quantity,
+    unit: d.unit,
+    createdAt: new Date().toISOString(),
+    mealStarred: false,
+    verified: Boolean(d.barcode),
+    proteinG:
+      d.proteinPer100g != null ? d.proteinPer100g * factor : undefined,
+    carbsG: d.carbsPer100g != null ? d.carbsPer100g * factor : undefined,
+    fatG: d.fatPer100g != null ? d.fatPer100g * factor : undefined,
+  };
+  const merged = [entry, ...existing];
+  saveDayLogEntries(dateKey, merged);
+  return merged;
+}
+
 export function loadCalorieBoardGold(): Record<string, boolean> {
   if (typeof window === "undefined") return {};
   try {
@@ -510,26 +805,86 @@ export function toggleCalorieBoardGold(dateKey: string): Record<string, boolean>
   return m;
 }
 
-export function loadStoryRevealUnlock(): Record<string, boolean> {
-  if (typeof window === "undefined") return {};
+function parseStoryRevealMap(raw: string | null): Record<string, boolean> | null {
+  if (!raw) return null;
   try {
-    const raw = localStorage.getItem(KEYS.storyRevealUnlock);
-    if (!raw) return {};
     const parsed = JSON.parse(raw) as Record<string, boolean>;
-    return typeof parsed === "object" && parsed !== null ? parsed : {};
+    return typeof parsed === "object" && parsed !== null ? parsed : null;
   } catch {
-    return {};
+    return null;
   }
 }
 
-export function saveStoryRevealUnlock(marks: Record<string, boolean>): void {
-  localStorage.setItem(KEYS.storyRevealUnlock, JSON.stringify(marks));
+function migrateIndexStoryMarksToDates(
+  legacy: Record<string, boolean>,
+  sequence: string[]
+): Record<string, boolean> {
+  const out: Record<string, boolean> = {};
+  for (const [k, v] of Object.entries(legacy)) {
+    if (!v) continue;
+    const idx = Number(k);
+    if (!Number.isInteger(idx) || idx < 0 || idx >= sequence.length) continue;
+    out[sequence[idx]!] = true;
+  }
+  return out;
 }
 
-export function toggleStoryRevealUnlock(squareIndex: number): Record<string, boolean> {
-  const k = String(squareIndex);
+/**
+ * Call with the same date sequence as the calorie board (e.g. getCalorieBoardDateSequence)
+ * before reading unlock state, so legacy index-keyed marks map to calendar dates.
+ */
+export function ensureStoryRevealDateMigration(sequence: string[]): void {
+  if (typeof window === "undefined" || sequence.length === 0) return;
+  if (localStorage.getItem(KEYS.storyRevealByDate)) return;
+
+  const rawLegacy = localStorage.getItem(KEYS.storyRevealUnlock);
+  const legacy = parseStoryRevealMap(rawLegacy);
+  if (!legacy || Object.keys(legacy).length === 0) {
+    localStorage.setItem(KEYS.storyRevealByDate, JSON.stringify({}));
+    return;
+  }
+
+  const keys = Object.keys(legacy);
+  const allIndexKeys = keys.length > 0 && keys.every((k) => /^\d+$/.test(k));
+  const allIsoDateKeys = keys.length > 0 && keys.every((k) => /^\d{4}-\d{2}-\d{2}$/.test(k));
+
+  if (allIndexKeys) {
+    const migrated = migrateIndexStoryMarksToDates(legacy, sequence);
+    localStorage.setItem(KEYS.storyRevealByDate, JSON.stringify(migrated));
+    localStorage.removeItem(KEYS.storyRevealUnlock);
+    return;
+  }
+
+  if (allIsoDateKeys) {
+    localStorage.setItem(KEYS.storyRevealByDate, JSON.stringify(legacy));
+    localStorage.removeItem(KEYS.storyRevealUnlock);
+    return;
+  }
+
+  localStorage.setItem(KEYS.storyRevealByDate, JSON.stringify({}));
+}
+
+export function loadStoryRevealUnlock(): Record<string, boolean> {
+  if (typeof window === "undefined") return {};
+  const parsed = parseStoryRevealMap(localStorage.getItem(KEYS.storyRevealByDate));
+  return parsed ?? {};
+}
+
+export function saveStoryRevealUnlock(marks: Record<string, boolean>): void {
+  if (typeof window === "undefined") return;
+  localStorage.setItem(KEYS.storyRevealByDate, JSON.stringify(marks));
+}
+
+/** dateKey: YYYY-MM-DD — רק אחרי סגירת יומן לאותו תארי�� */
+export function toggleStoryRevealUnlock(dateKey: string): Record<string, boolean> {
+  if (typeof window !== "undefined" && !isDayJournalClosed(dateKey)) {
+    return { ...loadStoryRevealUnlock() };
+  }
   const m = { ...loadStoryRevealUnlock() };
-  m[k] = !m[k];
+  m[dateKey] = !m[dateKey];
   saveStoryRevealUnlock(m);
+  if (typeof window !== "undefined") {
+    window.dispatchEvent(new Event("cj-story-reveal-updated"));
+  }
   return m;
 }

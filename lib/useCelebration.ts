@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import type { Gender } from "@/lib/tdee";
 import {
   getRandomMessage,
   type CelebrationMessageType,
@@ -11,32 +12,35 @@ export type TriggerCelebrationArg =
   | { customMessage: string };
 
 /** ~2.5s מלא, ~0.5s fade, ~3s סה״כ; מנקה טיימרים לפני טריגר חדש */
-export function useCelebration() {
+export function useCelebration(gender: Gender = "female") {
   const [showCelebration, setShowCelebration] = useState(false);
   const [fadeOut, setFadeOut] = useState(false);
   const [celebrationMessage, setCelebrationMessage] = useState("");
   const fadeTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const hideTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const triggerCelebration = useCallback((arg: TriggerCelebrationArg) => {
-    const msg =
-      typeof arg === "object"
-        ? arg.customMessage
-        : getRandomMessage(arg);
-    setCelebrationMessage(msg);
-    setShowCelebration(true);
-    setFadeOut(false);
+  const triggerCelebration = useCallback(
+    (arg: TriggerCelebrationArg) => {
+      const msg =
+        typeof arg === "object"
+          ? arg.customMessage
+          : getRandomMessage(arg, gender);
+      setCelebrationMessage(msg);
+      setShowCelebration(true);
+      setFadeOut(false);
 
-    if (fadeTimeoutRef.current) clearTimeout(fadeTimeoutRef.current);
-    if (hideTimeoutRef.current) clearTimeout(hideTimeoutRef.current);
+      if (fadeTimeoutRef.current) clearTimeout(fadeTimeoutRef.current);
+      if (hideTimeoutRef.current) clearTimeout(hideTimeoutRef.current);
 
-    fadeTimeoutRef.current = setTimeout(() => {
-      setFadeOut(true);
-      hideTimeoutRef.current = setTimeout(() => {
-        setShowCelebration(false);
-      }, 500);
-    }, 2500);
-  }, []);
+      fadeTimeoutRef.current = setTimeout(() => {
+        setFadeOut(true);
+        hideTimeoutRef.current = setTimeout(() => {
+          setShowCelebration(false);
+        }, 500);
+      }, 2500);
+    },
+    [gender]
+  );
 
   useEffect(() => {
     return () => {

@@ -1,7 +1,3 @@
-/** טקסט הזמנה כשהמשבצת אפורה (לא זהב) */
-export const JOURNEY_LOCKED_PLACEHOLDER =
-  "לחצי על הקובייה לגלות את כתב הסתרים";
-
 /** ימים נותרים במסלול במשבצת i (0 = היום) */
 export function getDaysLeftAtSquare(
   daysRemaining: number,

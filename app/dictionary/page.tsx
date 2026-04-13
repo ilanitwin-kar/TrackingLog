@@ -6,13 +6,15 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   type DictionaryItem,
   type MealPreset,
+  appendDictionaryItemToToday,
   applyMealPresetToToday,
   loadDictionary,
   loadMealPresets,
+  normalizeFoodKey,
   removeDictionaryItem,
   upsertDictionaryFromScan,
 } from "@/lib/storage";
-import { IconTrash, IconVerified } from "@/components/Icons";
+import { IconCalendar, IconTrash, IconVerified } from "@/components/Icons";
 
 const fontFood =
   "font-[Calibri,'Segoe_UI','Helvetica_Neue',system-ui,sans-serif]";
@@ -50,7 +52,7 @@ export default function DictionaryPage() {
   const [debouncedDbQ, setDebouncedDbQ] = useState("");
   const [dbItems, setDbItems] = useState<FoodItem[]>([]);
   const [dbLoading, setDbLoading] = useState(false);
-  const [appliedMealId, setAppliedMealId] = useState<string | null>(null);
+  const [flashMsg, setFlashMsg] = useState<string | null>(null);
   const searchInputRef = useRef<HTMLInputElement>(null);
 
   const refresh = useCallback(() => {
@@ -120,6 +122,11 @@ export default function DictionaryPage() {
     });
   }, []);
 
+  const flash = useCallback((msg: string) => {
+    setFlashMsg(msg);
+    window.setTimeout(() => setFlashMsg(null), 2500);
+  }, []);
+
   const addDbToDictionary = useCallback(
     (row: FoodItem) => {
       const next = upsertDictionaryFromScan({
@@ -133,8 +140,9 @@ export default function DictionaryPage() {
         fatPer100g: row.fat,
       });
       setSaved(next);
+      flash("נשמר במילון");
     },
-    []
+    [flash]
   );
 
   const filteredSaved = useMemo(
@@ -142,11 +150,27 @@ export default function DictionaryPage() {
     [saved, rawQ]
   );
 
+  const savedFoodKeys = useMemo(
+    () => new Set(saved.map((d) => normalizeFoodKey(d.food))),
+    [saved]
+  );
+
   function applyPreset(preset: MealPreset) {
     applyMealPresetToToday(preset);
-    setAppliedMealId(preset.id);
-    window.setTimeout(() => setAppliedMealId(null), 2500);
+    flash("נוסף ליומן היום");
   }
+
+  const addSavedToToday = useCallback(
+    (d: DictionaryItem, preset: MealPreset | undefined) => {
+      if (d.mealPresetId && !preset) {
+        flash("לא נמצאה ארוחה שמורה");
+        return;
+      }
+      appendDictionaryItemToToday(d, preset ?? null);
+      flash("נוסף ליומן היום");
+    },
+    [flash]
+  );
 
   return (
     <div
@@ -161,9 +185,9 @@ export default function DictionaryPage() {
         מילון מזונות
       </motion.h1>
 
-      {appliedMealId && (
+      {flashMsg && (
         <p className="mb-4 rounded-xl border border-[#FADADD] bg-[#fffafb] py-2 text-center text-sm font-medium text-[#333333]">
-          נוסף ליומן היום
+          {flashMsg}
         </p>
       )}
 
@@ -215,11 +239,15 @@ export default function DictionaryPage() {
             </p>
           ) : (
             <ul className="space-y-2">
-              {dbItems.map((row) => (
-                <li
-                  key={`${row.id}-${row.name}`}
-                  className="flex flex-wrap items-start gap-2 rounded-2xl border-2 border-[#FADADD] bg-gradient-to-b from-white to-[#fffafd] px-3 py-3 shadow-[inset_0_2px_6px_rgba(255,255,255,0.95),0_4px_0_rgba(0,0,0,0.06),0_10px_28px_rgba(250,218,221,0.42)]"
-                >
+              {dbItems.map((row) => {
+                const inDictionary = savedFoodKeys.has(
+                  normalizeFoodKey(row.name)
+                );
+                return (
+                  <li
+                    key={`${row.id}-${row.name}`}
+                    className="flex flex-wrap items-start gap-2 rounded-2xl border-2 border-[#FADADD] bg-gradient-to-b from-white to-[#fffafd] px-3 py-3 shadow-[inset_0_2px_6px_rgba(255,255,255,0.95),0_4px_0_rgba(0,0,0,0.06),0_10px_28px_rgba(250,218,221,0.42)]"
+                  >
                   <div className="min-w-0 flex-1">
                     <p className="flex flex-wrap items-center gap-1.5 font-semibold text-[#333333]">
                       <span className="inline-flex shrink-0" aria-label="מאומת">
@@ -240,15 +268,25 @@ export default function DictionaryPage() {
                   </div>
                   <button
                     type="button"
-                    className="btn-gold shrink-0 rounded-xl px-4 py-2 text-sm font-semibold"
-                    onClick={() => addDbToDictionary(row)}
-                    aria-label="שמירה למילון"
-                    title="שמירה למילון"
+                    disabled={inDictionary}
+                    className={`shrink-0 rounded-xl px-4 py-2 text-sm font-semibold transition-colors duration-200 ${
+                      inDictionary
+                        ? "cursor-default border-2 border-emerald-500/70 bg-emerald-50 text-emerald-900 shadow-none"
+                        : "btn-gold"
+                    }`}
+                    onClick={() => {
+                      if (!inDictionary) addDbToDictionary(row);
+                    }}
+                    aria-label={
+                      inDictionary ? "כבר במילון" : "שמירה למילון"
+                    }
+                    title={inDictionary ? "במילון" : "שמירה למילון"}
                   >
-                    שמירה למילון
+                    {inDictionary ? "ב�" : "שמירה למילון"}
                   </button>
-                </li>
-              ))}
+                  </li>
+                );
+              })}
             </ul>
           )}
         </div>
@@ -359,14 +397,26 @@ export default function DictionaryPage() {
                         </p>
                       )}
                     </div>
-                    <button
-                      type="button"
-                      onClick={() => setSaved(removeDictionaryItem(d.id))}
-                      className="btn-icon-luxury btn-icon-luxury-danger shrink-0 p-2"
-                      aria-label="הסרה מהמילון"
-                    >
-                      <IconTrash className="h-6 w-6" />
-                    </button>
+                    <div className="flex shrink-0 flex-col gap-1.5">
+                      <button
+                        type="button"
+                        onClick={() => addSavedToToday(d, preset)}
+                        className="btn-icon-luxury shrink-0 p-2 text-[#2d6a4f]"
+                        aria-label="העבר ליומן היום"
+                        title="העבר ליומן היום"
+                      >
+                        <IconCalendar className="h-6 w-6" />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setSaved(removeDictionaryItem(d.id))}
+                        className="btn-icon-luxury btn-icon-luxury-danger shrink-0 p-2"
+                        aria-label="הסרה מהמילון"
+                        title="הסרה מהמילון"
+                      >
+                        <IconTrash className="h-6 w-6" />
+                      </button>
+                    </div>
                   </div>
                   {isMeal && preset && (
                     <button

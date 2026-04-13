@@ -2,6 +2,7 @@
 
 import { AnimatePresence, motion } from "framer-motion";
 import { useCallback, useEffect, useState } from "react";
+import { fireworksDismissHint } from "@/lib/hebrewGenderUi";
 import type { Gender } from "@/lib/tdee";
 
 const fontBoard =
@@ -176,9 +177,7 @@ export function CelebrationFireworks({
               {msg}
             </p>
             <p className="mt-4 text-sm font-semibold text-[#78350f]/90">
-              {gender === "male"
-                ? "לחץ מחוץ לחלון או Escape לסגירה"
-                : "לחצי מחוץ לחלון או Escape לסגירה"}
+              {fireworksDismissHint(gender)}
             </p>
           </motion.div>
         </motion.div>

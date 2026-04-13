@@ -2,7 +2,14 @@
 
 import { AnimatePresence, motion } from "framer-motion";
 import { useCallback, useEffect, useId, useRef, useState } from "react";
-import { loadDictionary } from "@/lib/storage";
+import {
+  barcodeAimInstruction,
+  uiCameraPermissionHint,
+  uiNetworkErrorRetry,
+  uiRetryShort,
+} from "@/lib/hebrewGenderUi";
+import type { Gender } from "@/lib/tdee";
+import { loadDictionary, loadProfile } from "@/lib/storage";
 
 export function BarcodeScanModal({
   open,
@@ -14,6 +21,7 @@ export function BarcodeScanModal({
   onApplyToHome: (name: string, note: string) => void;
 }) {
   const titleId = useId();
+  const [gender, setGender] = useState<Gender>("female");
   const [phase, setPhase] = useState<"scan" | "loading" | "result" | "error">(
     "scan"
   );
@@ -32,6 +40,12 @@ export function BarcodeScanModal({
   useEffect(() => {
     if (open) reset();
   }, [open, reset]);
+
+  useEffect(() => {
+    if (!open) return;
+    const g = loadProfile().gender;
+    setGender(g === "male" ? "male" : "female");
+  }, [open]);
 
   useEffect(() => {
     if (!open || phase !== "scan") return;
@@ -93,7 +107,9 @@ export function BarcodeScanModal({
               setResultName(data.result.name);
               setPhase("result");
             } catch {
-              setErrorMessage("בעיית רשת — נסי שוב");
+              const g =
+                loadProfile().gender === "male" ? "male" : "female";
+              setErrorMessage(uiNetworkErrorRetry(g));
               setPhase("error");
             }
           },
@@ -103,7 +119,8 @@ export function BarcodeScanModal({
         );
       } catch {
         if (!cancelled) {
-          setErrorMessage("לא ניתן להפעיל מצלמה — בדקי הרשאות דפדפן");
+          const g = loadProfile().gender === "male" ? "male" : "female";
+          setErrorMessage(uiCameraPermissionHint(g));
           setPhase("error");
         }
       }
@@ -166,7 +183,7 @@ export function BarcodeScanModal({
             {phase === "scan" && (
               <div className="space-y-3">
                 <p className="text-sm text-[#333333]/85">
-                  כווני את הברקוד בתוך המסגרת — הסריקה מתבצעת אוטומטית.
+                  {barcodeAimInstruction(gender)}
                 </p>
                 <div
                   id="barcode-reader-region"
@@ -182,7 +199,9 @@ export function BarcodeScanModal({
                   aria-hidden
                 />
                 <p className="text-sm font-medium text-[#333333]">
-                  מחפשת במאגר המקומי…
+                  {gender === "male"
+                    ? "מחפש במאגר המקומי…"
+                    : "מחפשת במאגר המקומי…"}
                 </p>
               </div>
             )}
@@ -220,7 +239,7 @@ export function BarcodeScanModal({
                   className="btn-gold w-full rounded-xl py-3 text-base font-semibold"
                   onClick={() => reset()}
                 >
-                  נסי שוב
+                  {uiRetryShort(gender)}
                 </button>
               </div>
             )}

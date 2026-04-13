@@ -10,6 +10,7 @@ import {
   saveProfile,
 } from "@/lib/storage";
 import { BackToMenuButton } from "@/components/BackToMenuButton";
+import { tdeeOnboardingFillAllFields } from "@/lib/hebrewGenderUi";
 import type { ActivityLevel, Gender } from "@/lib/tdee";
 import { dailyCalorieTarget, tdee } from "@/lib/tdee";
 
@@ -85,7 +86,7 @@ export default function TdeePage() {
       <p className="mb-6 text-center text-sm font-medium text-[#333333]/85">
         {registered
           ? "השינויים נשמרים אוטומטית. יעד הקלוריות בדשבורד מתעדכן מיד כשמשנים גירעון או פעילות."
-          : "מלאי את כל השדות כדי להגדיר את היעד היומי ולהמשיך לדשבורד."}
+          : tdeeOnboardingFillAllFields(p.gender)}
       </p>
 
       <motion.section

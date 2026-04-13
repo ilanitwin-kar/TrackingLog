@@ -2,22 +2,17 @@
 
 import { motion, AnimatePresence } from "framer-motion";
 import { useEffect, useMemo, useState } from "react";
+import { uiWeightHistoryEmpty, weightAffirmations } from "@/lib/hebrewGenderUi";
+import type { Gender } from "@/lib/tdee";
 import {
   type WeightEntry,
+  loadProfile,
   loadWeights,
   saveWeights,
 } from "@/lib/storage";
 import { BackToMenuButton } from "@/components/BackToMenuButton";
 import { CelebrationConfetti } from "@/components/Fireworks";
 import { useCelebration } from "@/lib/useCelebration";
-
-const AFFIRMATIONS = [
-  "את מדהימה!",
-  "מנצחת!",
-  "התקדמות אמיתית — כל הכבוד!",
-  "גאים בך — המשיכי ככה!",
-  "זה בדיוק הכיוון!",
-];
 
 function uid(): string {
   return `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
@@ -26,11 +21,14 @@ function uid(): string {
 export default function WeightPage() {
   const [list, setList] = useState<WeightEntry[]>([]);
   const [kg, setKg] = useState("");
+  const [gender, setGender] = useState<Gender>("female");
   const { showCelebration, fadeOut, celebrationMessage, triggerCelebration } =
-    useCelebration();
+    useCelebration(gender);
 
   useEffect(() => {
     setList(loadWeights());
+    const g = loadProfile().gender;
+    setGender(g === "male" ? "male" : "female");
   }, []);
 
   const sorted = useMemo(
@@ -60,7 +58,8 @@ export default function WeightPage() {
     setKg("");
 
     if (prevLast && v < prevLast.kg - 0.05) {
-      const line = AFFIRMATIONS[Math.floor(Math.random() * AFFIRMATIONS.length)];
+      const lines = weightAffirmations(gender);
+      const line = lines[Math.floor(Math.random() * lines.length)]!;
       triggerCelebration({ customMessage: line });
     }
   }
@@ -128,7 +127,7 @@ export default function WeightPage() {
         <h2 className="mb-3 text-lg font-bold text-[#333333]">היסטוריה</h2>
         {sorted.length === 0 ? (
           <p className="text-[#333333]/85">
-            אין עדיין שקילות — הוסיפי רשומה ראשונה
+            {uiWeightHistoryEmpty(gender)}
           </p>
         ) : (
           <ul className="space-y-2">

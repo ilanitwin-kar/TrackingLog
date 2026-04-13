@@ -5,17 +5,27 @@ import { useEffect, useState } from "react";
 import { getCalorieBoardDateSequence, getTodayKey } from "@/lib/dateKey";
 import {
   JOURNEY_FINAL_GOLD_MESSAGE,
-  JOURNEY_LOCKED_PLACEHOLDER,
   getJourneyMilestoneMessage,
 } from "@/lib/journeyMilestones";
-import { getStoryDisplayForSquare } from "@/lib/storyReveal";
+import { formatClosedDayCalorieGapPhrase } from "@/lib/calorieGapMessageHe";
 import {
-  getDaysRemainingToGoal,
+  uiCloseJournalOnHome,
+  uiCloseJournalToUnlockCube,
+  uiTapOnCube,
+} from "@/lib/hebrewGenderUi";
+import {
+  getStoryDisplayForSquare,
+  getWordForSquareIndex,
+} from "@/lib/storyReveal";
+import {
+  getCalorieBoardTotalDays,
   getTdeeKcalRoundedFromProfile,
 } from "@/lib/goalMetrics";
 import type { Gender } from "@/lib/tdee";
 import {
-  getEntriesForDate,
+  ensureStoryRevealDateMigration,
+  isDayJournalClosed,
+  loadDayJournalClosedMap,
   loadProfile,
   loadStoryRevealUnlock,
   toggleStoryRevealUnlock,
@@ -23,6 +33,9 @@ import {
 import { CelebrationFireworks } from "@/components/CelebrationFireworks";
 const fontBoard =
   "font-[Calibri,'Segoe_UI','Helvetica_Neue',system-ui,sans-serif]";
+/** גופן שמציג עברית בצורה אמינה על רקע זהב (Calibri ראשון עלול להשאיר תאים “ריקים”) */
+const fontBoardStoryGold =
+  "font-[system-ui,'Segoe_UI',Arial,'Helvetica_Neue',sans-serif]";
 
 const grey3d =
   "border-[#9ca3af] bg-gradient-to-b from-[#eceef2] to-[#bfc2c9] shadow-[inset_0_3px_6px_rgba(255,255,255,0.85),inset_0_-3px_8px_rgba(0,0,0,0.14),0_5px_0_rgba(0,0,0,0.18),0_8px_16px_rgba(0,0,0,0.1)]";
@@ -37,8 +50,7 @@ function formatDayMonth(dateKey: string): string {
 }
 
 type GridModel = {
-  /** תואם ל־getDaysRemainingToGoal (לוגיקת TDEE / יעד) */
-  daysRemaining: number;
+  totalDays: number;
   dateKeys: string[];
   tdeeKcal: number;
   today: string;
@@ -47,18 +59,19 @@ type GridModel = {
 };
 
 function buildGridModel(): GridModel | null {
-  const daysRemaining = getDaysRemainingToGoal();
-  if (daysRemaining == null || daysRemaining < 1) {
+  const totalDays = getCalorieBoardTotalDays();
+  if (totalDays == null || totalDays < 1) {
     return null;
   }
-  const dateKeys = getCalorieBoardDateSequence(daysRemaining);
-  if (dateKeys.length !== daysRemaining) {
+  const dateKeys = getCalorieBoardDateSequence(totalDays);
+  if (dateKeys.length !== totalDays) {
     return null;
   }
+  ensureStoryRevealDateMigration(dateKeys);
   const p = loadProfile();
   const tdeeKcal = getTdeeKcalRoundedFromProfile(p);
   return {
-    daysRemaining,
+    totalDays,
     dateKeys,
     tdeeKcal,
     today: getTodayKey(),
@@ -80,15 +93,27 @@ export function CalorieBoardGrid({ profileRev = 0 }: { profileRev?: number }) {
     const sync = () => setBoard(buildGridModel());
     window.addEventListener("cj-profile-updated", sync);
     window.addEventListener("storage", sync);
+    window.addEventListener("cj-day-journal-closed", sync);
     return () => {
       window.removeEventListener("cj-profile-updated", sync);
       window.removeEventListener("storage", sync);
+      window.removeEventListener("cj-day-journal-closed", sync);
     };
   }, []);
 
   useEffect(() => {
     setGoldMap(loadStoryRevealUnlock());
-  }, [profileRev, board?.daysRemaining]);
+  }, [profileRev, board?.totalDays]);
+
+  useEffect(() => {
+    const sync = () => setGoldMap(loadStoryRevealUnlock());
+    window.addEventListener("cj-story-reveal-updated", sync);
+    window.addEventListener("cj-day-journal-closed", sync);
+    return () => {
+      window.removeEventListener("cj-story-reveal-updated", sync);
+      window.removeEventListener("cj-day-journal-closed", sync);
+    };
+  }, []);
 
   if (board === undefined) {
     return (
@@ -113,17 +138,12 @@ export function CalorieBoardGrid({ profileRev = 0 }: { profileRev?: number }) {
     );
   }
 
-  const { dateKeys, daysRemaining, tdeeKcal, today, firstName, gender } =
-    board;
+  const { dateKeys, totalDays, today, firstName, gender } = board;
+  const closedMap = loadDayJournalClosedMap();
 
-  /** כל המשבצות — אותו גודל (ריבוע), תוכן בתוך המסגרת בלי הרחבה */
-  const plannedDailyDeficitKcal = Math.max(
-    0,
-    Math.round(loadProfile().deficit || 0)
-  );
-
+  /** בלי overflow-hidden / ריבוע קטן ב-md — אחרת שורת הסיפור והפער נחתכים לגמרי */
   const cellFixed =
-    "aspect-square w-full min-h-0 min-w-0 max-w-full shrink-0 overflow-hidden";
+    "min-h-[11.5rem] w-full min-w-0 max-w-full shrink-0 sm:min-h-[11rem] md:min-h-[12.5rem]";
 
   return (
     <section className={`space-y-4 overflow-visible ${fontBoard}`}>
@@ -134,63 +154,86 @@ export function CalorieBoardGrid({ profileRev = 0 }: { profileRev?: number }) {
         <div
           className="grid grid-cols-2 gap-3 overflow-visible sm:grid-cols-3 sm:gap-3 md:grid-cols-4"
           role="list"
-          aria-label={`מפת התקדמות, ${daysRemaining} משבצות`}
+          aria-label={`מפת התקדמות, ${totalDays} משבצות`}
         >
           {dateKeys.map((dateKey, i) => {
             const isFuture = dateKey > today;
-            const entries = isFuture ? [] : getEntriesForDate(dateKey);
-            const hasData = entries.length > 0;
-            const consumed = entries.reduce((s, e) => s + e.calories, 0);
-            /** גירעון בפועל ליום: TDEE − צריכה (רק כשיש רישום לאותו תאריך) */
-            const actualDeficitKcal = hasData ? tdeeKcal - consumed : null;
-            const revealedDeficitKcal =
-              actualDeficitKcal != null
-                ? actualDeficitKcal
-                : plannedDailyDeficitKcal;
-
-            const isGold = goldMap[String(i)] === true;
+            const dayNum = totalDays - i;
+            const journalClosed = isDayJournalClosed(dateKey);
+            const isGold = journalClosed && goldMap[dateKey] === true;
             const isLastSquare = i === dateKeys.length - 1;
-            const storyText = getStoryDisplayForSquare(i, firstName, gender);
+            const storyTextRaw = getStoryDisplayForSquare(i, firstName, gender);
+            const storyText =
+              storyTextRaw.trim().length > 0
+                ? storyTextRaw.trim()
+                : i === 0
+                  ? firstName.trim() ||
+                    (gender === "male" ? "אתה" : "את")
+                  : getWordForSquareIndex(Math.max(0, i - 1), gender);
             const showReveal = !isFuture && isGold;
-            const milestoneMsg = getJourneyMilestoneMessage(
-              daysRemaining,
-              i
-            );
+            const milestoneMsg = getJourneyMilestoneMessage(totalDays, i);
+            const gapKcal = closedMap[dateKey]?.gapKcal;
+            const gapRounded =
+              gapKcal != null ? Math.round(gapKcal) : null;
 
-            const deficitGoldOnly = showReveal ? (
-              <span className="text-[10px] font-bold tabular-nums leading-none text-[#78350f]/90 sm:text-[11px]">
-                {revealedDeficitKcal > 0 ? "+" : ""}
-                {Math.round(revealedDeficitKcal)} kcal
-              </span>
-            ) : null;
+            const lockedHint = isFuture
+              ? milestoneMsg ??
+                `יום ${dayNum} · ` + "\u05ea\u05d0\u05e8\u05d9\u05da \u05e2\u05ea\u05d9\u05d3\u05d9"
+              : journalClosed
+                ? milestoneMsg ?? uiTapOnCube(gender)
+                : milestoneMsg ?? uiCloseJournalOnHome(dayNum, gender);
 
-            const goldMainText =
-              isLastSquare && showReveal
-                ? JOURNEY_FINAL_GOLD_MESSAGE
-                : storyText;
-
-            const lockedMuted = (
-              <span
-                dir="rtl"
-                className="line-clamp-5 w-full max-h-full overflow-hidden text-center text-[11px] font-bold leading-snug text-black sm:text-[12px]"
-              >
-                {milestoneMsg ?? JOURNEY_LOCKED_PLACEHOLDER}
-              </span>
-            );
+            const gapLine =
+              showReveal && gapRounded != null ? (
+                <p
+                  dir="rtl"
+                  className={`mb-1 max-w-full shrink-0 px-0.5 text-center text-[0.95rem] font-black leading-snug text-black sm:text-[1.1rem] md:text-[1.2rem] ${fontBoardStoryGold}`}
+                >
+                  {formatClosedDayCalorieGapPhrase(gapRounded, gender)}
+                </p>
+              ) : null;
 
             const centerBlock = (
-              <div className="flex min-h-0 flex-1 flex-col items-center justify-center overflow-hidden px-0.5">
+              <div
+                className={`flex min-h-0 flex-1 flex-col items-center justify-center px-0.5 ${
+                  showReveal ? "overflow-visible" : "overflow-hidden"
+                }`}
+              >
                 {showReveal ? (
+                  <>
+                    {gapLine != null ? gapLine : null}
+                    <span
+                      dir="rtl"
+                      className={`line-clamp-6 w-full shrink-0 break-words text-center text-[clamp(1.1rem,4vw,1.75rem)] font-extrabold leading-snug tracking-tight text-slate-950 sm:text-[clamp(1.05rem,3.2vw,1.55rem)] [text-shadow:0_1px_0_rgba(255,255,255,0.9),0_0_1px_rgba(255,255,255,0.5)] ${fontBoardStoryGold}`}
+                    >
+                      {isLastSquare && showReveal
+                        ? JOURNEY_FINAL_GOLD_MESSAGE
+                        : storyText}
+                    </span>
+                  </>
+                ) : (
                   <span
                     dir="rtl"
-                    className="line-clamp-3 w-full max-h-full overflow-hidden text-center text-[clamp(1.15rem,4.2vw,1.8rem)] font-black leading-tight tracking-tight text-[#1a1200] sm:text-[clamp(1.05rem,3vw,1.5rem)] sm:leading-tight"
+                    className="line-clamp-8 w-full max-h-full overflow-hidden text-center text-sm font-semibold leading-snug text-[#374151] sm:text-base"
                   >
-                    {goldMainText}
+                    {lockedHint}
                   </span>
-                ) : (
-                  lockedMuted
                 )}
               </div>
+            );
+
+            const headerBlock = (
+              <div className="shrink-0 text-center leading-tight">
+                <div className="text-base font-black tabular-nums text-black sm:text-lg md:text-xl">
+                  יום {dayNum.toLocaleString("he-IL")}
+                </div>
+                <div className="truncate text-sm font-black tracking-tight text-black sm:text-base md:text-lg">
+                  {formatDayMonth(dateKey)}
+                </div>
+              </div>
+            );
+            const goldHeaderSpacer = (
+              <div className="min-h-[2.25rem] shrink-0" aria-hidden />
             );
 
             if (isFuture) {
@@ -202,12 +245,15 @@ export function CalorieBoardGrid({ profileRev = 0 }: { profileRev?: number }) {
                   tabIndex={-1}
                   className={`relative flex ${cellFixed} flex-col items-stretch justify-between gap-1 rounded-2xl border-2 px-2.5 py-2.5 text-center ${fontBoard} ${futureGrey3d}`}
                 >
-                  <span className="shrink-0 truncate text-xs font-bold tracking-tight text-[#374151] sm:text-sm">
-                    {formatDayMonth(dateKey)}
-                  </span>
-                  <div className="min-h-[12px] shrink-0" aria-hidden />
+                  {headerBlock}
+                  <div className="min-h-[8px] shrink-0" aria-hidden />
                   <div className="flex min-h-0 flex-1 flex-col items-center justify-center overflow-hidden px-0.5">
-                    {lockedMuted}
+                    <span
+                      dir="rtl"
+                      className="line-clamp-8 w-full max-h-full overflow-hidden text-center text-sm font-semibold leading-snug text-[#374151] sm:text-base"
+                    >
+                      {lockedHint}
+                    </span>
                   </div>
                 </div>
               );
@@ -218,39 +264,39 @@ export function CalorieBoardGrid({ profileRev = 0 }: { profileRev?: number }) {
                 key={`${dateKey}-${i}`}
                 type="button"
                 role="listitem"
-                whileTap={{ scale: 0.97 }}
+                whileTap={{ scale: journalClosed ? 0.97 : 1 }}
                 transition={{ type: "spring", stiffness: 520, damping: 30 }}
                 aria-pressed={isGold}
-                aria-label={`${formatDayMonth(dateKey)}${
-                  showReveal
-                    ? hasData
-                      ? `, גירעון בפועל ${Math.round(
-                          actualDeficitKcal!
-                        )} kcal (TDEE מינוס צריכה)`
-                      : `, גירעון מתוכנן ${Math.round(
-                          plannedDailyDeficitKcal
-                        )} kcal (אין רישום ביומן)`
-                    : ""
+                aria-label={`${formatDayMonth(dateKey)}, יום ${dayNum}${
+                  !journalClosed
+                    ? " — נדרשת סגירת יומן"
+                    : isGold && gapRounded != null
+                      ? `, ${formatClosedDayCalorieGapPhrase(gapRounded, gender)}`
+                      : journalClosed
+                        ? " — ניתן ללחיצה על הקוביה"
+                        : ""
                 }${isLastSquare && isGold ? ", חגיגת סיום" : ""}`}
+                title={
+                  !journalClosed
+                    ? uiCloseJournalToUnlockCube(gender)
+                    : !isGold
+                      ? uiTapOnCube(gender)
+                      : undefined
+                }
                 className={`relative flex ${cellFixed} flex-col items-stretch justify-between gap-1 rounded-2xl border-2 px-2.5 py-2.5 text-center transition-shadow focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:ring-offset-2 active:shadow-[inset_0_4px_10px_rgba(0,0,0,0.15)] ${fontBoard} ${
-                  isGold ? gold3d : grey3d
-                } `}
+                  isGold ? `${gold3d} text-slate-950` : grey3d
+                } ${!journalClosed ? "opacity-[0.92]" : ""} `}
                 onClick={() => {
+                  if (!journalClosed) return;
                   if (isLastSquare && isGold) {
                     setCelebrationOpen(true);
                     return;
                   }
-                  setGoldMap(toggleStoryRevealUnlock(i));
+                  setGoldMap(toggleStoryRevealUnlock(dateKey));
                 }}
               >
-                <span className="shrink-0 truncate text-xs font-bold tracking-tight text-[#1f2937] sm:text-sm">
-                  {formatDayMonth(dateKey)}
-                </span>
-                {deficitGoldOnly != null ? (
-                  <div className="shrink-0">{deficitGoldOnly}</div>
-                ) : (
-                  <div className="min-h-[12px] shrink-0" aria-hidden />
-                )}
+                {isGold ? goldHeaderSpacer : headerBlock}
+                <div className="min-h-[8px] shrink-0" aria-hidden />
                 {centerBlock}
               </motion.button>
             );

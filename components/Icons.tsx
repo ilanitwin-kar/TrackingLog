@@ -141,6 +141,24 @@ export function IconScanBarcode({ className = "" }: { className?: string }) {
   );
 }
 
+/** הוספה ידנית — פלוס בעיגול */
+export function IconPlusCircle({ className = "" }: { className?: string }) {
+  return (
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={1.75}
+      className={className}
+      aria-hidden
+    >
+      <circle cx="12" cy="12" r="9" strokeLinecap="round" />
+      <path strokeLinecap="round" d="M12 8.5v7M8.5 12h7" />
+    </svg>
+  );
+}
+
 export function IconUser({ className = "" }: { className?: string }) {
   return (
     <svg

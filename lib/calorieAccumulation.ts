@@ -1,39 +1,36 @@
 import { getCalorieBoardDateSequence, getTodayKey } from "@/lib/dateKey";
-import { getDaysRemainingToGoal } from "@/lib/goalMetrics";
-import { loadDayLogs, loadProfile, loadStoryRevealUnlock } from "@/lib/storage";
+import { getCalorieBoardTotalDays } from "@/lib/goalMetrics";
+import {
+  ensureStoryRevealDateMigration,
+  loadDayJournalClosedMap,
+  loadDayLogs,
+  loadProfile,
+  loadStoryRevealUnlock,
+  type DayJournalClosedEntry,
+} from "@/lib/storage";
 import { tdee } from "@/lib/tdee";
 
 const FAT_KCAL_PER_G = 7.7;
 
 export type CalorieAccumulationRow = {
   dateKey: string;
-  /** ההון היומי לפי תוכנית: TDEE − יעד יומי (כלומר deficit בפרופיל) */
   plannedDailyBankKcal: number;
-  /** מאזן יומי בפועל: TDEE − צריכה (חיובי = מתחת ל-TDEE) */
-  dailyBalanceKcal: number;
-  /** נספר בצבירה רק לאחר שהיום הסתיים (אחרי חצות) ורק אם המשבצת נפתחה */
+  /** פער מסגירת יומן (צריכה − TDEE); null אם עדיין לא נסגר */
+  dailyBalanceKcal: number | null;
+  /** תורם לסכום כשהקובייה נפתחה: רק אם היום נסגר — הערך gapKcal */
   contributionKcal: number;
-  /** הון מצטבר בקק״ל */
   accumulatedKcal: number;
-  /** שקול שומן לצבירה הנוכחית */
   fatEquivalentG: number;
 };
 
 export type CalorieAccumulationResult = {
-  /** TDEE מעוגל — אותו חישוב כמו במסך הרשמה / עריכת פרטים */
   tdeeKcal: number;
-  /** יעד יומי מעוגל: TDEE − deficit */
   dailyTargetKcal: number;
   rows: CalorieAccumulationRow[];
+  /** סכום פערים (חתומים) מימים סגורים שהקובייה שלהם נפתחה — מעדכן את חוב השריפה */
   totalAccumulatedKcal: number;
 };
 
-/**
- * צבירת הון קלורי:
- * - ההון היומי = (TDEE − יעד יומי) כלומר ה-deficit המתוכנן בפרופיל.
- * - נספר רק עבור ימים שהסתיימו (dateKey < today) ורק אם המשתמש/ת "פתחה"
- *   את המשבצת בלוח (בלחיצה).
- */
 export function buildCalorieAccumulationTable(): CalorieAccumulationResult {
   const profile = loadProfile();
   const tdeeKcal = Math.round(
@@ -49,38 +46,57 @@ export function buildCalorieAccumulationTable(): CalorieAccumulationResult {
   const plannedDailyBankKcal = Math.max(0, Math.round(profile.deficit || 0));
   const dailyTargetKcal = Math.max(0, tdeeKcal - plannedDailyBankKcal);
 
-  const daysRemaining = getDaysRemainingToGoal() ?? 0;
+  const totalDays = getCalorieBoardTotalDays() ?? 0;
   const dateKeys =
-    daysRemaining > 0 ? getCalorieBoardDateSequence(daysRemaining) : [];
+    totalDays > 0 ? getCalorieBoardDateSequence(totalDays) : [];
+  if (dateKeys.length > 0) {
+    ensureStoryRevealDateMigration(dateKeys);
+  }
   const today = getTodayKey();
   const unlockedMap = loadStoryRevealUnlock();
   const dayLogs = loadDayLogs();
+  const closedMap = loadDayJournalClosedMap();
+
+  const forwardSet = new Set(dateKeys);
+  const extraBeforeSet = new Set<string>();
+  for (const d of Object.keys(dayLogs)) {
+    if (
+      d < today &&
+      (dayLogs[d]?.length ?? 0) > 0 &&
+      !forwardSet.has(d)
+    ) {
+      extraBeforeSet.add(d);
+    }
+  }
+  for (const d of Object.keys(unlockedMap)) {
+    if (d < today && unlockedMap[d] && !forwardSet.has(d)) {
+      extraBeforeSet.add(d);
+    }
+  }
+  for (const d of Object.keys(closedMap)) {
+    if (d < today && !forwardSet.has(d)) {
+      extraBeforeSet.add(d);
+    }
+  }
+  const extraBeforeSorted = [...extraBeforeSet].sort();
+  const displayDateKeys = [...extraBeforeSorted, ...dateKeys];
 
   let accumulated = 0;
   const rows: CalorieAccumulationRow[] = [];
 
-  for (let i = 0; i < dateKeys.length; i++) {
-    const dateKey = dateKeys[i]!;
-    const isPastCompleteDay = dateKey < today;
-    const isUnlocked = unlockedMap[String(i)] === true;
-    const contributionKcal =
-      isPastCompleteDay && isUnlocked ? plannedDailyBankKcal : 0;
+  for (const dateKey of displayDateKeys) {
+    const closed = closedMap[dateKey];
+    const dailyBalanceKcal =
+      closed != null ? closed.gapKcal : null;
 
-    const entries = dayLogs[dateKey] ?? [];
-    const consumed = entries.reduce((s, e) => s + e.calories, 0);
-    // גירעון יומי מוצג:
-    // - לימים שהסתיימו: בפועל (TDEE − צריכה)
-    // - להיום/עתיד: מתוכנן (פער TDEE ליעד = deficit)
-    const dailyBalanceKcal = isPastCompleteDay
-      ? tdeeKcal - consumed
-      : plannedDailyBankKcal;
-
-    accumulated += contributionKcal;
+    const contributionFromDay =
+      closed && unlockedMap[dateKey] === true ? closed.gapKcal : 0;
+    accumulated += contributionFromDay;
     rows.push({
       dateKey,
       plannedDailyBankKcal,
       dailyBalanceKcal,
-      contributionKcal,
+      contributionKcal: contributionFromDay,
       accumulatedKcal: accumulated,
       fatEquivalentG: accumulated / FAT_KCAL_PER_G,
     });

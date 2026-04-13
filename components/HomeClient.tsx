@@ -17,9 +17,11 @@ import {
   type LogEntry,
   type MealPresetComponent,
   addMealPreset,
+  closeDayJournal,
   getFoodMemory,
   getEntriesForDate,
   type UserProfile,
+  isDayJournalClosed,
   isFoodStarred,
   loadProfile,
   saveDayLogEntries,
@@ -28,19 +30,23 @@ import {
 } from "@/lib/storage";
 import { optionalMacroGram, sumMacroGrams } from "@/lib/macroGrams";
 import { SEARCH_DEBOUNCE_MS } from "@/lib/searchDebounce";
-import { dailyCalorieTarget } from "@/lib/tdee";
+import { getRandomMessage } from "@/lib/celebrationMessages";
+import { uiNetworkErrorRetry } from "@/lib/hebrewGenderUi";
+import { dailyCalorieTarget, type Gender } from "@/lib/tdee";
 import { CelebrationConfetti } from "./Fireworks";
 import {
   IconBookmark,
   IconCalendar,
   IconDuplicate,
   IconPencil,
+  IconPlusCircle,
   IconScanBarcode,
   IconStar,
   IconTrash,
   IconVerified,
 } from "./Icons";
 import { BarcodeScanModal } from "./BarcodeScanModal";
+import { ManualFoodModal } from "./ManualFoodModal";
 import { LiveClock } from "./LiveClock";
 import { ProfileMenu } from "./ProfileMenu";
 
@@ -174,26 +180,11 @@ function uid(): string {
   return `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
 }
 
-const halfMessages = [
-  "התקדמות מעולה — ממשיכים בדיוק ככה!",
-  "את בשליטה — וזה כבר חצי דרך!",
-  "חצי יעד כבר מאחורייך — יפה!",
-];
-
-const fullMessages = [
-  "יעד הושג — כל הכבוד!",
-  "עשית את זה — מדויק!",
-  "שליטה מלאה — ככה נראית הצלחה",
-];
 
 const MIXKIT_CLICK_SOUND_URL =
   "https://assets.mixkit.co/active_storage/sfx/2571/2571-preview.mp3";
 
 const GEMINI_UNAVAILABLE_MSG = "שירות הניתוח זמנית לא זמין";
-
-function getRandom<T>(arr: readonly T[]): T {
-  return arr[Math.floor(Math.random() * arr.length)]!;
-}
 
 export function HomeClient() {
   const [food, setFood] = useState("");
@@ -260,6 +251,14 @@ export function HomeClient() {
   const [editLoading, setEditLoading] = useState(false);
 
   const [scanModalOpen, setScanModalOpen] = useState(false);
+  const [manualFoodOpen, setManualFoodOpen] = useState(false);
+  const [journalRev, setJournalRev] = useState(0);
+
+  useEffect(() => {
+    const bump = () => setJournalRev((r) => r + 1);
+    window.addEventListener("cj-day-journal-closed", bump);
+    return () => window.removeEventListener("cj-day-journal-closed", bump);
+  }, []);
 
   useEffect(() => {
     const a = new Audio(MIXKIT_CLICK_SOUND_URL);
@@ -324,10 +323,14 @@ export function HomeClient() {
   const displayPercentage =
     target > 0 ? Math.round((total / target) * 100) : 0;
   const isViewingToday = viewDateKey === getTodayKey();
+  const dayJournalClosed = useMemo(
+    () => isDayJournalClosed(viewDateKey),
+    [viewDateKey, journalRev]
+  );
 
   const triggerCelebration = useCallback((type: "half" | "full") => {
-    const message =
-      type === "half" ? getRandom(halfMessages) : getRandom(fullMessages);
+    const g: Gender = profile?.gender === "male" ? "male" : "female";
+    const message = getRandomMessage(type, g);
     setCelebration({ show: true, message, fadeOut: false });
     if (celebrationTimeoutRef.current) {
       clearTimeout(celebrationTimeoutRef.current);
@@ -341,7 +344,7 @@ export function HomeClient() {
         setCelebration((prev) => ({ ...prev, show: false }));
       }, 500);
     }, 2500);
-  }, []);
+  }, [profile?.gender]);
 
   useEffect(() => {
     return () => {
@@ -365,7 +368,11 @@ export function HomeClient() {
     (debouncePending || searchPanelSync);
 
   const blockFoodFormOverlay =
-    mealModalOpen || editOpen || celebration.show || scanModalOpen;
+    mealModalOpen ||
+    editOpen ||
+    celebration.show ||
+    scanModalOpen ||
+    manualFoodOpen;
 
   useEffect(() => {
     if (celebration.show) {
@@ -702,7 +709,8 @@ export function HomeClient() {
         }, 1200);
       }
     } catch {
-      setError("בעיית רשת — נסי שוב");
+      const g: Gender = profile?.gender === "male" ? "male" : "female";
+      setError(uiNetworkErrorRetry(g));
     } finally {
       setLoading(false);
     }
@@ -1229,22 +1237,37 @@ export function HomeClient() {
               autoCapitalize="none"
               spellCheck={false}
               placeholder="חפשי מזון…"
-              className="input-luxury-search w-full ps-12 pe-14"
+              className="input-luxury-search w-full ps-12 pe-[5.75rem] sm:pe-24"
               aria-controls={showSuggestions ? "food-suggestions" : undefined}
             />
-            <button
-              type="button"
-              className="absolute end-3 top-1/2 z-[11] flex h-10 w-10 -translate-y-1/2 items-center justify-center rounded-xl border-2 border-[#fadadd] bg-white text-[#333333] shadow-sm transition hover:bg-[#fadadd]/45 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#f5c8d4]"
-              aria-label="סריקת ברקוד"
-              title="סריקת ברקוד"
-              onClick={() => {
-                foodSearchInputRef.current?.blur();
-                setSuggestionsDismissed(true);
-                setScanModalOpen(true);
-              }}
-            >
-              <IconScanBarcode className="h-6 w-6" />
-            </button>
+            <div className="absolute end-2 top-1/2 z-[11] flex -translate-y-1/2 items-center gap-1">
+              <button
+                type="button"
+                className="flex h-10 w-10 items-center justify-center rounded-xl border-2 border-[#fadadd] bg-white text-[#333333] shadow-sm transition hover:bg-[#fadadd]/45 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#f5c8d4]"
+                aria-label="הוספת מזון ידנית"
+                title="הוספת מזון ידנית"
+                onClick={() => {
+                  foodSearchInputRef.current?.blur();
+                  setSuggestionsDismissed(true);
+                  setManualFoodOpen(true);
+                }}
+              >
+                <IconPlusCircle className="h-6 w-6" />
+              </button>
+              <button
+                type="button"
+                className="flex h-10 w-10 items-center justify-center rounded-xl border-2 border-[#fadadd] bg-white text-[#333333] shadow-sm transition hover:bg-[#fadadd]/45 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#f5c8d4]"
+                aria-label="סריקת ברקוד"
+                title="סריקת ברקוד"
+                onClick={() => {
+                  foodSearchInputRef.current?.blur();
+                  setSuggestionsDismissed(true);
+                  setScanModalOpen(true);
+                }}
+              >
+                <IconScanBarcode className="h-6 w-6" />
+              </button>
+            </div>
             {showSuggestions && (
               <div
                 id="food-suggestions"
@@ -1553,6 +1576,31 @@ export function HomeClient() {
                       {formatQtyLabel(item.quantity, item.unit)} {item.unit} ·{" "}
                       {item.calories} קק״ל
                     </p>
+                    {(item.proteinG != null ||
+                      item.carbsG != null ||
+                      item.fatG != null) && (
+                      <p className="mt-1 text-[11px] leading-snug text-[#333333]/65">
+                        {item.proteinG != null && (
+                          <>
+                            ח {item.proteinG} גרם
+                            {(item.carbsG != null || item.fatG != null)
+                              ? " · "
+                              : ""}
+                          </>
+                        )}
+                        {item.carbsG != null && (
+                          <>
+                            פחם {item.carbsG} גרם
+                            {item.fatG != null ? " · " : ""}
+                          </>
+                        )}
+                        {item.fatG != null && (
+                          <>
+                            שומן {item.fatG} גרם
+                          </>
+                        )}
+                      </p>
+                    )}
                   </div>
                   <div className="flex w-full flex-wrap items-start justify-start gap-2 sm:w-auto sm:shrink-0 sm:items-center sm:justify-end">
                     <button
@@ -1632,6 +1680,35 @@ export function HomeClient() {
             })}
           </ul>
         )}
+        {viewDateKey <= getTodayKey() ? (
+          <motion.button
+            type="button"
+            className="btn-gold mt-4 w-full rounded-xl border-2 border-[#8b2942] bg-gradient-to-b from-[#ffe4e8] to-[#ffd0d8] py-4 text-lg font-bold text-[#4a1522] shadow-[0_6px_20px_rgba(200,100,120,0.35)] disabled:cursor-not-allowed disabled:opacity-55"
+            disabled={dayJournalClosed}
+            whileTap={{ scale: dayJournalClosed ? 1 : 0.98 }}
+            onClick={() => {
+              const r = closeDayJournal(viewDateKey);
+              if (r.ok && r.gapKcal !== undefined) {
+                const g = r.gapKcal;
+                const sign = g > 0 ? "+" : "";
+                setNote(
+                  `היומן נסגר. פער (צריכה − TDEE): ${sign}${g.toLocaleString("he-IL")} ${"\u05e7\u05e7\u05f4\u05dc"}.`
+                );
+                setError(null);
+                setJournalRev((x) => x + 1);
+              } else {
+                setNote(null);
+                setError(r.message ?? "לא ניתן לסגור את היומן");
+              }
+            }}
+          >
+            {dayJournalClosed
+              ? "היומן נסגר ליום זה"
+              : isViewingToday
+                ? "סגירת יומן"
+                : `סגירת יומן — ${viewDateKey}`}
+          </motion.button>
+        ) : null}
       </section>
 
       <BarcodeScanModal
@@ -1641,6 +1718,18 @@ export function HomeClient() {
           setFood(name);
           setSuggestionsDismissed(true);
           setNote(noteMsg);
+          setError(null);
+        }}
+      />
+      <ManualFoodModal
+        open={manualFoodOpen}
+        onClose={() => setManualFoodOpen(false)}
+        dateKey={viewDateKey}
+        gender={profile?.gender === "male" ? "male" : "female"}
+        onSuccess={(msg) => {
+          setEntries(getEntriesForDate(viewDateKey));
+          setDictTick((t) => t + 1);
+          setNote(msg);
           setError(null);
         }}
       />

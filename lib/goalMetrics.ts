@@ -1,4 +1,9 @@
-import { loadDayLogs, loadProfile, loadWeights } from "@/lib/storage";
+import {
+  loadBoardExtraTailDays,
+  loadDayLogs,
+  loadProfile,
+  loadWeights,
+} from "@/lib/storage";
 import type { UserProfile } from "@/lib/storage";
 import { tdee } from "@/lib/tdee";
 
@@ -84,4 +89,11 @@ export function getDaysRemainingToGoal(): number | null {
     return Math.max(1, Math.ceil(kcalToBurn / dailyDeficit));
   }
   return null;
+}
+
+/** ימי לוח צבירה = ימים עד יעד + ימי זנב מחריגות (קלוריות) */
+export function getCalorieBoardTotalDays(): number | null {
+  const base = getDaysRemainingToGoal();
+  if (base == null || base < 1) return null;
+  return base + loadBoardExtraTailDays();
 }

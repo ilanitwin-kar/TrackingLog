@@ -7,7 +7,7 @@ import {
   FAT_KCAL_PER_G,
 } from "@/lib/calorieAccumulation";
 import { getDaysRemainingToGoal } from "@/lib/goalMetrics";
-import { loadProfile, loadWeights } from "@/lib/storage";
+import { isDayJournalClosed, loadProfile, loadWeights } from "@/lib/storage";
 import { BackToMenuButton } from "@/components/BackToMenuButton";
 import { getTodayKey } from "@/lib/dateKey";
 
@@ -30,10 +30,14 @@ export default function ReportPage() {
     const bump = () => setRev((r) => r + 1);
     window.addEventListener("focus", bump);
     window.addEventListener("cj-profile-updated", bump);
+    window.addEventListener("cj-story-reveal-updated", bump);
+    window.addEventListener("cj-day-journal-closed", bump);
     window.addEventListener("storage", bump);
     return () => {
       window.removeEventListener("focus", bump);
       window.removeEventListener("cj-profile-updated", bump);
+      window.removeEventListener("cj-story-reveal-updated", bump);
+      window.removeEventListener("cj-day-journal-closed", bump);
       window.removeEventListener("storage", bump);
     };
   }, []);
@@ -118,9 +122,9 @@ export default function ReportPage() {
                       תאריך
                     </th>
                     <th className="border-b border-[#FADADD] px-2 py-3 text-right font-bold sm:px-3">
-                      גירעון יומי
+                      פער יומי
                       <span className="block text-[10px] font-semibold opacity-80">
-                        (קק״ל)
+                        לפי סגירת יומן · צריכה − TDEE (קק״ל)
                       </span>
                     </th>
                     <th className="border-b border-[#FADADD] px-2 py-3 text-right font-bold sm:px-3">
@@ -146,27 +150,40 @@ export default function ReportPage() {
                       }
                     >
                       <td className="border-b border-[#FADADD]/60 px-2 py-2.5 text-[#333333] sm:px-3">
-                        {formatHeDate(row.dateKey)}
+                        <span className="inline-flex items-center gap-2">
+                          {formatHeDate(row.dateKey)}
+                          {isDayJournalClosed(row.dateKey) ? (
+                            <span
+                              className="inline-flex h-5 min-w-[1.25rem] shrink-0 items-center justify-center rounded-full border border-[#1f5f3a]/25 bg-[#ecfdf3] px-1 text-[11px] font-bold leading-none text-[#166534]"
+                              title="יום שהסתיים"
+                              aria-label="יום שהסתיים"
+                            >
+                              {"\u2713"}
+                            </span>
+                          ) : null}
+                        </span>
                       </td>
                       <td
                         className={`border-b border-[#FADADD]/60 px-2 py-2.5 font-medium tabular-nums sm:px-3 ${
-                          (row.dateKey < todayKey
-                            ? row.dailyBalanceKcal
-                            : row.plannedDailyBankKcal) >= 0
-                            ? "text-[#1f5f3a]"
-                            : "text-[#8b2e2e]"
+                          row.dailyBalanceKcal == null
+                            ? "text-[#333333]/45"
+                            : row.dailyBalanceKcal < 0
+                              ? "text-[#1f5f3a]"
+                              : row.dailyBalanceKcal > 0
+                                ? "text-[#8b2e2e]"
+                                : "text-[#333333]"
                         }`}
                       >
-                        {(row.dateKey < todayKey
-                          ? row.dailyBalanceKcal
-                          : row.plannedDailyBankKcal) > 0
-                          ? "+"
-                          : ""}
-                        {Math.round(
-                          row.dateKey < todayKey
-                            ? row.dailyBalanceKcal
-                            : row.plannedDailyBankKcal
-                        ).toLocaleString("he-IL")}
+                        {row.dailyBalanceKcal == null ? (
+                          "—"
+                        ) : (
+                          <>
+                            {row.dailyBalanceKcal > 0 ? "+" : ""}
+                            {Math.round(row.dailyBalanceKcal).toLocaleString(
+                              "he-IL"
+                            )}
+                          </>
+                        )}
                       </td>
                       <td className="border-b border-[#FADADD]/60 px-2 py-2.5 font-semibold tabular-nums text-[#333333] sm:px-3">
                         {Math.round(row.accumulatedKcal).toLocaleString("he-IL")}
