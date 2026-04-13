@@ -1,6 +1,6 @@
 import { getCalorieBoardDateSequence, getTodayKey } from "@/lib/dateKey";
 import { getDaysRemainingToGoal } from "@/lib/goalMetrics";
-import { loadProfile, loadStoryRevealUnlock } from "@/lib/storage";
+import { loadDayLogs, loadProfile, loadStoryRevealUnlock } from "@/lib/storage";
 import { tdee } from "@/lib/tdee";
 
 const FAT_KCAL_PER_G = 7.7;
@@ -9,6 +9,8 @@ export type CalorieAccumulationRow = {
   dateKey: string;
   /** ההון היומי לפי תוכנית: TDEE − יעד יומי (כלומר deficit בפרופיל) */
   plannedDailyBankKcal: number;
+  /** מאזן יומי בפועל: TDEE − צריכה (חיובי = מתחת ל-TDEE) */
+  dailyBalanceKcal: number;
   /** נספר בצבירה רק לאחר שהיום הסתיים (אחרי חצות) ורק אם המשבצת נפתחה */
   contributionKcal: number;
   /** הון מצטבר בקק״ל */
@@ -52,6 +54,7 @@ export function buildCalorieAccumulationTable(): CalorieAccumulationResult {
     daysRemaining > 0 ? getCalorieBoardDateSequence(daysRemaining) : [];
   const today = getTodayKey();
   const unlockedMap = loadStoryRevealUnlock();
+  const dayLogs = loadDayLogs();
 
   let accumulated = 0;
   const rows: CalorieAccumulationRow[] = [];
@@ -63,10 +66,15 @@ export function buildCalorieAccumulationTable(): CalorieAccumulationResult {
     const contributionKcal =
       isPastCompleteDay && isUnlocked ? plannedDailyBankKcal : 0;
 
+    const entries = dayLogs[dateKey] ?? [];
+    const consumed = entries.reduce((s, e) => s + e.calories, 0);
+    const dailyBalanceKcal = tdeeKcal - consumed;
+
     accumulated += contributionKcal;
     rows.push({
       dateKey,
       plannedDailyBankKcal,
+      dailyBalanceKcal,
       contributionKcal,
       accumulatedKcal: accumulated,
       fatEquivalentG: accumulated / FAT_KCAL_PER_G,
