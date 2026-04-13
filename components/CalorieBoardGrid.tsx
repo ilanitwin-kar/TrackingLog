@@ -117,6 +117,11 @@ export function CalorieBoardGrid({ profileRev = 0 }: { profileRev?: number }) {
     board;
 
   /** כל המשבצות — אותו גודל (ריבוע), תוכן בתוך המסגרת בלי הרחבה */
+  const plannedDailyDeficitKcal = Math.max(
+    0,
+    Math.round(loadProfile().deficit || 0)
+  );
+
   const cellFixed =
     "aspect-square w-full min-h-0 min-w-0 max-w-full shrink-0 overflow-hidden";
 
@@ -138,6 +143,10 @@ export function CalorieBoardGrid({ profileRev = 0 }: { profileRev?: number }) {
             const consumed = entries.reduce((s, e) => s + e.calories, 0);
             /** גירעון בפועל ליום: TDEE − צריכה (רק כשיש רישום לאותו תאריך) */
             const actualDeficitKcal = hasData ? tdeeKcal - consumed : null;
+            const revealedDeficitKcal =
+              actualDeficitKcal != null
+                ? actualDeficitKcal
+                : plannedDailyDeficitKcal;
 
             const isGold = goldMap[String(i)] === true;
             const isLastSquare = i === dateKeys.length - 1;
@@ -148,17 +157,12 @@ export function CalorieBoardGrid({ profileRev = 0 }: { profileRev?: number }) {
               i
             );
 
-            const deficitGoldOnly =
-              showReveal && hasData && actualDeficitKcal !== null ? (
-                <span className="text-[10px] font-bold tabular-nums leading-none text-[#78350f]/90 sm:text-[11px]">
-                  {actualDeficitKcal > 0 ? "+" : ""}
-                  {Math.round(actualDeficitKcal)} קק״ל
-                </span>
-              ) : showReveal ? (
-                <span className="text-[10px] font-semibold tabular-nums text-[#92400e]/75 sm:text-[11px]">
-                  —
-                </span>
-              ) : null;
+            const deficitGoldOnly = showReveal ? (
+              <span className="text-[10px] font-bold tabular-nums leading-none text-[#78350f]/90 sm:text-[11px]">
+                {revealedDeficitKcal > 0 ? "+" : ""}
+                {Math.round(revealedDeficitKcal)} kcal
+              </span>
+            ) : null;
 
             const goldMainText =
               isLastSquare && showReveal
@@ -218,8 +222,14 @@ export function CalorieBoardGrid({ profileRev = 0 }: { profileRev?: number }) {
                 transition={{ type: "spring", stiffness: 520, damping: 30 }}
                 aria-pressed={isGold}
                 aria-label={`${formatDayMonth(dateKey)}${
-                  showReveal && hasData
-                    ? `, גירעון בפועל ${Math.round(actualDeficitKcal!)} קק״ל (TDEE פחות מה שנאכל ביומן)`
+                  showReveal
+                    ? hasData
+                      ? `, גירעון בפועל ${Math.round(
+                          actualDeficitKcal!
+                        )} kcal (TDEE מינוס צריכה)`
+                      : `, גירעון מתוכנן ${Math.round(
+                          plannedDailyDeficitKcal
+                        )} kcal (אין רישום ביומן)`
                     : ""
                 }${isLastSquare && isGold ? ", חגיגת סיום" : ""}`}
                 className={`relative flex ${cellFixed} flex-col items-stretch justify-between gap-1 rounded-2xl border-2 px-2.5 py-2.5 text-center transition-shadow focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:ring-offset-2 active:shadow-[inset_0_4px_10px_rgba(0,0,0,0.15)] ${fontBoard} ${

@@ -32,6 +32,13 @@ export function getAverageDailyIntakeKcal(): number | null {
   return sum / keys.length;
 }
 
+function countLoggedDaysWithFood(): number {
+  const logs = loadDayLogs();
+  return Object.keys(logs).filter(
+    (k) => Array.isArray(logs[k]) && logs[k]!.length > 0
+  ).length;
+}
+
 /**
  * גירעון יומי למסלול היעד = TDEE − צריכה יומית.
  * - עם יומן: ממוצע צריכה על כל הימים הרשומים (כמו מגמת ההתנהגות).
@@ -41,12 +48,21 @@ export function getAverageDailyIntakeKcal(): number | null {
 export function getDailyCaloricDeficitKcal(): number | null {
   const profile = loadProfile();
   const tdeeKcal = getTdeeKcalRoundedFromProfile(profile);
+  const planned = Math.max(0, profile.deficit);
   const avgIntake = getAverageDailyIntakeKcal();
   if (avgIntake != null) {
-    const deficit = tdeeKcal - avgIntake;
-    return deficit > 0 ? deficit : null;
+    const implied = tdeeKcal - avgIntake;
+    const loggedDays = countLoggedDaysWithFood();
+
+    // Avoid unrealistic countdowns when the logged-day average implies a much larger deficit
+    // than the user's planned target, or when there isn't enough data yet.
+    if (planned > 0) {
+      if (loggedDays < 7) return planned;
+      if (implied > planned + 250) return planned;
+    }
+
+    return implied > 0 ? implied : null;
   }
-  const planned = profile.deficit;
   return planned > 0 ? planned : null;
 }
 
