@@ -1,7 +1,7 @@
 "use client";
 
 import { usePathname, useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
 import { BottomNav } from "@/components/BottomNav";
 import { isRegistrationComplete, loadProfile } from "@/lib/storage";
 
@@ -13,6 +13,10 @@ export function AppChrome({ children }: { children: React.ReactNode }) {
   const [regOk, setRegOk] = useState(false);
 
   useEffect(() => {
+    if (pathname === "/add-food") {
+      setHideNav(true);
+      return;
+    }
     if (pathname !== "/tdee") {
       setHideNav(false);
       return;
@@ -22,6 +26,10 @@ export function AppChrome({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     const sync = () => {
+      if (pathname === "/add-food") {
+        setHideNav(true);
+        return;
+      }
       if (pathname !== "/tdee") return;
       setHideNav(!loadProfile().onboardingComplete);
     };
@@ -61,11 +69,24 @@ export function AppChrome({ children }: { children: React.ReactNode }) {
   return (
     <div
       className={
-        hideNav ? "min-h-dvh pb-6 print:pb-0" : "min-h-dvh pb-24 print:pb-0"
+        hideNav
+          ? "min-h-dvh pb-6 print:pb-0"
+          : "min-h-dvh pb-28 print:pb-0"
       }
     >
       {children}
-      {!hideNav && <BottomNav />}
+      {!hideNav && (
+        <Suspense
+          fallback={
+            <div
+              className="fixed bottom-0 left-0 right-0 z-[100] h-20 border-t-2 border-[#FADADD] bg-white print:hidden"
+              aria-hidden
+            />
+          }
+        >
+          <BottomNav />
+        </Suspense>
+      )}
     </div>
   );
 }
