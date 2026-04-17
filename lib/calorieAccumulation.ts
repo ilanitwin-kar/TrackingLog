@@ -1,12 +1,11 @@
-import { getCalorieBoardDateSequence, getTodayKey } from "@/lib/dateKey";
+import { getCalorieBoardPastDateKeysBeforeForwardWindow } from "@/lib/calorieBoardPastKeys";
+import { getCalorieBoardDateSequence } from "@/lib/dateKey";
 import { getCalorieBoardTotalDays } from "@/lib/goalMetrics";
 import {
   ensureStoryRevealDateMigration,
   loadDayJournalClosedMap,
-  loadDayLogs,
   loadProfile,
   loadStoryRevealUnlock,
-  type DayJournalClosedEntry,
 } from "@/lib/storage";
 import { tdee } from "@/lib/tdee";
 
@@ -49,37 +48,14 @@ export function buildCalorieAccumulationTable(): CalorieAccumulationResult {
   const totalDays = getCalorieBoardTotalDays() ?? 0;
   const dateKeys =
     totalDays > 0 ? getCalorieBoardDateSequence(totalDays) : [];
-  if (dateKeys.length > 0) {
-    ensureStoryRevealDateMigration(dateKeys);
-  }
-  const today = getTodayKey();
-  const unlockedMap = loadStoryRevealUnlock();
-  const dayLogs = loadDayLogs();
-  const closedMap = loadDayJournalClosedMap();
-
-  const forwardSet = new Set(dateKeys);
-  const extraBeforeSet = new Set<string>();
-  for (const d of Object.keys(dayLogs)) {
-    if (
-      d < today &&
-      (dayLogs[d]?.length ?? 0) > 0 &&
-      !forwardSet.has(d)
-    ) {
-      extraBeforeSet.add(d);
-    }
-  }
-  for (const d of Object.keys(unlockedMap)) {
-    if (d < today && unlockedMap[d] && !forwardSet.has(d)) {
-      extraBeforeSet.add(d);
-    }
-  }
-  for (const d of Object.keys(closedMap)) {
-    if (d < today && !forwardSet.has(d)) {
-      extraBeforeSet.add(d);
-    }
-  }
-  const extraBeforeSorted = [...extraBeforeSet].sort();
+  const extraBeforeSorted =
+    getCalorieBoardPastDateKeysBeforeForwardWindow(dateKeys);
   const displayDateKeys = [...extraBeforeSorted, ...dateKeys];
+  if (displayDateKeys.length > 0) {
+    ensureStoryRevealDateMigration(displayDateKeys);
+  }
+  const unlockedMap = loadStoryRevealUnlock();
+  const closedMap = loadDayJournalClosedMap();
 
   let accumulated = 0;
   const rows: CalorieAccumulationRow[] = [];

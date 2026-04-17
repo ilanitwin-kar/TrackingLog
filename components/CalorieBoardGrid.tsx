@@ -2,6 +2,7 @@
 
 import { motion } from "framer-motion";
 import { useEffect, useState } from "react";
+import { getCalorieBoardPastDateKeysBeforeForwardWindow } from "@/lib/calorieBoardPastKeys";
 import { getCalorieBoardDateSequence, getTodayKey } from "@/lib/dateKey";
 import {
   JOURNEY_FINAL_GOLD_MESSAGE,
@@ -50,7 +51,10 @@ function formatDayMonth(dateKey: string): string {
 }
 
 type GridModel = {
-  totalDays: number;
+  /** משבצות לפני חלון המסלול (היום ואילך) — ימי עבר עם רישום / סגירה / זהב */
+  pastCount: number;
+  /** מספר משבצות במסלול מהיום ליעד (כמו getCalorieBoardTotalDays) */
+  forwardDayCount: number;
   dateKeys: string[];
   tdeeKcal: number;
   today: string;
@@ -59,19 +63,22 @@ type GridModel = {
 };
 
 function buildGridModel(): GridModel | null {
-  const totalDays = getCalorieBoardTotalDays();
-  if (totalDays == null || totalDays < 1) {
+  const forwardDayCount = getCalorieBoardTotalDays();
+  if (forwardDayCount == null || forwardDayCount < 1) {
     return null;
   }
-  const dateKeys = getCalorieBoardDateSequence(totalDays);
-  if (dateKeys.length !== totalDays) {
+  const forwardKeys = getCalorieBoardDateSequence(forwardDayCount);
+  if (forwardKeys.length !== forwardDayCount) {
     return null;
   }
+  const pastKeys = getCalorieBoardPastDateKeysBeforeForwardWindow(forwardKeys);
+  const dateKeys = [...pastKeys, ...forwardKeys];
   ensureStoryRevealDateMigration(dateKeys);
   const p = loadProfile();
   const tdeeKcal = getTdeeKcalRoundedFromProfile(p);
   return {
-    totalDays,
+    pastCount: pastKeys.length,
+    forwardDayCount,
     dateKeys,
     tdeeKcal,
     today: getTodayKey(),
@@ -103,7 +110,7 @@ export function CalorieBoardGrid({ profileRev = 0 }: { profileRev?: number }) {
 
   useEffect(() => {
     setGoldMap(loadStoryRevealUnlock());
-  }, [profileRev, board?.totalDays]);
+  }, [profileRev, board?.dateKeys.length]);
 
   useEffect(() => {
     const sync = () => setGoldMap(loadStoryRevealUnlock());
@@ -138,7 +145,9 @@ export function CalorieBoardGrid({ profileRev = 0 }: { profileRev?: number }) {
     );
   }
 
-  const { dateKeys, totalDays, today, firstName, gender } = board;
+  const { dateKeys, pastCount, forwardDayCount, today, firstName, gender } =
+    board;
+  const totalCells = dateKeys.length;
   const closedMap = loadDayJournalClosedMap();
 
   /** בלי overflow-hidden / ריבוע קטן ב-md — אחרת שורת הסיפור והפער נחתכים לגמרי */
@@ -154,34 +163,53 @@ export function CalorieBoardGrid({ profileRev = 0 }: { profileRev?: number }) {
         <div
           className="grid grid-cols-2 gap-3 overflow-visible sm:grid-cols-3 sm:gap-3 md:grid-cols-4"
           role="list"
-          aria-label={`מפת התקדמות, ${totalDays} משבצות`}
+          aria-label={`מפת התקדמות, ${totalCells} משבצות`}
         >
           {dateKeys.map((dateKey, i) => {
             const isFuture = dateKey > today;
-            const dayNum = totalDays - i;
+            const forwardIndex = i - pastCount;
+            const isPastSlot = forwardIndex < 0;
+            const dayNum =
+              forwardIndex >= 0
+                ? forwardDayCount - forwardIndex
+                : null;
             const journalClosed = isDayJournalClosed(dateKey);
             const isGold = journalClosed && goldMap[dateKey] === true;
             const isLastSquare = i === dateKeys.length - 1;
-            const storyTextRaw = getStoryDisplayForSquare(i, firstName, gender);
+            const storyTextRaw =
+              forwardIndex >= 0
+                ? getStoryDisplayForSquare(forwardIndex, firstName, gender)
+                : "";
             const storyText =
-              storyTextRaw.trim().length > 0
-                ? storyTextRaw.trim()
-                : i === 0
-                  ? firstName.trim() ||
-                    (gender === "male" ? "אתה" : "את")
-                  : getWordForSquareIndex(Math.max(0, i - 1), gender);
+              forwardIndex >= 0
+                ? storyTextRaw.trim().length > 0
+                  ? storyTextRaw.trim()
+                  : forwardIndex === 0
+                    ? firstName.trim() ||
+                      (gender === "male" ? "אתה" : "את")
+                    : getWordForSquareIndex(
+                        Math.max(0, forwardIndex - 1),
+                        gender
+                      )
+                : "עוד צעד בדרך שלך";
             const showReveal = !isFuture && isGold;
-            const milestoneMsg = getJourneyMilestoneMessage(totalDays, i);
+            const milestoneMsg =
+              forwardIndex >= 0
+                ? getJourneyMilestoneMessage(forwardDayCount, forwardIndex)
+                : null;
             const gapKcal = closedMap[dateKey]?.gapKcal;
             const gapRounded =
               gapKcal != null ? Math.round(gapKcal) : null;
 
             const lockedHint = isFuture
               ? milestoneMsg ??
-                `יום ${dayNum} · ` + "\u05ea\u05d0\u05e8\u05d9\u05da \u05e2\u05ea\u05d9\u05d3\u05d9"
+                `יום ${dayNum ?? forwardDayCount} · ` +
+                  "\u05ea\u05d0\u05e8\u05d9\u05da \u05e2\u05ea\u05d9\u05d3\u05d9"
               : journalClosed
                 ? milestoneMsg ?? uiTapOnCube(gender)
-                : milestoneMsg ?? uiCloseJournalOnHome(dayNum, gender);
+                : isPastSlot
+                  ? milestoneMsg ?? uiCloseJournalToUnlockCube(gender)
+                  : milestoneMsg ?? uiCloseJournalOnHome(dayNum!, gender);
 
             const gapLine =
               showReveal && gapRounded != null ? (
@@ -222,7 +250,16 @@ export function CalorieBoardGrid({ profileRev = 0 }: { profileRev?: number }) {
               </div>
             );
 
-            const headerBlock = (
+            const headerBlock = isPastSlot ? (
+              <div className="shrink-0 text-center leading-tight">
+                <div className="text-xs font-bold text-[#4b5563] sm:text-sm">
+                  יום מהעבר
+                </div>
+                <div className="truncate text-base font-black tabular-nums text-black sm:text-lg md:text-xl">
+                  {formatDayMonth(dateKey)}
+                </div>
+              </div>
+            ) : dayNum != null ? (
               <div className="shrink-0 text-center leading-tight">
                 <div className="text-base font-black tabular-nums text-black sm:text-lg md:text-xl">
                   יום {dayNum.toLocaleString("he-IL")}
@@ -231,7 +268,7 @@ export function CalorieBoardGrid({ profileRev = 0 }: { profileRev?: number }) {
                   {formatDayMonth(dateKey)}
                 </div>
               </div>
-            );
+            ) : null;
             const goldHeaderSpacer = (
               <div className="min-h-[2.25rem] shrink-0" aria-hidden />
             );
@@ -267,7 +304,9 @@ export function CalorieBoardGrid({ profileRev = 0 }: { profileRev?: number }) {
                 whileTap={{ scale: journalClosed ? 0.97 : 1 }}
                 transition={{ type: "spring", stiffness: 520, damping: 30 }}
                 aria-pressed={isGold}
-                aria-label={`${formatDayMonth(dateKey)}, יום ${dayNum}${
+                aria-label={`${formatDayMonth(dateKey)}, ${
+                  dayNum != null ? `יום ${dayNum}` : "יום מהעבר"
+                }${
                   !journalClosed
                     ? " — נדרשת סגירת יומן"
                     : isGold && gapRounded != null
