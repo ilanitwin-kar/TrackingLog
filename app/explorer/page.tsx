@@ -267,8 +267,9 @@ export default function ExplorerPage() {
                 >
                   <div className="min-w-0 flex-1">
                     <p className="flex flex-wrap items-center gap-1.5 font-semibold text-[#333333]">
-                      <span className="inline-flex shrink-0" aria-label="מאומת">
-                        <IconVerified className="h-4 w-4 text-[#d4a017]" />
+                      <span className="inline-flex shrink-0 items-center gap-0.5 text-[#b8860b]">
+                        <IconVerified className="h-4 w-4" />
+                        <span className="text-[10px] font-semibold">מאומת</span>
                       </span>
                       <span>{row.name}</span>
                     </p>

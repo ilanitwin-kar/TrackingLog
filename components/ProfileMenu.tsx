@@ -23,13 +23,14 @@ export function ProfileMenu() {
     <div className="relative" ref={rootRef}>
       <button
         type="button"
-        className="flex h-11 w-11 items-center justify-center rounded-xl border-2 border-[#FADADD] bg-white text-[#333333] shadow-sm transition hover:bg-[#fffafb]"
+        className="flex h-11 min-w-[5.5rem] items-center justify-center gap-1.5 rounded-xl border-2 border-[#FADADD] bg-white px-2.5 text-[#333333] shadow-sm transition hover:bg-[#fffafb] sm:min-w-[6rem]"
         aria-expanded={open}
         aria-haspopup="true"
         aria-label="תפריט פרופיל"
         onClick={() => setOpen((v) => !v)}
       >
-        <IconUser className="h-6 w-6" />
+        <IconUser className="h-6 w-6 shrink-0" />
+        <span className="text-xs font-semibold">תפריט</span>
       </button>
 
       <AnimatePresence>

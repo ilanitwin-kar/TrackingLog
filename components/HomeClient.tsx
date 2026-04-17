@@ -20,13 +20,16 @@ import {
   closeDayJournal,
   getFoodMemory,
   getEntriesForDate,
+  loadDictionary,
   type UserProfile,
   isDayJournalClosed,
   isFoodStarred,
   loadProfile,
+  normalizeFoodKey,
   saveDayLogEntries,
   saveFoodMemoryKey,
   toggleDictionaryFromEntry,
+  upsertDictionaryFromScan,
 } from "@/lib/storage";
 import { optionalMacroGram, sumMacroGrams } from "@/lib/macroGrams";
 import { SEARCH_DEBOUNCE_MS } from "@/lib/searchDebounce";
@@ -82,15 +85,45 @@ type HomeSuggestRow = {
   carbs?: number;
 };
 
+type HomeDictionaryRow = {
+  id: string;
+  name: string;
+};
+
+type OffProductLite = {
+  code: string;
+  product_name: string;
+  brands?: string;
+  quantity?: string;
+};
+
+type OffProductDetails = {
+  code: string;
+  name: string;
+  brand?: string;
+  quantity?: string;
+  caloriesPer100g: number;
+  proteinPer100g: number;
+  carbsPer100g: number;
+  fatPer100g: number;
+};
+
 /** Lower = better. Tier: word-start → after-space substring → any partial. */
 function homeLocalSearchRank(
   name: string,
-  query: string
+  query: string,
+  opts?: { exactWord?: boolean }
 ): [number, number, string] {
   const q = query.trim();
   const n = name.trim();
   if (!q) return [99, 0, n];
   const words = n.split(/\s+/).filter(Boolean);
+  if (opts?.exactWord) {
+    const exactIdx = words.findIndex((w) => w === q);
+    if (exactIdx >= 0) return [0, exactIdx, n];
+    return [3, 0, n];
+  }
+
   const startIdx = words.findIndex((w) => w.startsWith(q));
   if (startIdx >= 0) {
     return [0, startIdx, n];
@@ -120,12 +153,13 @@ type GeminiInsightState =
 
 function sortHomeLocalRows(
   rows: HomeSuggestRow[],
-  query: string
+  query: string,
+  opts?: { exactWord?: boolean }
 ): HomeSuggestRow[] {
   const q = query.trim();
   return [...rows].sort((a, b) => {
-    const [ta, sa, na] = homeLocalSearchRank(a.name, q);
-    const [tb, sb, nb] = homeLocalSearchRank(b.name, q);
+    const [ta, sa, na] = homeLocalSearchRank(a.name, q, opts);
+    const [tb, sb, nb] = homeLocalSearchRank(b.name, q, opts);
     if (ta !== tb) return ta - tb;
     if (sa !== sb) return sa - sb;
     return na.localeCompare(nb, "he");
@@ -200,12 +234,19 @@ export function HomeClient() {
   const [error, setError] = useState<string | null>(null);
   const [dictTick, setDictTick] = useState(0);
   const [suggestionsDismissed, setSuggestionsDismissed] = useState(false);
-  const [debouncedFoodSearch, setDebouncedFoodSearch] = useState("");
+  const [debouncedFoodSearch, setDebouncedFoodSearch] = useState<{
+    q: string;
+    exactWord: boolean;
+  }>({ q: "", exactWord: false });
+  const [homeDictionaryRows, setHomeDictionaryRows] = useState<HomeDictionaryRow[]>([]);
   const [homeLocalRows, setHomeLocalRows] = useState<HomeSuggestRow[]>([]);
   const [homeSearchLoading, setHomeSearchLoading] = useState(false);
-  const [geminiInsight, setGeminiInsight] = useState<GeminiInsightState>({
-    kind: "idle",
-  });
+  const [offItems, setOffItems] = useState<OffProductLite[]>([]);
+  const [offLoading, setOffLoading] = useState(false);
+  const [offSavingCode, setOffSavingCode] = useState<string | null>(null);
+  const [offDetailsMap, setOffDetailsMap] = useState<Record<string, OffProductDetails>>(
+    {}
+  );
 
   const [mealModalOpen, setMealModalOpen] = useState(false);
   const [mealNameDraft, setMealNameDraft] = useState("");
@@ -358,9 +399,9 @@ export function HomeClient() {
   }, []);
 
   const searchPanelSync =
-    debouncedFoodSearch.length >= 2 && debouncedFoodSearch === food.trim();
+    debouncedFoodSearch.q.length >= 2 && debouncedFoodSearch.q === food.trim();
   const debouncePending =
-    food.trim().length >= 2 && debouncedFoodSearch !== food.trim();
+    food.trim().length >= 2 && debouncedFoodSearch.q !== food.trim();
 
   const showSuggestions =
     !suggestionsDismissed &&
@@ -384,38 +425,104 @@ export function HomeClient() {
   useEffect(() => {
     const trimmed = food.trim();
     if (trimmed.length === 0) {
-      setDebouncedFoodSearch("");
+      setDebouncedFoodSearch({ q: "", exactWord: false });
       return;
     }
     if (trimmed.length < 2) {
-      setDebouncedFoodSearch("");
+      setDebouncedFoodSearch({ q: "", exactWord: false });
       return;
     }
     const t = window.setTimeout(() => {
-      setDebouncedFoodSearch(trimmed);
+      setDebouncedFoodSearch({
+        q: trimmed,
+        // If the user typed a trailing space, interpret as "complete word".
+        exactWord: /\s$/.test(food),
+      });
     }, SEARCH_DEBOUNCE_MS);
     return () => window.clearTimeout(t);
   }, [food]);
 
   useEffect(() => {
     if (food.trim().length < 2) {
+      setHomeDictionaryRows([]);
       setHomeLocalRows([]);
       setHomeSearchLoading(false);
-      setGeminiInsight({ kind: "idle" });
+      setOffItems([]);
+      setOffLoading(false);
+      setOffDetailsMap({});
     }
   }, [food]);
 
-  /** בזמן הקלדה לפני סנכרון debounce — לא להציג ניתוח AI של שאילתה קודמת */
   useEffect(() => {
-    const t = food.trim();
-    if (t.length < 2) return;
-    if (t !== debouncedFoodSearch) {
-      setGeminiInsight({ kind: "idle" });
-    }
-  }, [food, debouncedFoodSearch]);
+    if (offItems.length === 0) return;
+    const ac = new AbortController();
+    const need = offItems
+      .map((x) => x.code)
+      .filter(Boolean)
+      .filter((code) => offDetailsMap[code] == null)
+      .slice(0, 6);
+    if (need.length === 0) return;
+
+    void (async () => {
+      await Promise.all(
+        need.map(async (code) => {
+          try {
+            const params = new URLSearchParams({ code });
+            const res = await fetch(`/api/openfoodfacts-product?${params}`, {
+              signal: ac.signal,
+            });
+            if (!res.ok) return;
+            const data = (await res.json()) as { item?: OffProductDetails };
+            if (!data.item || ac.signal.aborted) return;
+            setOffDetailsMap((prev) => ({ ...prev, [code]: data.item! }));
+          } catch {
+            // Ignore per-item failures; we still show the product meta row.
+          }
+        })
+      );
+    })();
+
+    return () => ac.abort();
+  }, [offItems, offDetailsMap]);
 
   useEffect(() => {
-    if (debouncedFoodSearch.length < 2) {
+    if (debouncedFoodSearch.q.length < 2) {
+      setHomeDictionaryRows([]);
+      return;
+    }
+    try {
+      const dict = loadDictionary();
+      const q = normalizeFoodKey(debouncedFoodSearch.q);
+      const scored: Array<{ row: HomeDictionaryRow; score: [number, number, string] }> =
+        [];
+      for (const d of dict) {
+        const name = d.food?.trim?.() ? String(d.food).trim() : "";
+        if (!name) continue;
+        const s = homeLocalSearchRank(normalizeFoodKey(name), q, {
+          exactWord: debouncedFoodSearch.exactWord,
+        });
+        if (s[0] <= 2) {
+          scored.push({
+            row: { id: d.id, name },
+            score: s,
+          });
+        }
+      }
+      scored.sort((a, b) => {
+        const [ta, sa, na] = a.score;
+        const [tb, sb, nb] = b.score;
+        if (ta !== tb) return ta - tb;
+        if (sa !== sb) return sa - sb;
+        return na.localeCompare(nb, "he");
+      });
+      setHomeDictionaryRows(scored.slice(0, 10).map((x) => x.row));
+    } catch {
+      setHomeDictionaryRows([]);
+    }
+  }, [debouncedFoodSearch.q, debouncedFoodSearch.exactWord]);
+
+  useEffect(() => {
+    if (debouncedFoodSearch.q.length < 2) {
       setHomeLocalRows([]);
       setHomeSearchLoading(false);
       return;
@@ -425,7 +532,7 @@ export function HomeClient() {
     void (async () => {
       try {
         const params = new URLSearchParams({
-          q: debouncedFoodSearch,
+          q: debouncedFoodSearch.q,
           sort: "caloriesAsc",
           category: "הכל",
           page: "1",
@@ -459,7 +566,11 @@ export function HomeClient() {
             fat: i.fat,
             carbs: i.carbs,
           }));
-          setHomeLocalRows(sortHomeLocalRows(mapped, debouncedFoodSearch));
+          setHomeLocalRows(
+            sortHomeLocalRows(mapped, debouncedFoodSearch.q, {
+              exactWord: debouncedFoodSearch.exactWord,
+            })
+          );
         } else {
           setHomeLocalRows([]);
         }
@@ -472,57 +583,42 @@ export function HomeClient() {
       }
     })();
     return () => ac.abort();
-  }, [debouncedFoodSearch]);
+  }, [debouncedFoodSearch.q, debouncedFoodSearch.exactWord]);
 
   useEffect(() => {
-    if (debouncedFoodSearch.length < 2) {
-      setGeminiInsight({ kind: "idle" });
+    if (debouncedFoodSearch.q.length < 2) {
+      setOffItems([]);
+      setOffLoading(false);
       return;
     }
     const ac = new AbortController();
-    setGeminiInsight({ kind: "loading" });
+    setOffLoading(true);
     void (async () => {
       try {
-        const res = await fetch("/api/gemini-food-analyze", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ query: debouncedFoodSearch }),
+        const params = new URLSearchParams({
+          q: debouncedFoodSearch.q,
+          pageSize: "16",
+        });
+        const res = await fetch(`/api/openfoodfacts-search?${params}`, {
           signal: ac.signal,
         });
-        const data = (await res.json()) as {
-          result?: {
-            name: string;
-            calories: number;
-            protein: number;
-            carbs: number;
-            fat: number;
-          } | null;
-          error?: string;
-        };
         if (ac.signal.aborted) return;
         if (!res.ok) {
-          setGeminiInsight({
-            kind: "error",
-            message: GEMINI_UNAVAILABLE_MSG,
-          });
+          setOffItems([]);
           return;
         }
-        if (data.result == null) {
-          setGeminiInsight({ kind: "notFood" });
-          return;
-        }
-        setGeminiInsight({ kind: "ok", ...data.result });
+        const data = (await res.json()) as { items?: OffProductLite[] };
+        setOffItems(Array.isArray(data.items) ? data.items : []);
       } catch {
         if (!ac.signal.aborted) {
-          setGeminiInsight({
-            kind: "error",
-            message: GEMINI_UNAVAILABLE_MSG,
-          });
+          setOffItems([]);
         }
+      } finally {
+        if (!ac.signal.aborted) setOffLoading(false);
       }
     })();
     return () => ac.abort();
-  }, [debouncedFoodSearch]);
+  }, [debouncedFoodSearch.q]);
 
   const starredForMealCount = useMemo(
     () => entries.filter((e) => e.mealStarred).length,
@@ -774,6 +870,46 @@ export function HomeClient() {
     queueMicrotask(() => foodSearchInputRef.current?.blur());
   }
 
+  async function saveOffToDictionary(p: OffProductLite) {
+    if (!p.code) return;
+    setOffSavingCode(p.code);
+    try {
+      let row: OffProductDetails | undefined = offDetailsMap[p.code];
+      if (!row) {
+        const params = new URLSearchParams({ code: p.code });
+        const res = await fetch(`/api/openfoodfacts-product?${params}`);
+        const data = (await res.json()) as {
+          item?: OffProductDetails;
+          error?: string;
+        };
+        if (!res.ok || !data.item) {
+          setError(data.error ?? "לא הצלחנו לשמור למילון");
+          return;
+        }
+        row = data.item;
+        setOffDetailsMap((prev) => ({ ...prev, [p.code]: row! }));
+      }
+      upsertDictionaryFromScan({
+        food: row.name,
+        quantity: 100,
+        unit: "גרם",
+        lastCalories: Math.round(row.caloriesPer100g),
+        caloriesPer100g: row.caloriesPer100g,
+        proteinPer100g: row.proteinPer100g,
+        carbsPer100g: row.carbsPer100g,
+        fatPer100g: row.fatPer100g,
+        barcode: row.code,
+      });
+      setDictTick((t) => t + 1);
+      setNote("נשמר במילון");
+      setError(null);
+    } catch {
+      setError("שגיאת רשת — נסי שוב");
+    } finally {
+      setOffSavingCode(null);
+    }
+  }
+
   function onFoodChange(value: string) {
     addFromSearchRef.current = false;
     setFood(value);
@@ -860,7 +996,9 @@ export function HomeClient() {
         <ProfileMenu />
         <label className="inline-flex cursor-pointer items-center gap-2 rounded-xl border-2 border-[#FADADD] bg-white px-3 py-2 text-sm font-semibold text-[#333333] shadow-sm">
           <IconCalendar className="h-5 w-5 shrink-0 text-[#333333]" aria-hidden />
-          <span className="sr-only">בחירת תאריך ליומן</span>
+          <span className="shrink-0 text-xs font-semibold text-[#333333]/90">
+            תאריך ביומן
+          </span>
           <input
             type="date"
             className="max-w-[11rem] cursor-pointer bg-transparent font-[inherit] text-[#333333] outline-none"
@@ -1218,7 +1356,7 @@ export function HomeClient() {
       >
         <label className="block">
           <span className="mb-2 block text-sm font-semibold text-[#333333]">
-            חיפוש מזון — המילון שלך + ניתוח AI (Gemini)
+            חיפוש מזון
           </span>
           <div className="search-field-wrap relative w-full">
             <input
@@ -1237,13 +1375,13 @@ export function HomeClient() {
               autoCapitalize="none"
               spellCheck={false}
               placeholder="חפשי מזון…"
-              className="input-luxury-search w-full ps-12 pe-[5.75rem] sm:pe-24"
+              className="input-luxury-search w-full ps-12 pe-[10.5rem] sm:pe-[12rem]"
               aria-controls={showSuggestions ? "food-suggestions" : undefined}
             />
             <div className="absolute end-2 top-1/2 z-[11] flex -translate-y-1/2 items-center gap-1">
               <button
                 type="button"
-                className="flex h-10 w-10 items-center justify-center rounded-xl border-2 border-[#fadadd] bg-white text-[#333333] shadow-sm transition hover:bg-[#fadadd]/45 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#f5c8d4]"
+                className="flex h-10 min-w-[4.25rem] sm:min-w-[5rem] items-center justify-center gap-1 rounded-xl border-2 border-[#fadadd] bg-white px-1.5 text-[#333333] shadow-sm transition hover:bg-[#fadadd]/45 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#f5c8d4]"
                 aria-label="הוספת מזון ידנית"
                 title="הוספת מזון ידנית"
                 onClick={() => {
@@ -1252,11 +1390,14 @@ export function HomeClient() {
                   setManualFoodOpen(true);
                 }}
               >
-                <IconPlusCircle className="h-6 w-6" />
+                <IconPlusCircle className="h-6 w-6 shrink-0" />
+                <span className="text-[10px] font-bold leading-tight sm:text-xs">
+                  ידני
+                </span>
               </button>
               <button
                 type="button"
-                className="flex h-10 w-10 items-center justify-center rounded-xl border-2 border-[#fadadd] bg-white text-[#333333] shadow-sm transition hover:bg-[#fadadd]/45 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#f5c8d4]"
+                className="flex h-10 min-w-[4.25rem] sm:min-w-[5rem] items-center justify-center gap-1 rounded-xl border-2 border-[#fadadd] bg-white px-1.5 text-[#333333] shadow-sm transition hover:bg-[#fadadd]/45 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#f5c8d4]"
                 aria-label="סריקת ברקוד"
                 title="סריקת ברקוד"
                 onClick={() => {
@@ -1265,7 +1406,10 @@ export function HomeClient() {
                   setScanModalOpen(true);
                 }}
               >
-                <IconScanBarcode className="h-6 w-6" />
+                <IconScanBarcode className="h-6 w-6 shrink-0" />
+                <span className="text-[10px] font-bold leading-tight sm:text-xs">
+                  ברקוד
+                </span>
               </button>
             </div>
             {showSuggestions && (
@@ -1286,7 +1430,35 @@ export function HomeClient() {
                   <div className="space-y-3 py-1">
                     <div>
                       <p className="px-3 pb-1 text-sm font-bold text-[#333333]">
-                        מהמילון שלך
+                        המילון שלי
+                      </p>
+                      {homeDictionaryRows.length === 0 ? (
+                        <p className="px-3 py-1 text-xs text-[#333333]/65">
+                          אין התאמות במילון
+                        </p>
+                      ) : (
+                        <ul className="space-y-0.5">
+                          {homeDictionaryRows.map((s) => (
+                            <li key={`d-${s.id}`}>
+                              <button
+                                type="button"
+                                className="suggestion-item flex w-full flex-col items-stretch gap-0.5 px-3 py-2 text-right"
+                                onMouseDown={(e) => e.preventDefault()}
+                                onClick={() => pickSuggestion(s.name)}
+                              >
+                                <span className="font-semibold text-[#333333]">
+                                  {s.name}
+                                </span>
+                              </button>
+                            </li>
+                          ))}
+                        </ul>
+                      )}
+                    </div>
+
+                    <div className="border-t border-[#FADADD]/80 pt-2">
+                      <p className="px-3 pb-1 text-sm font-bold text-[#333333]">
+                        מאגר אינטלגנציה קלורית
                       </p>
                       {homeSearchLoading && homeLocalRows.length === 0 ? (
                         <div
@@ -1301,7 +1473,7 @@ export function HomeClient() {
                         </div>
                       ) : homeLocalRows.length === 0 ? (
                         <p className="px-3 py-1 text-xs text-[#333333]/65">
-                          אין התאמות מקומיות
+                          אין התאמות במאגר
                         </p>
                       ) : (
                         <ul className="space-y-0.5">
@@ -1315,8 +1487,14 @@ export function HomeClient() {
                               >
                                 <span className="flex items-center justify-end gap-2 font-semibold text-[#333333]">
                                   <span>{s.name}</span>
-                                  <span title="מאומת" aria-label="מאומת">
-                                    <IconVerified className="h-4 w-4 shrink-0 text-[#d4a017]" />
+                                  <span
+                                    className="inline-flex items-center gap-0.5 text-[#b8860b]"
+                                    title="מאומת ממאגר"
+                                  >
+                                    <IconVerified className="h-4 w-4 shrink-0" />
+                                    <span className="text-[10px] font-semibold">
+                                      מאומת
+                                    </span>
                                   </span>
                                 </span>
                                 {s.category != null && (
@@ -1344,9 +1522,9 @@ export function HomeClient() {
 
                     <div className="border-t border-[#FADADD]/80 pt-2">
                       <p className="px-3 pb-1 text-sm font-bold text-[#333333]">
-                        ניתוח אינטליגנציה קלורית (AI)
+                        מאגר עולמי
                       </p>
-                      {geminiInsight.kind === "loading" && (
+                      {offLoading && offItems.length === 0 && (
                         <div
                           className="flex items-center gap-2 px-3 py-2 text-sm text-[#333333]"
                           role="status"
@@ -1355,48 +1533,72 @@ export function HomeClient() {
                             className="inline-block size-4 animate-spin rounded-full border-2 border-[#FADADD] border-t-[#c45c74]"
                             aria-hidden
                           />
-                          מנתח נתונים…
+                          מחפש במאגר העולמי…
                         </div>
                       )}
-                      {geminiInsight.kind === "error" && (
-                        <p className="px-3 py-1 text-xs text-[#a94444]">
-                          {geminiInsight.message}
+                      {!offLoading && offItems.length === 0 ? (
+                        <p className="px-3 py-1 text-xs text-[#333333]/65">
+                          אין תוצאות במאגר העולמי
                         </p>
-                      )}
-                      {geminiInsight.kind === "notFood" && (
-                        <p className="px-3 py-1 text-xs text-[#333333]/70">
-                          לא זוהה כמזון (לפי AI)
-                        </p>
-                      )}
-                      {geminiInsight.kind === "ok" && (
-                        <div className="px-3 py-1">
-                          <button
-                            type="button"
-                            className="suggestion-item flex w-full flex-col items-stretch gap-0.5 py-2 text-right"
-                            onMouseDown={(e) => e.preventDefault()}
-                            onClick={() => pickSuggestion(geminiInsight.name)}
-                          >
-                            <span className="font-semibold text-[#333333]">
-                              {geminiInsight.name}
-                            </span>
-                            <span className="text-[11px] text-[#333333]/75">
-                              קלוריות: {Math.round(geminiInsight.calories)} ·
-                              חלבון: {Math.round(geminiInsight.protein)} ·
-                              פחמימות: {Math.round(geminiInsight.carbs)} · שומן:{" "}
-                              {Math.round(geminiInsight.fat)}
-                              <span className="text-[#333333]/55">
-                                {" "}
-                                (ל־100 ג׳ — הערכה AI)
-                              </span>
-                            </span>
-                          </button>
-                        </div>
-                      )}
-                      {geminiInsight.kind === "idle" && (
-                        <p className="px-3 py-1 text-[11px] text-[#333333]/55">
-                          ממתין לניתוח…
-                        </p>
-                      )}
+                      ) : offItems.length > 0 ? (
+                        <ul className="space-y-0.5">
+                          {offItems.map((p) => (
+                            <li key={`off-${p.code}`}>
+                              <div className="suggestion-item flex w-full flex-col items-stretch gap-1 px-3 py-2 text-right">
+                                <button
+                                  type="button"
+                                  className="flex w-full flex-col items-stretch gap-0.5 text-right"
+                                  onMouseDown={(e) => e.preventDefault()}
+                                  onClick={() => pickSuggestion(p.product_name)}
+                                >
+                                  <span className="flex items-center justify-end gap-2 font-semibold text-[#333333]">
+                                    <span>{p.product_name}</span>
+                                    <span
+                                      className="inline-flex items-center gap-1 rounded-full border border-[#FADADD] bg-white px-2 py-0.5 text-[10px] font-bold text-[#333333]/80"
+                                      title="Open Food Facts"
+                                    >
+                                      OFF
+                                    </span>
+                                  </span>
+                                  <span className="text-[11px] text-[#333333]/70">
+                                    {p.brands ? `מותג: ${p.brands}` : "מותג: —"}
+                                    {" · "}
+                                    {p.quantity ? `כמות: ${p.quantity}` : "כמות: —"}
+                                    {" · "}
+                                    ברקוד: {p.code}
+                                  </span>
+                                  {offDetailsMap[p.code] && (
+                                    <span className="text-[11px] text-[#333333]/75">
+                                      קלוריות:{" "}
+                                      {Math.round(offDetailsMap[p.code]!.caloriesPer100g)} ·
+                                      חלבון: {offDetailsMap[p.code]!.proteinPer100g} ·
+                                      פחמימות: {offDetailsMap[p.code]!.carbsPer100g} ·
+                                      שומן: {offDetailsMap[p.code]!.fatPer100g}
+                                      <span className="text-[#333333]/55">
+                                        {" "}
+                                        (ל־100 ג׳)
+                                      </span>
+                                    </span>
+                                  )}
+                                </button>
+                                <div className="flex justify-start">
+                                  <button
+                                    type="button"
+                                    disabled={offSavingCode === p.code}
+                                    className="rounded-xl border-2 border-[#FADADD] bg-white px-3 py-1.5 text-xs font-bold text-[#333333] shadow-sm transition hover:bg-[#fffafb] disabled:opacity-50"
+                                    onMouseDown={(e) => e.preventDefault()}
+                                    onClick={() => void saveOffToDictionary(p)}
+                                    aria-label="שמירה למילון"
+                                    title="שמירה למילון"
+                                  >
+                                    {offSavingCode === p.code ? "שומר…" : "שמירה למילון"}
+                                  </button>
+                                </div>
+                              </div>
+                            </li>
+                          ))}
+                        </ul>
+                      ) : null}
                     </div>
                   </div>
                 )}
@@ -1535,7 +1737,9 @@ export function HomeClient() {
 
       <section className="glass-panel p-4">
         <h2 className="mb-3 text-xl font-bold text-[#333333]">
-          {isViewingToday ? "היום ביומן" : `יומן — ${viewDateKey}`}
+          {isViewingToday
+            ? "מלאי את היומן של היום"
+            : `מלאי את היומן לתאריך — ${viewDateKey}`}
         </h2>
         {entries.length === 0 ? (
           <p className="text-[#333333]/85">
@@ -1563,11 +1767,13 @@ export function HomeClient() {
                     <p className="flex flex-wrap items-center gap-1 font-semibold text-[#333333]">
                       {item.verified && (
                         <span
-                          className="inline-flex shrink-0"
-                          title="מאומת"
-                          aria-label="מאומת"
+                          className="inline-flex shrink-0 items-center gap-0.5 text-[#b8860b]"
+                          title="מאומת ממאגר"
                         >
-                          <IconVerified className="h-4 w-4 text-[#d4a017]" />
+                          <IconVerified className="h-4 w-4" aria-hidden />
+                          <span className="text-[10px] font-semibold">
+                            מאומת
+                          </span>
                         </span>
                       )}
                       <span>{item.food}</span>

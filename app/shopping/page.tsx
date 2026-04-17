@@ -90,7 +90,7 @@ export default function ShoppingPage() {
               onClick={shareWhatsApp}
             >
               <IconWhatsApp className="h-5 w-5 shrink-0 text-[#25D366]" />
-              <span className="hidden sm:inline">שתף ב-WhatsApp</span>
+              <span className="text-xs font-semibold">וואטסאפ</span>
             </button>
             <button
               type="button"
@@ -101,7 +101,7 @@ export default function ShoppingPage() {
               onClick={shareEmail}
             >
               <IconEnvelope className="h-5 w-5 shrink-0 text-[#c45c74]" />
-              <span className="hidden sm:inline">שלח במייל</span>
+              <span className="text-xs font-semibold">מייל</span>
             </button>
             <button
               type="button"
@@ -112,7 +112,7 @@ export default function ShoppingPage() {
               onClick={printList}
             >
               <IconPrinter className="h-5 w-5 shrink-0 text-[#333333]/90" />
-              <span className="hidden sm:inline">הדפסה</span>
+              <span className="text-xs font-semibold">הדפסה</span>
             </button>
           </nav>
         </div>
@@ -169,12 +169,13 @@ export default function ShoppingPage() {
                   </label>
                   <button
                     type="button"
-                    className="btn-icon-luxury btn-icon-luxury-danger shrink-0"
+                    className="btn-icon-luxury btn-icon-luxury-danger flex shrink-0 flex-col items-center gap-0.5 px-2 py-1.5"
                     title="מחיקה"
                     aria-label={`מחיקת ${it.name}`}
                     onClick={() => remove(it.id)}
                   >
                     <IconTrash className="h-5 w-5" />
+                    <span className="text-[10px] font-semibold">מחק</span>
                   </button>
                 </motion.li>
               ))}
