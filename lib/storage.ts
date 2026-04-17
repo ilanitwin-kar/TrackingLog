@@ -120,6 +120,8 @@ export type DictionaryItem = {
   food: string;
   quantity: number;
   unit: FoodUnit;
+  /** משקל יחידה בגרם — כש־unit הוא «יחידה», לחישוב מול ערכי 100 ג׳ */
+  gramsPerUnit?: number;
   lastCalories?: number;
   /** ל־100 גרם — מסריקה / מקור חיצוני */
   caloriesPer100g?: number;
@@ -175,7 +177,13 @@ export function saveProfile(p: UserProfile): void {
   }
 }
 
-export type FoodMemory = Record<string, { quantity: number; unit: FoodUnit }>;
+export type FoodMemoryEntry = {
+  quantity: number;
+  unit: FoodUnit;
+  gramsPerUnit?: number;
+};
+
+export type FoodMemory = Record<string, FoodMemoryEntry>;
 
 function normalizeFoodKey(name: string): string {
   return name.trim().toLowerCase().replace(/\s+/g, " ");
@@ -188,18 +196,26 @@ export function loadFoodMemory(): FoodMemory {
     if (!raw) return {};
     const parsed = JSON.parse(raw) as Record<
       string,
-      { quantity?: number; unit?: string }
+      { quantity?: number; unit?: string; gramsPerUnit?: number }
     >;
     const out: FoodMemory = {};
     for (const [k, v] of Object.entries(parsed)) {
       if (!v || typeof v !== "object") continue;
-      out[k] = {
+      const gU =
+        typeof v.gramsPerUnit === "number" &&
+        Number.isFinite(v.gramsPerUnit) &&
+        v.gramsPerUnit > 0
+          ? v.gramsPerUnit
+          : undefined;
+      const entry: FoodMemoryEntry = {
         quantity:
           typeof v.quantity === "number" && Number.isFinite(v.quantity)
             ? v.quantity
             : 100,
         unit: normalizeFoodUnit(String(v.unit ?? "גרם")),
       };
+      if (gU != null) entry.gramsPerUnit = gU;
+      out[k] = entry;
     }
     return out;
   } catch {
@@ -210,14 +226,23 @@ export function loadFoodMemory(): FoodMemory {
 export function saveFoodMemoryKey(
   food: string,
   quantity: number,
-  unit: FoodUnit
+  unit: FoodUnit,
+  gramsPerUnit?: number
 ): void {
   const mem = loadFoodMemory();
-  mem[normalizeFoodKey(food)] = { quantity, unit };
+  const entry: FoodMemoryEntry = { quantity, unit };
+  if (
+    gramsPerUnit != null &&
+    Number.isFinite(gramsPerUnit) &&
+    gramsPerUnit > 0
+  ) {
+    entry.gramsPerUnit = gramsPerUnit;
+  }
+  mem[normalizeFoodKey(food)] = entry;
   localStorage.setItem(KEYS.foodMemory, JSON.stringify(mem));
 }
 
-export function getFoodMemory(food: string): { quantity: number; unit: FoodUnit } | null {
+export function getFoodMemory(food: string): FoodMemoryEntry | null {
   const mem = loadFoodMemory();
   return mem[normalizeFoodKey(food)] ?? null;
 }
@@ -377,6 +402,42 @@ export function removeDictionaryItem(id: string): DictionaryItem[] {
   return next;
 }
 
+/** עדכון שדות בפריט מילון לפי מזהה (שומר id ושדות מטא שלא עודכנו) */
+export function patchDictionaryItemById(
+  id: string,
+  patch: Partial<
+    Pick<
+      DictionaryItem,
+      "food" | "quantity" | "unit" | "gramsPerUnit" | "lastCalories"
+    >
+  > & { gramsPerUnit?: number | null }
+): DictionaryItem[] | null {
+  const items = loadDictionary();
+  const idx = items.findIndex((d) => d.id === id);
+  if (idx < 0) return null;
+  const prev = items[idx];
+  const unit = normalizeFoodUnit(String(patch.unit ?? prev.unit));
+  const next: DictionaryItem = {
+    ...prev,
+    ...patch,
+    id: prev.id,
+    unit,
+  };
+  if (unit !== "יחידה") {
+    delete next.gramsPerUnit;
+  } else if ("gramsPerUnit" in patch) {
+    const g = patch.gramsPerUnit;
+    if (g != null && Number.isFinite(g) && g > 0) {
+      next.gramsPerUnit = g;
+    } else {
+      delete next.gramsPerUnit;
+    }
+  }
+  items[idx] = next;
+  saveDictionary(items);
+  return items;
+}
+
 /** שמירה או עדכון פריט במילון האישי (למשל מסריקת ברקוד) */
 export function upsertDictionaryFromScan(item: {
   food: string;
@@ -388,6 +449,7 @@ export function upsertDictionaryFromScan(item: {
   carbsPer100g: number;
   fatPer100g: number;
   barcode?: string;
+  gramsPerUnit?: number;
 }): DictionaryItem[] {
   const items = loadDictionary();
   const n = normalizeFoodKey(item.food);
@@ -405,6 +467,13 @@ export function upsertDictionaryFromScan(item: {
     barcode: item.barcode,
     source: "manual",
   };
+  if (
+    item.gramsPerUnit != null &&
+    Number.isFinite(item.gramsPerUnit) &&
+    item.gramsPerUnit > 0
+  ) {
+    row.gramsPerUnit = item.gramsPerUnit;
+  }
   without.unshift(row);
   saveDictionary(without);
   return without;

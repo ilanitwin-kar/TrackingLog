@@ -1,8 +1,8 @@
 "use client";
 
 import { AnimatePresence, motion } from "framer-motion";
+import { useSearchParams } from "next/navigation";
 import {
-  startTransition,
   useCallback,
   useEffect,
   useMemo,
@@ -17,7 +17,6 @@ import {
   type LogEntry,
   type MealPresetComponent,
   addMealPreset,
-  getFoodMemory,
   getEntriesForDate,
   type UserProfile,
   isFoodStarred,
@@ -27,20 +26,16 @@ import {
   toggleDictionaryFromEntry,
 } from "@/lib/storage";
 import { optionalMacroGram, sumMacroGrams } from "@/lib/macroGrams";
-import { SEARCH_DEBOUNCE_MS } from "@/lib/searchDebounce";
 import { dailyCalorieTarget } from "@/lib/tdee";
 import { CelebrationConfetti } from "./Fireworks";
 import {
   IconBookmark,
-  IconCalendar,
   IconDuplicate,
   IconPencil,
-  IconScanBarcode,
   IconStar,
   IconTrash,
   IconVerified,
 } from "./Icons";
-import { BarcodeScanModal } from "./BarcodeScanModal";
 import { LiveClock } from "./LiveClock";
 import { ProfileMenu } from "./ProfileMenu";
 
@@ -63,68 +58,6 @@ const FRACTION_DECIMAL_ROWS = [
 ] as const;
 
 const FRACTION_VALUES = FRACTION_DECIMAL_ROWS.map((r) => r[0]);
-const NON_GRAM_FRACTS = [...FRACTION_VALUES, 1] as const;
-
-type HomeSuggestRow = {
-  id: string;
-  name: string;
-  verified: boolean;
-  category?: string;
-  calories?: number;
-  protein?: number;
-  fat?: number;
-  carbs?: number;
-};
-
-/** Lower = better. Tier: word-start → after-space substring → any partial. */
-function homeLocalSearchRank(
-  name: string,
-  query: string
-): [number, number, string] {
-  const q = query.trim();
-  const n = name.trim();
-  if (!q) return [99, 0, n];
-  const words = n.split(/\s+/).filter(Boolean);
-  const startIdx = words.findIndex((w) => w.startsWith(q));
-  if (startIdx >= 0) {
-    return [0, startIdx, n];
-  }
-  if (n.includes(` ${q}`)) {
-    return [1, 0, n];
-  }
-  if (n.includes(q)) {
-    return [2, 0, n];
-  }
-  return [3, 0, n];
-}
-
-type GeminiInsightState =
-  | { kind: "idle" }
-  | { kind: "loading" }
-  | { kind: "error"; message: string }
-  | { kind: "notFood" }
-  | {
-      kind: "ok";
-      name: string;
-      calories: number;
-      protein: number;
-      carbs: number;
-      fat: number;
-    };
-
-function sortHomeLocalRows(
-  rows: HomeSuggestRow[],
-  query: string
-): HomeSuggestRow[] {
-  const q = query.trim();
-  return [...rows].sort((a, b) => {
-    const [ta, sa, na] = homeLocalSearchRank(a.name, q);
-    const [tb, sb, nb] = homeLocalSearchRank(b.name, q);
-    if (ta !== tb) return ta - tb;
-    if (sa !== sb) return sa - sb;
-    return na.localeCompare(nb, "he");
-  });
-}
 
 function approxEq(a: number, b: number): boolean {
   return Math.abs(a - b) < 0.009;
@@ -143,11 +76,22 @@ function normalizeValue(value: number): number {
   return Math.round(value);
 }
 
-function snapToFraction(n: number): number {
-  if (!Number.isFinite(n) || n <= 0) return 1;
-  return [...NON_GRAM_FRACTS].reduce((best, v) =>
-    Math.abs(v - n) < Math.abs(best - n) ? v : best
-  );
+function formatEntryTime(iso: string): string {
+  try {
+    const d = new Date(iso);
+    if (Number.isNaN(d.getTime())) return "";
+    return d.toLocaleTimeString("he-IL", {
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+  } catch {
+    return "";
+  }
+}
+
+function formatMacroCell(n: number | undefined): string {
+  if (n == null || !Number.isFinite(n)) return "—";
+  return `${Math.round(n)} ג׳`;
 }
 
 function formatQtyLabel(q: number, u: FoodUnit): string {
@@ -186,35 +130,14 @@ const fullMessages = [
   "שליטה מלאה — ככה נראית הצלחה",
 ];
 
-const MIXKIT_CLICK_SOUND_URL =
-  "https://assets.mixkit.co/active_storage/sfx/2571/2571-preview.mp3";
-
-const GEMINI_UNAVAILABLE_MSG = "שירות הניתוח זמנית לא זמין";
-
 function getRandom<T>(arr: readonly T[]): T {
   return arr[Math.floor(Math.random() * arr.length)]!;
 }
 
 export function HomeClient() {
-  const [food, setFood] = useState("");
-  const [quantityText, setQuantityText] = useState("100");
-  const quantity = useMemo(() => {
-    const n = parseFloat(quantityText.replace(",", "."));
-    return Number.isFinite(n) && n > 0 ? n : 100;
-  }, [quantityText]);
-  const [unit, setUnit] = useState<FoodUnit>("גרם");
+  const searchParams = useSearchParams();
   const [entries, setEntries] = useState<LogEntry[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [note, setNote] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
   const [dictTick, setDictTick] = useState(0);
-  const [suggestionsDismissed, setSuggestionsDismissed] = useState(false);
-  const [debouncedFoodSearch, setDebouncedFoodSearch] = useState("");
-  const [homeLocalRows, setHomeLocalRows] = useState<HomeSuggestRow[]>([]);
-  const [homeSearchLoading, setHomeSearchLoading] = useState(false);
-  const [geminiInsight, setGeminiInsight] = useState<GeminiInsightState>({
-    kind: "idle",
-  });
 
   const [mealModalOpen, setMealModalOpen] = useState(false);
   const [mealNameDraft, setMealNameDraft] = useState("");
@@ -230,22 +153,8 @@ export function HomeClient() {
     null
   );
   const celebrationHideRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const foodSearchInputRef = useRef<HTMLInputElement>(null);
-  const addFromSearchRef = useRef(false);
-  const clickAudioRef = useRef<HTMLAudioElement | null>(null);
-  const glowClearTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(
-    null
-  );
-  const addSuccessClearTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(
-    null
-  );
-
-  const [glowEntryId, setGlowEntryId] = useState<string | null>(null);
-  const [addBtnPulse, setAddBtnPulse] = useState(false);
-  const [addFromSearchSuccess, setAddFromSearchSuccess] = useState(false);
 
   const [profile, setProfile] = useState<UserProfile | null>(null);
-  const prevUnitRef = useRef<FoodUnit>("גרם");
   const [viewDateKey, setViewDateKey] = useState(() => getTodayKey());
   const prevCalKeyRef = useRef(getTodayKey());
 
@@ -258,23 +167,6 @@ export function HomeClient() {
   }, [editQtyText]);
   const [editUnit, setEditUnit] = useState<FoodUnit>("גרם");
   const [editLoading, setEditLoading] = useState(false);
-
-  const [scanModalOpen, setScanModalOpen] = useState(false);
-
-  useEffect(() => {
-    const a = new Audio(MIXKIT_CLICK_SOUND_URL);
-    a.preload = "auto";
-    clickAudioRef.current = a;
-    return () => {
-      clickAudioRef.current = null;
-      if (glowClearTimeoutRef.current) {
-        clearTimeout(glowClearTimeoutRef.current);
-      }
-      if (addSuccessClearTimeoutRef.current) {
-        clearTimeout(addSuccessClearTimeoutRef.current);
-      }
-    };
-  }, []);
 
   useEffect(() => {
     setProfile(loadProfile());
@@ -354,175 +246,6 @@ export function HomeClient() {
     };
   }, []);
 
-  const searchPanelSync =
-    debouncedFoodSearch.length >= 2 && debouncedFoodSearch === food.trim();
-  const debouncePending =
-    food.trim().length >= 2 && debouncedFoodSearch !== food.trim();
-
-  const showSuggestions =
-    !suggestionsDismissed &&
-    food.trim().length >= 2 &&
-    (debouncePending || searchPanelSync);
-
-  const blockFoodFormOverlay =
-    mealModalOpen || editOpen || celebration.show || scanModalOpen;
-
-  useEffect(() => {
-    if (celebration.show) {
-      foodSearchInputRef.current?.blur();
-      setSuggestionsDismissed(true);
-    }
-  }, [celebration.show]);
-
-  useEffect(() => {
-    const trimmed = food.trim();
-    if (trimmed.length === 0) {
-      setDebouncedFoodSearch("");
-      return;
-    }
-    if (trimmed.length < 2) {
-      setDebouncedFoodSearch("");
-      return;
-    }
-    const t = window.setTimeout(() => {
-      setDebouncedFoodSearch(trimmed);
-    }, SEARCH_DEBOUNCE_MS);
-    return () => window.clearTimeout(t);
-  }, [food]);
-
-  useEffect(() => {
-    if (food.trim().length < 2) {
-      setHomeLocalRows([]);
-      setHomeSearchLoading(false);
-      setGeminiInsight({ kind: "idle" });
-    }
-  }, [food]);
-
-  /** בזמן הקלדה לפני סנכרון debounce — לא להציג ניתוח AI של שאילתה קודמת */
-  useEffect(() => {
-    const t = food.trim();
-    if (t.length < 2) return;
-    if (t !== debouncedFoodSearch) {
-      setGeminiInsight({ kind: "idle" });
-    }
-  }, [food, debouncedFoodSearch]);
-
-  useEffect(() => {
-    if (debouncedFoodSearch.length < 2) {
-      setHomeLocalRows([]);
-      setHomeSearchLoading(false);
-      return;
-    }
-    const ac = new AbortController();
-    setHomeSearchLoading(true);
-    void (async () => {
-      try {
-        const params = new URLSearchParams({
-          q: debouncedFoodSearch,
-          sort: "caloriesAsc",
-          category: "הכל",
-          page: "1",
-          pageSize: "40",
-        });
-        const resL = await fetch(`/api/food-explorer?${params}`, {
-          signal: ac.signal,
-        });
-        if (ac.signal.aborted) return;
-
-        if (resL.ok) {
-          const data = (await resL.json()) as {
-            items?: Array<{
-              id: string;
-              name: string;
-              category: string;
-              calories: number;
-              protein: number;
-              fat: number;
-              carbs: number;
-            }>;
-          };
-          const items = data.items ?? [];
-          const mapped = items.map((i) => ({
-            id: i.id,
-            name: i.name,
-            verified: true,
-            category: i.category,
-            calories: i.calories,
-            protein: i.protein,
-            fat: i.fat,
-            carbs: i.carbs,
-          }));
-          setHomeLocalRows(sortHomeLocalRows(mapped, debouncedFoodSearch));
-        } else {
-          setHomeLocalRows([]);
-        }
-      } catch {
-        if (!ac.signal.aborted) {
-          setHomeLocalRows([]);
-        }
-      } finally {
-        if (!ac.signal.aborted) setHomeSearchLoading(false);
-      }
-    })();
-    return () => ac.abort();
-  }, [debouncedFoodSearch]);
-
-  useEffect(() => {
-    if (debouncedFoodSearch.length < 2) {
-      setGeminiInsight({ kind: "idle" });
-      return;
-    }
-    // Only ask Gemini if local dictionary has no matches.
-    if (homeSearchLoading) return;
-    if (homeLocalRows.length > 0) {
-      setGeminiInsight({ kind: "idle" });
-      return;
-    }
-    const ac = new AbortController();
-    setGeminiInsight({ kind: "loading" });
-    void (async () => {
-      try {
-        const res = await fetch("/api/gemini-food-analyze", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ query: debouncedFoodSearch }),
-          signal: ac.signal,
-        });
-        const data = (await res.json()) as {
-          result?: {
-            name: string;
-            calories: number;
-            protein: number;
-            carbs: number;
-            fat: number;
-          } | null;
-          error?: string;
-        };
-        if (ac.signal.aborted) return;
-        if (!res.ok) {
-          setGeminiInsight({
-            kind: "error",
-            message: GEMINI_UNAVAILABLE_MSG,
-          });
-          return;
-        }
-        if (data.result == null) {
-          setGeminiInsight({ kind: "notFood" });
-          return;
-        }
-        setGeminiInsight({ kind: "ok", ...data.result });
-      } catch {
-        if (!ac.signal.aborted) {
-          setGeminiInsight({
-            kind: "error",
-            message: GEMINI_UNAVAILABLE_MSG,
-          });
-        }
-      }
-    })();
-    return () => ac.abort();
-  }, [debouncedFoodSearch, homeSearchLoading, homeLocalRows.length]);
-
   const starredForMealCount = useMemo(
     () => entries.filter((e) => e.mealStarred).length,
     [entries]
@@ -536,6 +259,13 @@ export function HomeClient() {
   useEffect(() => {
     setEntries(getEntriesForDate(viewDateKey));
   }, [viewDateKey]);
+
+  useEffect(() => {
+    const d = searchParams.get("date");
+    if (d && /^\d{4}-\d{2}-\d{2}$/.test(d) && d <= getTodayKey()) {
+      setViewDateKey(d);
+    }
+  }, [searchParams]);
 
   useEffect(() => {
     const id = window.setInterval(() => {
@@ -553,46 +283,6 @@ export function HomeClient() {
     prevCaloriesRef.current = null;
     setMilestones({ half: false, full: false });
   }, [viewDateKey]);
-
-  const [debouncedFoodMemory, setDebouncedFoodMemory] = useState("");
-  useEffect(() => {
-    const t = food.trim();
-    if (t.length === 0) {
-      setDebouncedFoodMemory("");
-      return;
-    }
-    const id = window.setTimeout(() => setDebouncedFoodMemory(t), 400);
-    return () => window.clearTimeout(id);
-  }, [food]);
-
-  useEffect(() => {
-    const t = debouncedFoodMemory.trim();
-    if (t.length < 2) return;
-    if (t !== food.trim()) return;
-    const mem = getFoodMemory(t);
-    if (mem) {
-      setUnit(mem.unit);
-      if (mem.unit === "גרם") {
-        setQuantityText(String(Math.max(1, Math.round(mem.quantity))));
-      } else {
-        setQuantityText(String(snapToFraction(mem.quantity)));
-      }
-    }
-  }, [debouncedFoodMemory, food]);
-
-  function handleUnitChange(next: FoodUnit) {
-    const prev = prevUnitRef.current;
-    setUnit(next);
-    if (next !== "גרם") {
-      setQuantityText("1");
-    } else if (prev !== "גרם") {
-      setQuantityText("100");
-    }
-  }
-
-  useEffect(() => {
-    prevUnitRef.current = unit;
-  }, [unit]);
 
   useEffect(() => {
     const goalCalories = target;
@@ -624,96 +314,6 @@ export function HomeClient() {
     prevCaloriesRef.current = curr;
   }, [total, target, profile, viewDateKey, milestones, triggerCelebration]);
 
-  async function handleAdd(e: React.FormEvent) {
-    e.preventDefault();
-    setError(null);
-    setNote(null);
-    const name = food.trim();
-    if (!name) {
-      setError("הקלידי שם מזון");
-      return;
-    }
-    const q = clampQuantity(quantity, unit);
-    setQuantityText(String(q));
-    const fromSearchPick = addFromSearchRef.current;
-    if (fromSearchPick) {
-      const audio = clickAudioRef.current;
-      if (audio) {
-        audio.currentTime = 0;
-        void audio.play().catch(() => {});
-      }
-    }
-    setLoading(true);
-    try {
-      const res = await fetch("/api/calories", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ food: name, quantity: q, unit }),
-      });
-      const data = (await res.json()) as {
-        calories?: number;
-        note?: string;
-        error?: string;
-        verified?: boolean;
-        proteinG?: number;
-        carbsG?: number;
-        fatG?: number;
-        protein?: number;
-        carbohydrates?: number;
-        fat?: number;
-      };
-      if (!res.ok) {
-        setError(data.error ?? "שגיאה");
-        return;
-      }
-      const kcal = data.calories ?? 0;
-      saveFoodMemoryKey(name, q, unit);
-      const proteinG = optionalMacroGram(data.proteinG ?? data.protein);
-      const carbsG = optionalMacroGram(data.carbsG ?? data.carbohydrates);
-      const fatG = optionalMacroGram(data.fatG ?? data.fat);
-      const entry: LogEntry = {
-        id: uid(),
-        food: name,
-        calories: kcal,
-        quantity: q,
-        unit,
-        createdAt: new Date().toISOString(),
-        mealStarred: false,
-        verified: data.verified === true,
-        proteinG,
-        carbsG,
-        fatG,
-      };
-      persistEntries([entry, ...entries]);
-      setNote(data.note ?? null);
-      setSuggestionsDismissed(false);
-      setFood("");
-      if (fromSearchPick) {
-        addFromSearchRef.current = false;
-        if (glowClearTimeoutRef.current) {
-          clearTimeout(glowClearTimeoutRef.current);
-        }
-        if (addSuccessClearTimeoutRef.current) {
-          clearTimeout(addSuccessClearTimeoutRef.current);
-        }
-        setGlowEntryId(entry.id);
-        glowClearTimeoutRef.current = setTimeout(() => {
-          setGlowEntryId(null);
-          glowClearTimeoutRef.current = null;
-        }, 800);
-        setAddFromSearchSuccess(true);
-        addSuccessClearTimeoutRef.current = setTimeout(() => {
-          setAddFromSearchSuccess(false);
-          addSuccessClearTimeoutRef.current = null;
-        }, 1200);
-      }
-    } catch {
-      setError("בעיית רשת — נסי שוב");
-    } finally {
-      setLoading(false);
-    }
-  }
-
   function removeEntry(id: string) {
     persistEntries(entries.filter((x) => x.id !== id));
   }
@@ -738,8 +338,6 @@ export function HomeClient() {
   }
 
   function openMealModal() {
-    foodSearchInputRef.current?.blur();
-    setSuggestionsDismissed(true);
     setMealNameDraft("");
     setMealModalOpen(true);
   }
@@ -765,24 +363,7 @@ export function HomeClient() {
     setMealNameDraft("");
   }
 
-  function pickSuggestion(suggestionName: string) {
-    addFromSearchRef.current = true;
-    setSuggestionsDismissed(true);
-    setFood(suggestionName);
-    queueMicrotask(() => foodSearchInputRef.current?.blur());
-  }
-
-  function onFoodChange(value: string) {
-    addFromSearchRef.current = false;
-    setFood(value);
-    startTransition(() => {
-      setSuggestionsDismissed(false);
-    });
-  }
-
   function openEdit(item: LogEntry) {
-    foodSearchInputRef.current?.blur();
-    setSuggestionsDismissed(true);
     setEditEntry(item);
     setEditQtyText(String(item.quantity));
     setEditUnit(item.unit);
@@ -853,23 +434,9 @@ export function HomeClient() {
   }
 
   return (
-    <div className="mx-auto max-w-lg px-4 pb-8 pt-6 md:pt-10" dir="rtl">
-      <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+    <div className="mx-auto max-w-lg px-4 pb-32 pt-6 md:pt-10" dir="rtl">
+      <div className="mb-4 flex flex-wrap items-center justify-start gap-3">
         <ProfileMenu />
-        <label className="inline-flex cursor-pointer items-center gap-2 rounded-xl border-2 border-[#FADADD] bg-white px-3 py-2 text-sm font-semibold text-[#333333] shadow-sm">
-          <IconCalendar className="h-5 w-5 shrink-0 text-[#333333]" aria-hidden />
-          <span className="sr-only">בחירת תאריך ליומן</span>
-          <input
-            type="date"
-            className="max-w-[11rem] cursor-pointer bg-transparent font-[inherit] text-[#333333] outline-none"
-            value={viewDateKey}
-            max={getTodayKey()}
-            onChange={(e) => {
-              const v = e.target.value;
-              if (v) setViewDateKey(v);
-            }}
-          />
-        </label>
       </div>
 
       {celebration.show && (
@@ -1136,13 +703,18 @@ export function HomeClient() {
       </header>
 
       <motion.div
-        className="mb-8 text-center"
+        className="mb-8 flex justify-center px-3"
         initial={{ opacity: 0, y: -8 }}
         animate={{ opacity: 1, y: 0 }}
       >
-        <h1 className="app-title text-4xl md:text-5xl lg:text-6xl">
-          סופרים קלוריות
-        </h1>
+        <div className="max-w-[min(100%,20rem)] text-center">
+          <p className="mb-2.5 text-base font-bold leading-snug tracking-wide text-[#1a1a1a] md:text-lg">
+            יומן המעקב של
+          </p>
+          <h1 className="app-title relative rounded-2xl border border-[#FADADD]/90 bg-gradient-to-b from-white to-[#fffafb] px-4 py-3 text-[1.35rem] leading-snug shadow-[0_2px_14px_rgba(250,218,221,0.35)] md:px-5 md:py-3.5 md:text-2xl lg:text-[1.65rem]">
+            אינטליגנציה קלורית
+          </h1>
+        </div>
       </motion.div>
 
       <motion.section
@@ -1207,322 +779,14 @@ export function HomeClient() {
         </motion.div>
       )}
 
-      <form
-        onSubmit={handleAdd}
-        className={`glass-panel relative z-0 mb-6 space-y-4 overflow-visible p-4 ${
-          blockFoodFormOverlay ? "pointer-events-none select-none" : ""
-        }`}
-        aria-hidden={blockFoodFormOverlay ? true : undefined}
-      >
-        <label className="block">
-          <span className="mb-2 block text-sm font-semibold text-[#333333]">
-            חיפוש מזון — המילון שלך + ניתוח AI (Gemini)
-          </span>
-          <div className="search-field-wrap relative w-full">
-            <input
-              ref={foodSearchInputRef}
-              type="text"
-              inputMode="search"
-              enterKeyHint="search"
-              value={food}
-              onChange={(e) => onFoodChange(e.target.value)}
-              onFocus={(e) => {
-                // Makes it easy to clear and type a new search.
-                if (e.currentTarget.value) e.currentTarget.select();
-              }}
-              autoComplete="off"
-              autoCorrect="off"
-              autoCapitalize="none"
-              spellCheck={false}
-              placeholder="חפשי מזון…"
-              className="input-luxury-search w-full ps-12 pe-14"
-              aria-controls={showSuggestions ? "food-suggestions" : undefined}
-            />
-            <button
-              type="button"
-              className="absolute end-3 top-1/2 z-[11] flex h-10 w-10 -translate-y-1/2 items-center justify-center rounded-xl border-2 border-[#fadadd] bg-white text-[#333333] shadow-sm transition hover:bg-[#fadadd]/45 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#f5c8d4]"
-              aria-label="סריקת ברקוד"
-              title="סריקת ברקוד"
-              onClick={() => {
-                foodSearchInputRef.current?.blur();
-                setSuggestionsDismissed(true);
-                setScanModalOpen(true);
-              }}
-            >
-              <IconScanBarcode className="h-6 w-6" />
-            </button>
-            {showSuggestions && (
-              <div
-                id="food-suggestions"
-                className="suggestions-panel max-h-[min(70vh,28rem)] w-full overflow-y-auto"
-              >
-                {debouncePending && (
-                  <p
-                    className="px-3 py-2 text-xs text-[#333333]/70"
-                    role="status"
-                  >
-                    ממתינים לסיום הקלדה…
-                  </p>
-                )}
-
-                {searchPanelSync && (
-                  <div className="space-y-3 py-1">
-                    <div>
-                      <p className="px-3 pb-1 text-sm font-bold text-[#333333]">
-                        מהמילון שלך
-                      </p>
-                      {homeSearchLoading && homeLocalRows.length === 0 ? (
-                        <div
-                          className="flex items-center gap-2 px-3 py-2 text-sm text-[#333333]"
-                          role="status"
-                        >
-                          <span
-                            className="inline-block size-4 animate-spin rounded-full border-2 border-[#FADADD] border-t-[#c45c74]"
-                            aria-hidden
-                          />
-                          טוען מהמילון…
-                        </div>
-                      ) : homeLocalRows.length === 0 ? (
-                        <p className="px-3 py-1 text-xs text-[#333333]/65">
-                          אין התאמות מקומיות
-                        </p>
-                      ) : (
-                        <ul className="space-y-0.5">
-                          {homeLocalRows.map((s) => (
-                            <li key={`l-${s.id}`}>
-                              <button
-                                type="button"
-                                className="suggestion-item flex w-full flex-col items-stretch gap-0.5 px-3 py-2 text-right"
-                                onMouseDown={(e) => e.preventDefault()}
-                                onClick={() => pickSuggestion(s.name)}
-                              >
-                                <span className="flex items-center justify-end gap-2 font-semibold text-[#333333]">
-                                  <span>{s.name}</span>
-                                  <span title="מאומת" aria-label="מאומת">
-                                    <IconVerified className="h-4 w-4 shrink-0 text-[#d4a017]" />
-                                  </span>
-                                </span>
-                                {s.category != null && (
-                                  <span className="text-[11px] text-[#333333]/65">
-                                    {s.category}
-                                  </span>
-                                )}
-                                {s.calories != null && (
-                                  <span className="text-[11px] text-[#333333]/75">
-                                    קלוריות: {Math.round(s.calories)} · חלבון:{" "}
-                                    {s.protein ?? "—"} · פחמימות: {s.carbs ?? "—"}{" "}
-                                    · שומן: {s.fat ?? "—"}
-                                    <span className="text-[#333333]/55">
-                                      {" "}
-                                      (ל־100 ג׳)
-                                    </span>
-                                  </span>
-                                )}
-                              </button>
-                            </li>
-                          ))}
-                        </ul>
-                      )}
-                    </div>
-
-                    <div className="border-t border-[#FADADD]/80 pt-2">
-                      <p className="px-3 pb-1 text-sm font-bold text-[#333333]">
-                        ניתוח אינטליגנציה קלורית (AI)
-                      </p>
-                      {geminiInsight.kind === "loading" && (
-                        <div
-                          className="flex items-center gap-2 px-3 py-2 text-sm text-[#333333]"
-                          role="status"
-                        >
-                          <span
-                            className="inline-block size-4 animate-spin rounded-full border-2 border-[#FADADD] border-t-[#c45c74]"
-                            aria-hidden
-                          />
-                          מנתח נתונים…
-                        </div>
-                      )}
-                      {geminiInsight.kind === "error" && (
-                        <p className="px-3 py-1 text-xs text-[#a94444]">
-                          {geminiInsight.message}
-                        </p>
-                      )}
-                      {geminiInsight.kind === "notFood" && (
-                        <p className="px-3 py-1 text-xs text-[#333333]/70">
-                          לא זוהה כמזון (לפי AI)
-                        </p>
-                      )}
-                      {geminiInsight.kind === "ok" && (
-                        <div className="px-3 py-1">
-                          <button
-                            type="button"
-                            className="suggestion-item flex w-full flex-col items-stretch gap-0.5 py-2 text-right"
-                            onMouseDown={(e) => e.preventDefault()}
-                            onClick={() => pickSuggestion(geminiInsight.name)}
-                          >
-                            <span className="font-semibold text-[#333333]">
-                              {geminiInsight.name}
-                            </span>
-                            <span className="text-[11px] text-[#333333]/75">
-                              קלוריות: {Math.round(geminiInsight.calories)} ·
-                              חלבון: {Math.round(geminiInsight.protein)} ·
-                              פחמימות: {Math.round(geminiInsight.carbs)} · שומן:{" "}
-                              {Math.round(geminiInsight.fat)}
-                              <span className="text-[#333333]/55">
-                                {" "}
-                                (ל־100 ג׳ — הערכה AI)
-                              </span>
-                            </span>
-                          </button>
-                        </div>
-                      )}
-                      {geminiInsight.kind === "idle" && (
-                        <p className="px-3 py-1 text-[11px] text-[#333333]/55">
-                          ממתין לניתוח…
-                        </p>
-                      )}
-                    </div>
-                  </div>
-                )}
-              </div>
-            )}
-          </div>
-        </label>
-
-        <div className="flex flex-wrap gap-3">
-          <label className="min-w-[6rem] flex-1">
-            <span className="mb-1 block text-xs font-semibold text-[#333333]">
-              כמות
-            </span>
-            <input
-              type="text"
-              inputMode="decimal"
-              value={quantityText}
-              onFocus={(e) => {
-                if (e.currentTarget.value.trim() === "0") {
-                  setQuantityText("");
-                }
-                e.currentTarget.select();
-              }}
-              onChange={(e) => {
-                if ((e.nativeEvent as InputEvent).isComposing) return;
-                const raw = e.target.value;
-                if (raw.trim() === "") {
-                  setQuantityText("");
-                  return;
-                }
-                const cleaned = raw
-                  .replace(",", ".")
-                  .replace(/[^\d.]/g, "")
-                  .replace(/^0+(?=\d)/, "");
-                const parts = cleaned.split(".");
-                const normalized =
-                  parts.length <= 1
-                    ? parts[0]
-                    : `${parts[0]}.${parts.slice(1).join("")}`;
-                setQuantityText(normalized);
-              }}
-              onBlur={() => {
-                const n = parseFloat(quantityText.replace(",", "."));
-                if (!Number.isFinite(n)) return;
-                setQuantityText(String(clampQuantity(n, unit)));
-              }}
-              className="input-luxury-dark w-full"
-            />
-            {unit !== "גרם" && (
-              <div className="mt-2 flex min-w-0 flex-nowrap justify-start gap-2 overflow-x-auto pb-1">
-                {FRACTION_DECIMAL_ROWS.map(([num, label]) => {
-                  const selected = approxEq(quantity, num);
-                  return (
-                    <button
-                      key={label}
-                      type="button"
-                      className={`shrink-0 cursor-pointer whitespace-nowrap rounded-[10px] px-3 py-2 text-sm font-semibold text-[#333333] ${
-                        selected
-                          ? "border-2 border-black bg-[#eee]"
-                          : "border border-[#ccc] bg-white"
-                      }`}
-                      onClick={() =>
-                        setQuantityText(String(clampQuantity(num, unit)))
-                      }
-                    >
-                      {label}
-                    </button>
-                  );
-                })}
-              </div>
-            )}
-          </label>
-          <label className="min-w-[8rem] flex-[2]">
-            <span className="mb-1 block text-xs font-semibold text-[#333333]">
-              יחידה
-            </span>
-            <select
-              value={unit}
-              onChange={(e) =>
-                handleUnitChange(e.target.value as FoodUnit)
-              }
-              className="select-luxury w-full"
-            >
-              {UNITS.map((u) => (
-                <option key={u} value={u}>
-                  {u}
-                </option>
-              ))}
-            </select>
-          </label>
-        </div>
-
-        {note && (
-          <p className="border-r-2 border-[#FADADD] pr-2 text-sm text-[#333333]">
-            {note}
-          </p>
-        )}
-        {error && (
-          <p className="text-sm font-semibold text-[#a94444]">{error}</p>
-        )}
-
-        <motion.button
-          type="submit"
-          disabled={loading}
-          className={`btn-gold relative w-full rounded-xl py-4 text-lg font-bold transition-[box-shadow,background-color,color] duration-200 disabled:opacity-50 ${
-            addBtnPulse
-              ? "ring-2 ring-emerald-400/70 ring-offset-2 ring-offset-[#fffafb]"
-              : ""
-          } ${
-            addFromSearchSuccess
-              ? "bg-emerald-600/95 text-white shadow-[0_0_20px_rgba(16,185,129,0.45)]"
-              : ""
-          }`}
-          whileTap={{ scale: 0.98 }}
-          onPointerDown={() => {
-            if (addFromSearchRef.current) {
-              setAddBtnPulse(true);
-              window.setTimeout(() => setAddBtnPulse(false), 200);
-            }
-          }}
-        >
-          {loading ? (
-            "מחשבים…"
-          ) : addFromSearchSuccess ? (
-            <span className="flex items-center justify-center gap-2">
-              <span className="text-xl leading-none" aria-hidden>
-                ✓
-              </span>
-              נוסף ליומן
-            </span>
-          ) : (
-            "הוספה ליומן"
-          )}
-        </motion.button>
-      </form>
-
       <section className="glass-panel p-4">
         <h2 className="mb-3 text-xl font-bold text-[#333333]">
           {isViewingToday ? "היום ביומן" : `יומן — ${viewDateKey}`}
         </h2>
         {entries.length === 0 ? (
           <p className="text-[#333333]/85">
-            עדיין אין רשומות — התחילי מכאן למעלה
+            עדיין אין רשומות — לחצי על הכפתור המרכזי ״הוספה״ בתפריט התחתון,
+            ואז על ״פתיחת מסך הוספת מזון״ (המקלדת לא מסתירה את תוצאות החיפוש).
           </p>
         ) : (
           <ul className="space-y-3" data-dict-rev={dictTick}>
@@ -1538,9 +802,7 @@ export function HomeClient() {
                   transition={{
                     layout: { type: "spring", damping: 28, stiffness: 400 },
                   }}
-                  className={`flex flex-wrap items-center gap-2 rounded-xl border-2 border-[#FADADD] bg-white px-3 py-3 ${
-                    glowEntryId === item.id ? "glow-effect" : ""
-                  }`}
+                  className="flex flex-wrap items-center gap-2 rounded-xl border-2 border-[#FADADD] bg-white px-3 py-3"
                 >
                   <div className="min-w-0 flex-1">
                     <p className="flex flex-wrap items-center gap-1 font-semibold text-[#333333]">
@@ -1556,8 +818,21 @@ export function HomeClient() {
                       <span>{item.food}</span>
                     </p>
                     <p className="text-sm text-[#333333]/80">
+                      {formatEntryTime(item.createdAt) ? (
+                        <>
+                          <span className="tabular-nums font-medium text-[#333333]">
+                            {formatEntryTime(item.createdAt)}
+                          </span>
+                          {" · "}
+                        </>
+                      ) : null}
                       {formatQtyLabel(item.quantity, item.unit)} {item.unit} ·{" "}
                       {item.calories} קק״ל
+                    </p>
+                    <p className="text-xs text-[#333333]/65">
+                      חלבון {formatMacroCell(item.proteinG)} · פחמימות{" "}
+                      {formatMacroCell(item.carbsG)} · שומן{" "}
+                      {formatMacroCell(item.fatG)}
                     </p>
                   </div>
                   <div className="flex shrink-0 flex-wrap items-center gap-2">
@@ -1625,16 +900,6 @@ export function HomeClient() {
         )}
       </section>
 
-      <BarcodeScanModal
-        open={scanModalOpen}
-        onClose={() => setScanModalOpen(false)}
-        onApplyToHome={(name, noteMsg) => {
-          setFood(name);
-          setSuggestionsDismissed(true);
-          setNote(noteMsg);
-          setError(null);
-        }}
-      />
     </div>
   );
 }

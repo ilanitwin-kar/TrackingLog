@@ -3,7 +3,7 @@ import { AppChrome } from "@/components/AppChrome";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "סופרים קלוריות",
+  title: "יומן המעקב של אינטליגנציה קלורית",
   description: "יומן קלוריות חכם עם יעדים, משקל ודוח אסטרטגי",
 };
 
