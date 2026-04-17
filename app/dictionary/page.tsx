@@ -250,8 +250,9 @@ export default function DictionaryPage() {
                   >
                   <div className="min-w-0 flex-1">
                     <p className="flex flex-wrap items-center gap-1.5 font-semibold text-[#333333]">
-                      <span className="inline-flex shrink-0" aria-label="מאומת">
-                        <IconVerified className="h-4 w-4 text-[#d4a017]" />
+                      <span className="inline-flex shrink-0 items-center gap-0.5 text-[#b8860b]">
+                        <IconVerified className="h-4 w-4" />
+                        <span className="text-[10px] font-semibold">מאומת</span>
                       </span>
                       <span>{row.name}</span>
                     </p>
@@ -401,20 +402,26 @@ export default function DictionaryPage() {
                       <button
                         type="button"
                         onClick={() => addSavedToToday(d, preset)}
-                        className="btn-icon-luxury shrink-0 p-2 text-[#2d6a4f]"
+                        className="btn-icon-luxury flex shrink-0 flex-col items-center gap-0.5 px-2 py-1.5 text-[#2d6a4f]"
                         aria-label="העבר ליומן היום"
                         title="העבר ליומן היום"
                       >
                         <IconCalendar className="h-6 w-6" />
+                        <span className="text-[10px] font-semibold leading-tight">
+                          ליומן
+                        </span>
                       </button>
                       <button
                         type="button"
                         onClick={() => setSaved(removeDictionaryItem(d.id))}
-                        className="btn-icon-luxury btn-icon-luxury-danger shrink-0 p-2"
+                        className="btn-icon-luxury btn-icon-luxury-danger flex shrink-0 flex-col items-center gap-0.5 px-2 py-1.5"
                         aria-label="הסרה מהמילון"
                         title="הסרה מהמילון"
                       >
                         <IconTrash className="h-6 w-6" />
+                        <span className="text-[10px] font-semibold leading-tight">
+                          הסר
+                        </span>
                       </button>
                     </div>
                   </div>
