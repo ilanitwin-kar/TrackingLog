@@ -154,7 +154,7 @@ export function BottomNav() {
               aria-modal
               aria-labelledby={titleId}
               aria-describedby={subtitleId}
-              className="glass-panel w-full max-w-md rounded-t-[1.35rem] border-2 border-[#FADADD] p-5 shadow-2xl sm:rounded-2xl"
+              className="glass-panel w-full max-w-md rounded-t-[1.35rem] border-2 border-[#FADADD] p-5 shadow-2xl sm:rounded-2xl bg-white"
               initial={{ y: 48, opacity: 0 }}
               animate={{ y: 0, opacity: 1 }}
               exit={{ y: 32, opacity: 0 }}
@@ -182,7 +182,7 @@ export function BottomNav() {
               </p>
               <motion.button
                 type="button"
-                className="btn-gold mt-5 w-full rounded-xl py-3.5 text-base font-bold"
+                className="btn-gold mt-5 w-full rounded-xl py-3.5 text-base font-bold bg-[#FADADD] text-[#333333] hover:bg-[#ffd0d8] transition-colors"
                 whileTap={{ scale: 0.98 }}
                 onClick={goAddFood}
               >
