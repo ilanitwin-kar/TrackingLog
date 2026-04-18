@@ -2,13 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import {
-  useCallback,
-  useEffect,
-  useLayoutEffect,
-  useRef,
-  useState,
-} from "react";
+import { useCallback, useEffect, useState } from "react";
 import {
   activateDevAdminBypass,
   registerAccount,
@@ -28,9 +22,10 @@ const LANG_KEY = "cj_welcome_lang";
 type Lang = "he" | "en";
 
 type Copy = {
-  slogan: string;
-  slides: string[];
-  mindset: string[];
+  /** שורה ראשונה — מסר ראשי */
+  taglinePrimary: string;
+  /** שורה שנייה — הדגשה (במסך: צבע גבעול) */
+  taglineSecondary: string;
   signup: string;
   login: string;
   quickConnect: string;
@@ -64,19 +59,8 @@ type Copy = {
 
 const COPY: Record<Lang, Copy> = {
   he: {
-    slogan: "יומן מעקב מבית אינטליגנציה קלורית",
-    slides: [
-      "מסלול ישיר לגוף החלומות שלך דרך נתונים ודיוק.",
-      "ניהול חכם של דחיסות חלבון ושובע.",
-      "פיתוח ישראלי מקורי עם מאגר מוצרים מקומי מלא.",
-      "ממשק נקי, מעקב יומיומי וכלים שמחזיקים אותך במסלול.",
-    ],
-    mindset: [
-      "דיוק הוא המפתח לשליטה",
-      "השליטה עוברת לידיים שלך",
-      "נתון אחד בכל פעם — עקביות מנצחת",
-      "המסלול שלך, הקצב שלך",
-    ],
+    taglinePrimary: "מסלול ישיר לגוף החלומות שלך",
+    taglineSecondary: "שליטה, עצמאות, חופש",
     signup: "להרשמה והתחלת המסלול",
     login: "התחברות",
     quickConnect: "חיבור מהיר",
@@ -114,19 +98,8 @@ const COPY: Record<Lang, Copy> = {
     registering: "יוצרת חשבון…",
   },
   en: {
-    slogan: "A tracking journal from Caloric Intelligence",
-    slides: [
-      "A straight path to your dream body through data and precision.",
-      "Smart handling of protein density and satiety.",
-      "Israeli-built with a full local product catalog.",
-      "A clean interface, daily rhythm, and tools that keep you on track.",
-    ],
-    mindset: [
-      "Precision is the key to control",
-      "Control moves into your hands",
-      "One data point at a time — consistency wins",
-      "Your path, your pace",
-    ],
+    taglinePrimary: "A direct path to your dream body",
+    taglineSecondary: "Control, independence, freedom",
     signup: "Sign up & start your path",
     login: "Log in",
     quickConnect: "Quick connect",
@@ -246,7 +219,6 @@ export function WelcomeScreen() {
   const router = useRouter();
   const [lang, setLang] = useState<Lang>("he");
   const [mounted, setMounted] = useState(false);
-  const [slideIndex, setSlideIndex] = useState(0);
   const [manualOpen, setManualOpen] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
   const [authOpen, setAuthOpen] = useState<null | "signup" | "login">(null);
@@ -255,7 +227,6 @@ export function WelcomeScreen() {
   const [authConfirm, setAuthConfirm] = useState("");
   const [authBusy, setAuthBusy] = useState(false);
   const [authError, setAuthError] = useState<string | null>(null);
-  const scrollerRef = useRef<HTMLDivElement>(null);
 
   const t = COPY[lang];
   const dir = lang === "he" ? "rtl" : "ltr";
@@ -269,39 +240,6 @@ export function WelcomeScreen() {
     if (!mounted) return;
     localStorage.setItem(LANG_KEY, lang);
   }, [lang, mounted]);
-
-  /* קרוסלה אופקית: ב־RTL הדפדפן לעיתים מתחיל מקצה ה"סוף" — כופים LTR על המיכל */
-  useLayoutEffect(() => {
-    if (!mounted) return;
-    const el = scrollerRef.current;
-    if (!el) return;
-    el.scrollTo({ left: 0, top: 0, behavior: "auto" });
-    setSlideIndex(0);
-  }, [mounted, lang]);
-
-  const slides = t.slides;
-  const mindsetLine =
-    t.mindset[slideIndex % Math.max(1, t.mindset.length)];
-
-  const onScrollCarousel = useCallback(() => {
-    const el = scrollerRef.current;
-    if (!el || !slides.length) return;
-    const w = el.clientWidth;
-    if (w <= 0) return;
-    const i = Math.round(el.scrollLeft / w);
-    setSlideIndex(Math.min(Math.max(i, 0), slides.length - 1));
-  }, [slides.length]);
-
-  const goToSlide = useCallback(
-    (i: number) => {
-      const el = scrollerRef.current;
-      if (!el) return;
-      const w = el.clientWidth;
-      el.scrollTo({ left: i * w, behavior: "smooth" });
-      setSlideIndex(i);
-    },
-    []
-  );
 
   const showToast = useCallback((msg: string) => {
     setToast(msg);
@@ -430,50 +368,20 @@ export function WelcomeScreen() {
       <div className="mt-2 flex flex-col items-center text-center">
         <CherryMark className="h-24 w-28 sm:h-28 sm:w-32" />
         <h1 className={cherryWordClass}>Cherry</h1>
-        <p className="mt-1 max-w-sm text-sm font-medium text-[var(--text)]/85">
-          {t.slogan}
-        </p>
       </div>
 
-      <div className="mt-5 min-h-0 flex-1" dir="ltr">
+      <div className="mt-5 min-h-0 flex-1 px-0.5">
         <div
-          ref={scrollerRef}
-          onScroll={onScrollCarousel}
-          className="flex snap-x snap-mandatory overflow-x-auto scroll-smooth [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+          className="glass-panel mx-auto max-w-md rounded-2xl border-2 border-[var(--border-cherry-soft)] bg-white/95 px-4 py-6 shadow-[0_8px_28px_rgba(155,27,48,0.08)]"
+          dir={dir}
         >
-          {slides.map((text, i) => (
-            <section
-              key={i}
-              className="w-full shrink-0 snap-center px-1"
-              aria-roledescription="slide"
-              aria-label={`${i + 1} / ${slides.length}`}
-            >
-              <div className="glass-panel mx-auto min-h-[7.5rem] rounded-2xl border-2 border-[var(--border-cherry-soft)] bg-white/95 px-4 py-5 shadow-[0_8px_28px_rgba(155,27,48,0.08)]">
-                <p className="text-center text-base font-semibold leading-relaxed text-[var(--text)] sm:text-lg">
-                  {text}
-                </p>
-              </div>
-            </section>
-          ))}
+          <p className="text-balance text-center text-lg font-extrabold leading-snug text-[var(--cherry)] sm:text-xl">
+            {t.taglinePrimary}
+          </p>
+          <p className="mt-4 text-balance text-center text-base font-bold leading-relaxed text-[var(--stem)] sm:text-lg">
+            {t.taglineSecondary}
+          </p>
         </div>
-        <div className="mt-3 flex justify-center gap-1.5">
-          {slides.map((_, i) => (
-            <button
-              key={i}
-              type="button"
-              onClick={() => goToSlide(i)}
-              className={`h-2 rounded-full transition-all ${
-                i === slideIndex
-                  ? "w-6 bg-[#9b1b30]"
-                  : "w-2 bg-[var(--cherry-muted)]"
-              }`}
-              aria-label={`slide ${i + 1}`}
-            />
-          ))}
-        </div>
-        <p className="mt-3 text-center text-sm font-medium italic text-[var(--stem)]/75">
-          {mindsetLine}
-        </p>
       </div>
 
       <div className="mt-6 space-y-3">
