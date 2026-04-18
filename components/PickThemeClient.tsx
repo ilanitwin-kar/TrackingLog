@@ -37,12 +37,14 @@ export function PickThemeClient() {
       className="relative isolate min-h-dvh w-full overflow-hidden bg-[#0f172a]"
       dir="ltr"
     >
-      <p
+      <div
         dir="rtl"
-        className="pointer-events-none absolute start-0 end-0 top-[max(0.75rem,env(safe-area-inset-top))] z-30 px-4 text-center text-sm font-bold text-white drop-shadow-[0_1px_2px_rgba(0,0,0,0.45)]"
+        className="pointer-events-none absolute start-0 end-0 top-[max(0.5rem,env(safe-area-inset-top))] z-30 flex justify-center px-3"
       >
-        בחרו מסלול — בחירה חד־פעמית
-      </p>
+        <p className="max-w-[min(92vw,24rem)] rounded-2xl bg-[#0c1222]/92 px-5 py-2.5 text-center text-[1.05rem] font-extrabold leading-snug text-amber-50 shadow-[0_6px_24px_rgba(0,0,0,0.45)] ring-2 ring-amber-200/35 backdrop-blur-[6px] sm:px-6 sm:py-3 sm:text-xl md:text-2xl">
+          בחרו מסלול
+        </p>
+      </div>
 
       {/* שמאל — BLUE (משולש עליון־שמאלי): רקע בהיר, כותרות כחול עמוק, אייקונים פלדה */}
       <button
@@ -54,7 +56,7 @@ export function PickThemeClient() {
         onClick={() => choose("blueberry")}
       >
         <div className="pointer-events-none flex max-w-[min(92vw,20rem)] flex-row items-center gap-3 self-start sm:gap-4">
-          <PickThemeFigureMan className="h-16 w-[3.1rem] shrink-0 text-[#5c6b7a] drop-shadow-[0_2px_10px_rgba(71,85,105,0.22)] sm:h-[4.75rem] sm:w-[3.65rem]" />
+          <PickThemeFigureMan className="h-[4.5rem] w-[2.65rem] shrink-0 text-[#4a5568] opacity-95 drop-shadow-[0_2px_12px_rgba(71,85,105,0.2)] sm:h-[5.25rem] sm:w-[3rem]" />
           <div
             className="flex min-w-0 flex-col items-center gap-1.5 text-center"
             dir="rtl"
@@ -107,7 +109,7 @@ export function PickThemeClient() {
               לנשים
             </span>
           </div>
-          <PickThemeFigureWoman className="h-16 w-[3.1rem] shrink-0 text-[#ffe4e6] drop-shadow-[0_2px_8px_rgba(127,29,29,0.45)] sm:h-[4.75rem] sm:w-[3.65rem]" />
+          <PickThemeFigureWoman className="h-[4.5rem] w-[2.65rem] shrink-0 text-[#fff5f5] opacity-95 drop-shadow-[0_2px_10px_rgba(127,29,29,0.4)] sm:h-[5.25rem] sm:w-[3rem]" />
         </div>
       </button>
 
