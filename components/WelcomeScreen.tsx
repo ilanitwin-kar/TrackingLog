@@ -22,7 +22,11 @@ import {
 import { BlueberryMark } from "@/components/BlueberryMark";
 import { CherryMark } from "@/components/CherryMark";
 import { useAppVariant } from "@/components/useAppVariant";
-import { getBrandName, type AppVariant } from "@/lib/appVariant";
+import {
+  clearAppVariant,
+  getBrandName,
+  type AppVariant,
+} from "@/lib/appVariant";
 
 const LANG_KEY = "cj_welcome_lang";
 
@@ -58,6 +62,8 @@ type Copy = {
   staffEntry: string;
   staffPinPrompt: string;
   staffPinWrong: string;
+  switchTrack: string;
+  switchTrackConfirm: string;
   errEmail: string;
   errPasswordShort: string;
   errPasswordMismatch: string;
@@ -102,6 +108,9 @@ const COPY: Record<Lang, Copy> = {
     staffEntry: "כניסת מנהלת (קוד צוות)",
     staffPinPrompt: "קוד צוות",
     staffPinWrong: "קוד שגוי",
+    switchTrack: "החלפת מסלול (גברים / נשים)",
+    switchTrackConfirm:
+      "לעבור למסך בחירת המסלול? תוכלי לבחור מחדש צ׳רי או בלו.",
     errEmail: "נא להזין כתובת אימייל תקינה",
     errPasswordShort: "הסיסמה חייבת להכיל לפחות 6 תווים",
     errPasswordMismatch: "הסיסמאות אינן תואמות",
@@ -144,6 +153,9 @@ const COPY: Record<Lang, Copy> = {
     staffEntry: "Staff entry (passcode)",
     staffPinPrompt: "Team passcode",
     staffPinWrong: "Wrong passcode",
+    switchTrack: "Switch track (men / women)",
+    switchTrackConfirm:
+      "Open track selection again? You can pick Cherry or BLUE anew.",
     errEmail: "Please enter a valid email address",
     errPasswordShort: "Password must be at least 6 characters",
     errPasswordMismatch: "Passwords do not match",
@@ -467,13 +479,31 @@ export function WelcomeScreen() {
       </div>
 
       <div className="mt-4 space-y-2 pb-1 text-center">
-        <button
-          type="button"
-          onClick={() => setManualOpen(true)}
-          className="text-sm font-semibold text-[var(--cherry)] underline decoration-[color-mix(in_srgb,var(--cherry)_40%,transparent)] underline-offset-4"
-        >
-          {t.howItWorks}
-        </button>
+        <div className="flex flex-col items-center gap-2">
+          <button
+            type="button"
+            onClick={() => setManualOpen(true)}
+            className="text-sm font-semibold text-[var(--cherry)] underline decoration-[color-mix(in_srgb,var(--cherry)_40%,transparent)] underline-offset-4"
+          >
+            {t.howItWorks}
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              if (
+                typeof window !== "undefined" &&
+                !window.confirm(t.switchTrackConfirm)
+              ) {
+                return;
+              }
+              clearAppVariant();
+              window.location.assign("/pick-theme");
+            }}
+            className="text-sm font-semibold text-[var(--stem)] underline decoration-[color-mix(in_srgb,var(--stem)_35%,transparent)] underline-offset-4"
+          >
+            {t.switchTrack}
+          </button>
+        </div>
         {process.env.NODE_ENV === "development" && (
           <button
             type="button"
