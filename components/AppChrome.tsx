@@ -5,6 +5,14 @@ import { useEffect, useState } from "react";
 import { BottomNav } from "@/components/BottomNav";
 import { isRegistrationComplete, loadProfile } from "@/lib/storage";
 
+const PUBLIC_PATHS = [
+  "/welcome",
+  "/tdee",
+  "/terms",
+  "/privacy",
+  "/forgot-password",
+] as const;
+
 export function AppChrome({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
@@ -13,6 +21,15 @@ export function AppChrome({ children }: { children: React.ReactNode }) {
   const [regOk, setRegOk] = useState(false);
 
   useEffect(() => {
+    if (
+      pathname === "/welcome" ||
+      pathname === "/terms" ||
+      pathname === "/privacy" ||
+      pathname === "/forgot-password"
+    ) {
+      setHideNav(true);
+      return;
+    }
     if (pathname !== "/tdee") {
       setHideNav(false);
       return;
@@ -30,13 +47,19 @@ export function AppChrome({ children }: { children: React.ReactNode }) {
   }, [pathname]);
 
   useEffect(() => {
-    if (pathname === "/tdee") {
+    if (pathname === "/welcome" && isRegistrationComplete(loadProfile())) {
+      router.replace("/");
+      setRegOk(true);
+      setRegReady(true);
+      return;
+    }
+    if (PUBLIC_PATHS.includes(pathname as (typeof PUBLIC_PATHS)[number])) {
       setRegOk(true);
       setRegReady(true);
       return;
     }
     if (!isRegistrationComplete(loadProfile())) {
-      router.replace("/tdee");
+      router.replace("/welcome");
       setRegOk(false);
       setRegReady(true);
       return;
@@ -54,7 +77,17 @@ export function AppChrome({ children }: { children: React.ReactNode }) {
       </div>
     );
   }
-  if (!regOk && pathname !== "/tdee") {
+  if (!regOk && !PUBLIC_PATHS.includes(pathname as (typeof PUBLIC_PATHS)[number])) {
+    /* מעבר מ־/ ל־/welcome: לא להחזיר null — זה יוצר מסך ריק עד סיום הניווט */
+    if (pathname === "/" && !isRegistrationComplete(loadProfile())) {
+      return (
+        <div className="min-h-dvh pb-6">
+          <div className="p-8 text-center text-lg text-[#333333]" dir="rtl">
+            טוען…
+          </div>
+        </div>
+      );
+    }
     return null;
   }
 
