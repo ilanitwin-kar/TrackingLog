@@ -5,9 +5,7 @@ import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import {
   activateDevAdminBypass,
-  activateStaffBypass,
   hasWelcomeAutoResume,
-  isStaffUnlockConfigured,
   registerAccount,
   seedBypassProfileIfNeeded,
   seedDevAdminProfileIfNeeded,
@@ -27,6 +25,7 @@ import {
   getBrandName,
   type AppVariant,
 } from "@/lib/appVariant";
+import { StaffBypassEntry } from "@/components/StaffBypassEntry";
 
 const LANG_KEY = "cj_welcome_lang";
 
@@ -263,8 +262,6 @@ export function WelcomeScreen() {
   const [authConfirm, setAuthConfirm] = useState("");
   const [authBusy, setAuthBusy] = useState(false);
   const [authError, setAuthError] = useState<string | null>(null);
-  const [staffPinOpen, setStaffPinOpen] = useState(false);
-  const [staffPinInput, setStaffPinInput] = useState("");
 
   const t = COPY[lang];
   const dir = lang === "he" ? "rtl" : "ltr";
@@ -462,20 +459,24 @@ export function WelcomeScreen() {
             {t.forgotPassword}
           </Link>
         </div>
-        <button
-          type="button"
-          onClick={() => {
-            if (!isStaffUnlockConfigured()) {
-              showToast(t.staffNotConfigured);
-              return;
-            }
-            setStaffPinInput("");
-            setStaffPinOpen(true);
+        <StaffBypassEntry
+          theme="welcome"
+          dir={dir}
+          onNotify={showToast}
+          labels={{
+            staffEntry: t.staffEntry,
+            staffPinPrompt: t.staffPinPrompt,
+            staffPinWrong: t.staffPinWrong,
+            staffNotConfigured: t.staffNotConfigured,
+            submitLabel: t.submitLogin,
+            cancel: t.cancel,
           }}
-          className="w-full rounded-xl border-2 border-dashed border-[var(--welcome-dev-border)] bg-[var(--welcome-dev-bg)] py-2.5 text-center text-sm font-semibold text-[var(--cherry)] sm:text-base"
-        >
-          {t.staffEntry}
-        </button>
+          onStaffSuccess={() => {
+            seedBypassProfileIfNeeded();
+            markWelcomeLeft();
+            router.replace("/");
+          }}
+        />
         <p className="text-center text-xs font-semibold text-[var(--text)]/60">
           {t.quickConnect}
         </p>
@@ -635,62 +636,6 @@ export function WelcomeScreen() {
         </div>
       )}
 
-      {staffPinOpen && (
-        <div
-          className="fixed inset-0 z-[240] flex items-end justify-center bg-black/45 p-4 pb-[max(1rem,env(safe-area-inset-bottom))] sm:items-center sm:pb-4"
-          role="dialog"
-          aria-modal="true"
-          aria-labelledby="staff-pin-title"
-        >
-          <div
-            className="glass-panel w-full max-w-md rounded-2xl border-2 border-[var(--border-cherry-soft)] p-5 shadow-xl"
-            dir={dir}
-          >
-            <h2 id="staff-pin-title" className="panel-title-cherry text-lg">
-              {t.staffPinPrompt}
-            </h2>
-            <label className="mt-4 block">
-              <input
-                type="password"
-                autoComplete="off"
-                value={staffPinInput}
-                onChange={(e) => setStaffPinInput(e.target.value)}
-                className="input-luxury-search mt-1 w-full rounded-xl border-2 border-[var(--border-cherry-soft)] px-3 py-2.5 text-sm"
-              />
-            </label>
-            <div className="mt-5 flex flex-col gap-2 sm:flex-row-reverse">
-              <button
-                type="button"
-                onClick={() => {
-                  if (!activateStaffBypass(staffPinInput.trim())) {
-                    showToast(t.staffPinWrong);
-                    return;
-                  }
-                  setStaffPinOpen(false);
-                  setStaffPinInput("");
-                  seedBypassProfileIfNeeded();
-                  markWelcomeLeft();
-                  router.replace("/");
-                }}
-                className="btn-stem flex-1 rounded-xl py-3 text-center text-sm font-bold"
-              >
-                {t.submitLogin}
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  setStaffPinOpen(false);
-                  setStaffPinInput("");
-                }}
-                className="btn-gold flex-1 rounded-xl py-3 text-center text-sm font-bold"
-              >
-                {t.cancel}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
       {manualOpen && (
         <div
           className="fixed inset-0 z-[200] flex items-end justify-center bg-black/45 p-4 sm:items-center"
@@ -728,7 +673,7 @@ export function WelcomeScreen() {
 
       {toast && (
         <div
-          className="fixed bottom-[max(1rem,env(safe-area-inset-bottom,0px)+0.5rem)] left-1/2 z-[230] max-w-[min(100vw-1.5rem,24rem)] -translate-x-1/2 rounded-full bg-[var(--stem-deep)] px-4 py-2.5 text-center text-sm font-medium text-white shadow-lg"
+          className="fixed bottom-[max(1rem,env(safe-area-inset-bottom,0px)+0.5rem)] left-1/2 z-[280] max-w-[min(100vw-1.5rem,24rem)] -translate-x-1/2 rounded-full bg-[var(--stem-deep)] px-4 py-2.5 text-center text-sm font-medium text-white shadow-lg"
           role="status"
         >
           {toast}

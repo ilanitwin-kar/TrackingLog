@@ -11,6 +11,15 @@ import {
   saveProfile,
 } from "@/lib/storage";
 import { BackToMenuButton } from "@/components/BackToMenuButton";
+import {
+  STAFF_BYPASS_HE,
+  StaffBypassEntry,
+} from "@/components/StaffBypassEntry";
+import {
+  activateDevAdminBypass,
+  seedBypassProfileIfNeeded,
+  seedDevAdminProfileIfNeeded,
+} from "@/lib/localAuth";
 import type { ActivityLevel, Gender } from "@/lib/tdee";
 import { dailyCalorieTarget, tdee } from "@/lib/tdee";
 
@@ -155,6 +164,33 @@ export default function TdeePage() {
   return (
     <div className="mx-auto max-w-lg px-4 py-8 md:py-12" dir="rtl">
       <BackToMenuButton />
+
+      <div className="mb-6 space-y-2">
+        <StaffBypassEntry
+          theme="welcome"
+          dir="rtl"
+          labels={STAFF_BYPASS_HE}
+          onStaffSuccess={() => {
+            seedBypassProfileIfNeeded();
+            markWelcomeLeft();
+            router.replace("/");
+          }}
+        />
+        {process.env.NODE_ENV === "development" && (
+          <button
+            type="button"
+            onClick={() => {
+              seedDevAdminProfileIfNeeded();
+              activateDevAdminBypass();
+              markWelcomeLeft();
+              router.replace("/");
+            }}
+            className="w-full rounded-xl border-2 border-dashed border-[var(--welcome-dev-border)] bg-[var(--welcome-dev-bg)] py-2 text-center text-xs font-semibold text-[var(--cherry)]"
+          >
+            כניסת מנהלת (פיתוח בלבד)
+          </button>
+        )}
+      </div>
 
       <motion.h1
         className="heading-page mb-2 text-center text-3xl md:text-4xl"
