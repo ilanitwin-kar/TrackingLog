@@ -15,12 +15,12 @@ export default function PrivacyPage() {
       <h1 className="heading-page mt-6 text-2xl">
         מדיניות פרטיות — Cherry
       </h1>
-      <p className="mt-4 text-sm leading-relaxed text-[#333]/90">
+      <p className="mt-4 text-sm leading-relaxed text-[var(--text)]/90">
         מסמך זה מתאר בקצרה את עקרונות הפרטיות לצורכי חנויות האפליקציות. יש
         להחליפו בנוסח מלא בהתאם לדין החל (לרבות GDPR / חוק הגנת הפרטיות
         בישראל) לאחר ייעוץ משפטי.
       </p>
-      <ul className="mt-4 list-disc space-y-2 pe-5 text-sm leading-relaxed text-[#333]/90">
+      <ul className="mt-4 list-disc space-y-2 pe-5 text-sm leading-relaxed text-[var(--text)]/90">
         <li>
           נתוני פרופיל והזנות מזון נשמרים בעיקר במכשיר (local storage) אלא אם
           הוגדר אחרת בשירות עתידי.
@@ -32,7 +32,7 @@ export default function PrivacyPage() {
         </li>
         <li>ניתן לפנות אלינו בבקשות מחיקה או עדכון — יש להוסיף כאן פרטי קשר.</li>
       </ul>
-      <p className="mt-6 text-xs text-[#333]/55">
+      <p className="mt-6 text-xs text-[var(--text)]/55">
         עדכון אחרון לדוגמה: אפריל 2026
       </p>
     </div>

@@ -4,7 +4,7 @@ import Link from "next/link";
 import { AnimatePresence, motion } from "framer-motion";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
-import { IconUser } from "@/components/Icons";
+import { CherryMark } from "@/components/CherryMark";
 import {
   clearAuthCompletely,
   clearDevAdminBypass,
@@ -12,6 +12,10 @@ import {
   isDevAdminBypassActive,
   isSessionActive,
 } from "@/lib/localAuth";
+import {
+  loadProfileAvatarDataUrl,
+  saveProfileAvatarDataUrl,
+} from "@/lib/profileAvatar";
 import {
   clearWelcomeLeft,
   getDefaultUserProfile,
@@ -22,7 +26,9 @@ export function ProfileMenu() {
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [showLogout, setShowLogout] = useState(false);
+  const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
   const rootRef = useRef<HTMLDivElement>(null);
+  const avatarInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     function syncLogout() {
@@ -31,6 +37,17 @@ export function ProfileMenu() {
     syncLogout();
     window.addEventListener("cj-auth-changed", syncLogout);
     return () => window.removeEventListener("cj-auth-changed", syncLogout);
+  }, []);
+
+  useEffect(() => {
+    setAvatarUrl(loadProfileAvatarDataUrl());
+    function onStorage(e: StorageEvent) {
+      if (e.key === "cj-profile-avatar-data-url-v1") {
+        setAvatarUrl(loadProfileAvatarDataUrl());
+      }
+    }
+    window.addEventListener("storage", onStorage);
+    return () => window.removeEventListener("storage", onStorage);
   }, []);
 
   /** התחלה מחדש: מסך כניסה ואז שוב מילוי פרטים (כמו משתמש חדש) */
@@ -61,34 +78,96 @@ export function ProfileMenu() {
     return () => document.removeEventListener("mousedown", onDoc);
   }, [open]);
 
+  function onAvatarFile(e: React.ChangeEvent<HTMLInputElement>) {
+    const f = e.target.files?.[0];
+    e.target.value = "";
+    if (!f || !f.type.startsWith("image/")) return;
+    if (f.size > 900_000) {
+      window.alert("התמונה גדולה מדי — נסי קובץ קטן יותר (עד כ־700KB).");
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => {
+      const dataUrl = typeof reader.result === "string" ? reader.result : null;
+      if (!dataUrl || !dataUrl.startsWith("data:image/")) return;
+      saveProfileAvatarDataUrl(dataUrl);
+      setAvatarUrl(dataUrl);
+    };
+    reader.readAsDataURL(f);
+  }
+
+  function clearAvatar() {
+    saveProfileAvatarDataUrl(null);
+    setAvatarUrl(null);
+    setOpen(false);
+  }
+
   return (
     <div className="relative" ref={rootRef}>
+      <input
+        ref={avatarInputRef}
+        type="file"
+        accept="image/*"
+        className="sr-only"
+        aria-hidden
+        tabIndex={-1}
+        onChange={onAvatarFile}
+      />
       <button
         type="button"
-        className="flex h-11 min-w-[5.5rem] items-center justify-center gap-1.5 rounded-xl border-2 border-[#FADADD] bg-white px-2.5 text-[#333333] shadow-sm transition hover:bg-[#fffafb] sm:min-w-[6rem]"
+        className="flex h-11 min-w-[5.5rem] items-center justify-center gap-1.5 rounded-xl border-2 border-[var(--border-cherry-soft)] bg-white px-2.5 text-[var(--cherry)] shadow-sm transition hover:bg-[#fffafb] sm:min-w-[6rem]"
         aria-expanded={open}
         aria-haspopup="true"
         aria-label="תפריט פרופיל"
         onClick={() => setOpen((v) => !v)}
       >
-        <IconUser className="h-6 w-6 shrink-0" />
+        {avatarUrl ? (
+          <img
+            src={avatarUrl}
+            alt=""
+            className="h-8 w-8 shrink-0 rounded-full border-2 border-[var(--border-cherry-soft)] object-cover"
+          />
+        ) : (
+          <CherryMark className="h-8 w-10 shrink-0" />
+        )}
         <span className="text-xs font-semibold">תפריט</span>
       </button>
 
       <AnimatePresence>
         {open && (
           <motion.div
-            className="absolute start-0 top-[calc(100%+0.5rem)] z-[200] min-w-[16rem] overflow-hidden rounded-xl border-2 border-[#FADADD] bg-white py-1 shadow-lg"
+            className="absolute start-0 top-[calc(100%+0.5rem)] z-[200] min-w-[16rem] overflow-hidden rounded-xl border-2 border-[var(--border-cherry-soft)] bg-white py-1 shadow-lg"
             initial={{ opacity: 0, y: -6 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -6 }}
             transition={{ duration: 0.15 }}
             role="menu"
           >
+            <button
+              type="button"
+              role="menuitem"
+              className="block w-full px-4 py-3 text-start text-sm font-semibold text-[var(--stem)] hover:bg-[var(--cherry-muted)]"
+              onClick={() => {
+                avatarInputRef.current?.click();
+                setOpen(false);
+              }}
+            >
+              העלאת תמונת פרופיל
+            </button>
+            {avatarUrl && (
+              <button
+                type="button"
+                role="menuitem"
+                className="block w-full px-4 py-3 text-start text-sm font-semibold text-[var(--cherry)] hover:bg-[var(--cherry-muted)]"
+                onClick={clearAvatar}
+              >
+                הסרת תמונה — חזרה לאייקון דובדבן
+              </button>
+            )}
             <Link
               href="/weight"
               role="menuitem"
-              className="block px-4 py-3 text-sm font-semibold text-[#333333] hover:bg-[#FADADD]/40"
+              className="block px-4 py-3 text-sm font-semibold text-[var(--stem)] hover:bg-[var(--cherry-muted)]"
               onClick={() => setOpen(false)}
             >
               מעקב משקל
@@ -96,7 +175,7 @@ export function ProfileMenu() {
             <Link
               href="/tdee"
               role="menuitem"
-              className="block px-4 py-3 text-sm font-semibold text-[#333333] hover:bg-[#FADADD]/40"
+              className="block px-4 py-3 text-sm font-semibold text-[var(--stem)] hover:bg-[var(--cherry-muted)]"
               onClick={() => setOpen(false)}
             >
               עריכת פרטים ויעד (TDEE)
@@ -104,7 +183,7 @@ export function ProfileMenu() {
             <Link
               href="/explorer"
               role="menuitem"
-              className="block px-4 py-3 text-sm font-semibold text-[#333333] hover:bg-[#FADADD]/40"
+              className="block px-4 py-3 text-sm font-semibold text-[var(--stem)] hover:bg-[var(--cherry-muted)]"
               onClick={() => setOpen(false)}
             >
               מגלה המזונות
@@ -112,7 +191,7 @@ export function ProfileMenu() {
             <Link
               href="/shopping"
               role="menuitem"
-              className="block px-4 py-3 text-sm font-semibold text-[#333333] hover:bg-[#FADADD]/40"
+              className="block px-4 py-3 text-sm font-semibold text-[var(--stem)] hover:bg-[var(--cherry-muted)]"
               onClick={() => setOpen(false)}
             >
               רשימת קניות
@@ -120,7 +199,7 @@ export function ProfileMenu() {
             <Link
               href="/calorie-board"
               role="menuitem"
-              className="block px-4 py-3 text-sm font-semibold text-[#333333] hover:bg-[#FADADD]/40"
+              className="block px-4 py-3 text-sm font-semibold text-[var(--stem)] hover:bg-[var(--cherry-muted)]"
               onClick={() => setOpen(false)}
             >
               לוח צבירת קלוריות
@@ -130,7 +209,7 @@ export function ProfileMenu() {
               <button
                 type="button"
                 role="menuitem"
-                className="block w-full px-4 py-3 text-start text-sm font-semibold text-[#333333] hover:bg-[#FADADD]/40"
+                className="block w-full px-4 py-3 text-start text-sm font-semibold text-[var(--stem)] hover:bg-[var(--cherry-muted)]"
                 onClick={logout}
               >
                 התנתקות
@@ -140,7 +219,7 @@ export function ProfileMenu() {
             <button
               type="button"
               role="menuitem"
-              className="block w-full border-t border-[#fadadd] px-4 py-3 text-start text-sm font-semibold text-[#9b1b30] hover:bg-[#fff5f6]"
+              className="block w-full border-t border-[var(--border-cherry-soft)] px-4 py-3 text-start text-sm font-semibold text-[var(--cherry)] hover:bg-[var(--cherry-muted)]"
               onClick={goToWelcomeScreen}
             >
               מסך כניסה — התחלה מחדש 🍒

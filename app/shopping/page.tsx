@@ -67,7 +67,7 @@ export default function ShoppingPage() {
   }
 
   const exportBtnClass =
-    "inline-flex h-11 min-w-[2.75rem] shrink-0 items-center justify-center gap-2 rounded-xl border-2 border-[#FADADD] bg-white px-3 text-sm font-semibold text-[#333333] shadow-sm transition hover:bg-[#fffafb] active:scale-[0.98] disabled:pointer-events-none disabled:opacity-40 sm:h-10 sm:min-w-0 sm:px-2.5";
+    "inline-flex h-11 min-w-[2.75rem] shrink-0 items-center justify-center gap-2 rounded-xl border-2 border-[var(--border-cherry-soft)] bg-white px-3 text-sm font-semibold text-[var(--cherry)] shadow-sm transition hover:bg-[var(--cherry-muted)] active:scale-[0.98] disabled:pointer-events-none disabled:opacity-40 sm:h-10 sm:min-w-0 sm:px-2.5";
 
   return (
     <>
@@ -100,7 +100,7 @@ export default function ShoppingPage() {
               aria-label="שלח במייל"
               onClick={shareEmail}
             >
-              <IconEnvelope className="h-5 w-5 shrink-0 text-[#c45c74]" />
+              <IconEnvelope className="h-5 w-5 shrink-0 text-[var(--cherry)]" />
               <span className="hidden sm:inline">שלח במייל</span>
             </button>
             <button
@@ -111,7 +111,7 @@ export default function ShoppingPage() {
               aria-label="הדפסה"
               onClick={printList}
             >
-              <IconPrinter className="h-5 w-5 shrink-0 text-[#333333]/90" />
+              <IconPrinter className="h-5 w-5 shrink-0 text-[var(--stem)]" />
               <span className="hidden sm:inline">הדפסה</span>
             </button>
           </nav>
@@ -131,38 +131,41 @@ export default function ShoppingPage() {
           animate={{ opacity: 1, y: 0 }}
         >
           {items.length === 0 ? (
-            <p className="text-center text-[#333333]/85">הרשימה ריקה.</p>
+            <p className="text-center text-[var(--cherry)]/85">הרשימה ריקה.</p>
           ) : (
             <ul className="space-y-2">
               {items.map((it) => (
                 <motion.li
                   key={it.id}
                   layout
-                  className={`flex flex-wrap items-center gap-3 rounded-xl border-2 border-[#FADADD] bg-white px-3 py-3 ${
+                  className={`flex flex-wrap items-center gap-3 rounded-xl border-2 border-[var(--border-cherry-soft)] bg-white px-3 py-3 ${
                     it.checked ? "opacity-70" : ""
                   }`}
-                  style={{ boxShadow: "0 2px 12px rgba(250,218,221,0.35)" }}
+                  style={{
+                    boxShadow:
+                      "0 2px 12px rgba(155,27,48,0.08), 0 4px 16px rgba(74,124,35,0.06)",
+                  }}
                 >
                   <label className="flex min-w-0 flex-1 cursor-pointer items-start gap-3">
                     <input
                       type="checkbox"
                       checked={it.checked}
                       onChange={() => toggle(it.id)}
-                      className="mt-1 h-5 w-5 shrink-0 rounded border-[#FADADD]"
+                      className="mt-1 h-5 w-5 shrink-0 rounded border-[var(--border-cherry-soft)]"
                       aria-label={`סימון ${it.name}`}
                     />
                     <span className="min-w-0">
                       <span
-                        className={`block font-semibold text-[#333333] ${
+                        className={`block font-semibold text-[var(--stem)] ${
                           it.checked ? "line-through" : ""
                         }`}
                       >
                         {it.name}
                       </span>
-                      <span className="text-xs text-[#333333]/75">
+                      <span className="text-xs text-[var(--cherry)]/75">
                         {it.category}
                       </span>
-                      <span className="mt-0.5 block text-sm text-[#333333]/85">
+                      <span className="mt-0.5 block text-sm text-[var(--stem)]/85">
                         ~{Math.round(it.calories)} קק״ל ל־100 גרם
                       </span>
                     </span>
@@ -196,7 +199,7 @@ export default function ShoppingPage() {
             ))}
           </ul>
         ) : (
-          <p className="text-[#333]/80">אין פריטים ברשימה.</p>
+          <p className="text-[var(--text)]/80">אין פריטים ברשימה.</p>
         )}
       </div>
     </>

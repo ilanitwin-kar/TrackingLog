@@ -22,14 +22,21 @@ body {
   min-height: 100dvh;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-  background-color: #ffffff;
+  background: linear-gradient(
+    165deg,
+    #fff8fa 0%,
+    #ffffff 38%,
+    #f7fcf4 72%,
+    #fffdfb 100%
+  );
+  background-attachment: fixed;
   color: #333333;
   font-family: Calibri, "Segoe UI", "Helvetica Neue", Arial, sans-serif;
 }
 
 input[type="radio"],
 input[type="checkbox"] {
-  accent-color: #f5c8d4;
+  accent-color: var(--stem);
 }
 
 @layer utilities {
@@ -117,7 +124,7 @@ input[type="checkbox"] {
   .input-luxury-search {
     width: 100%;
     border-radius: 0.875rem;
-    border: 2px solid #fadadd;
+    border: 2px solid var(--border-cherry-soft);
     background-color: #ffffff;
     color: #333333;
     padding: 1rem 1.25rem;
@@ -132,13 +139,15 @@ input[type="checkbox"] {
   }
 
   .input-luxury-search:focus {
-    border-color: #f5c8d4;
-    box-shadow: 0 0 0 3px rgba(250, 218, 221, 0.55);
+    border-color: color-mix(in srgb, var(--stem) 35%, var(--accent-deep) 65%);
+    box-shadow:
+      0 0 0 3px rgba(74, 124, 35, 0.18),
+      0 0 0 1px rgba(155, 27, 48, 0.08);
   }
 
   .input-luxury-dark {
     border-radius: 0.75rem;
-    border: 2px solid #fadadd;
+    border: 2px solid var(--border-cherry-soft);
     background-color: #ffffff;
     color: #333333;
     padding: 0.5rem 0.75rem;
@@ -147,12 +156,14 @@ input[type="checkbox"] {
   }
 
   .input-luxury-dark:focus {
-    box-shadow: 0 0 0 3px rgba(250, 218, 221, 0.45);
+    box-shadow:
+      0 0 0 3px rgba(74, 124, 35, 0.15),
+      0 0 0 1px rgba(155, 27, 48, 0.06);
   }
 
   .select-luxury {
     border-radius: 0.75rem;
-    border: 2px solid #fadadd;
+    border: 2px solid var(--border-cherry-soft);
     background-color: #ffffff;
     color: #333333;
     padding: 0.5rem 0.75rem 0.5rem 2rem;
@@ -171,7 +182,9 @@ input[type="checkbox"] {
   }
 
   .select-luxury:focus {
-    box-shadow: 0 0 0 3px rgba(250, 218, 221, 0.45);
+    box-shadow:
+      0 0 0 3px rgba(74, 124, 35, 0.15),
+      0 0 0 1px rgba(155, 27, 48, 0.06);
   }
 
   .select-luxury option {
@@ -187,9 +200,11 @@ input[type="checkbox"] {
     z-index: 12;
     margin-top: 0.35rem;
     border-radius: 0.75rem;
-    border: 2px solid #fadadd;
+    border: 2px solid var(--border-cherry-soft);
     background-color: #ffffff;
-    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+    box-shadow:
+      0 8px 32px rgba(0, 0, 0, 0.08),
+      0 0 0 1px rgba(155, 27, 48, 0.06);
     max-height: 14rem;
     overflow-y: auto;
   }
@@ -205,7 +220,7 @@ input[type="checkbox"] {
     padding: 0.75rem 1rem;
     color: #333333;
     font-size: 0.95rem;
-    border-bottom: 1px solid rgba(250, 218, 221, 0.8);
+    border-bottom: 1px solid var(--border-cherry-soft);
     transition: background 0.12s ease;
   }
 
@@ -215,7 +230,7 @@ input[type="checkbox"] {
 
   .suggestion-item:hover,
   .suggestion-item:focus {
-    background-color: rgba(250, 218, 221, 0.35);
+    background-color: var(--cherry-muted);
     outline: none;
   }
 
@@ -225,14 +240,17 @@ input[type="checkbox"] {
     justify-content: center;
     padding: 0.45rem;
     border-radius: 0.5rem;
-    border: 2px solid #fadadd;
-    background-color: rgba(250, 218, 221, 0.35);
-    color: #333333;
-    transition: background 0.15s ease;
+    border: 2px solid color-mix(in srgb, var(--stem) 22%, var(--accent-deep) 78%);
+    background-color: color-mix(in srgb, var(--stem) 8%, #ffffff 92%);
+    color: var(--stem);
+    transition:
+      background 0.15s ease,
+      border-color 0.15s ease;
   }
 
   .btn-icon-luxury:hover {
-    background-color: rgba(250, 218, 221, 0.55);
+    background-color: color-mix(in srgb, var(--stem) 14%, #ffffff 86%);
+    border-color: color-mix(in srgb, var(--stem) 35%, var(--accent) 65%);
   }
 
   .btn-icon-luxury-danger {
@@ -245,6 +263,13 @@ input[type="checkbox"] {
     background-color: rgba(255, 220, 225, 0.95);
   }
 
+  .btn-icon-luxury:disabled,
+  .btn-icon-luxury-danger:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+    pointer-events: none;
+  }
+
   .luxury-hero-title {
     color: var(--cherry);
     font-weight: 800;
@@ -255,6 +280,28 @@ input[type="checkbox"] {
   .panel-title-cherry {
     color: var(--cherry);
     font-weight: 700;
+  }
+
+  /** אייקונים / הדגשות בירוק גבעול */
+  .text-stem {
+    color: var(--stem);
+  }
+
+  .border-stem-soft {
+    border-color: color-mix(in srgb, var(--stem) 28%, var(--accent) 72%);
+  }
+
+  .bg-cherry-faint {
+    background-color: var(--cherry-muted);
+  }
+
+  /** פס התקדמות — דובדבן → גבעול */
+  .progress-bar-cherry-stem {
+    background: linear-gradient(
+      90deg,
+      color-mix(in srgb, var(--cherry) 55%, var(--stem) 45%) 0%,
+      var(--stem-mid) 100%
+    );
   }
 }
 

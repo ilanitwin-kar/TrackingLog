@@ -53,18 +53,18 @@ export default function CalorieBoardPage() {
       </motion.h1>
 
       <motion.section
-        className="mb-8 rounded-2xl border-2 border-[#FADADD] bg-gradient-to-b from-[#fff8fa] to-white px-4 py-6 text-center shadow-[0_8px_28px_rgba(250,218,221,0.4)] sm:px-6"
+        className="mb-8 rounded-2xl border-2 border-[var(--border-cherry-soft)] bg-gradient-to-b from-[#fff8fa] via-white to-[#f6faf3] px-4 py-6 text-center shadow-[0_8px_28px_rgba(155,27,48,0.1),0_4px_20px_rgba(74,124,35,0.08)] sm:px-6"
         initial={{ opacity: 0, y: 8 }}
         animate={{ opacity: 1, y: 0 }}
       >
-        <p className="text-base font-semibold text-[#333333] sm:text-lg">
+        <p className="text-base font-semibold text-[var(--cherry)] sm:text-lg">
           סה״כ הון קלורי שנצבר:{" "}
-          <span className="font-[system-ui] text-2xl font-extrabold tabular-nums text-[#2a2a2a] sm:text-3xl">
+          <span className="font-[system-ui] text-2xl font-extrabold tabular-nums text-[var(--stem)] sm:text-3xl">
             {accumulation.totalAccumulatedKcal.toLocaleString("he-IL")}
           </span>{" "}
-          <span className="text-xl font-bold text-[#333333]/90">קק״ל</span>
+          <span className="text-xl font-bold text-[var(--cherry)]/90">קק״ל</span>
         </p>
-        <p className="mt-3 text-sm font-medium text-[#333333]/85">
+        <p className="mt-3 text-sm font-medium text-[var(--stem)]/90">
           {totalFat.toLocaleString("he-IL", {
             maximumFractionDigits: 1,
             minimumFractionDigits: 0,

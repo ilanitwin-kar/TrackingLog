@@ -14,7 +14,7 @@ export function LiveClock() {
 
   if (!now) {
     return (
-      <p className="h-5 text-xs font-medium text-[#333333]/75" dir="rtl">
+      <p className="h-5 text-xs font-medium text-[var(--text)]/75" dir="rtl">
         …
       </p>
     );
@@ -39,7 +39,7 @@ export function LiveClock() {
       animate={{ opacity: 1, y: 0 }}
       dir="rtl"
     >
-      <p className="text-xs font-medium text-[#333333]/80 md:text-sm">{date}</p>
+      <p className="text-xs font-medium text-[var(--text)]/80 md:text-sm">{date}</p>
       <p className="mt-1 font-mono text-sm font-semibold tracking-wide text-[var(--cherry)] md:text-base">
         {time}
       </p>

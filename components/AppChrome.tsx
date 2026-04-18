@@ -2,6 +2,7 @@
 
 import { usePathname, useRouter } from "next/navigation";
 import { Suspense, useEffect, useState } from "react";
+import { AppBrandMark } from "@/components/AppBrandMark";
 import { BottomNav } from "@/components/BottomNav";
 import {
   hasAuthRecord,
@@ -131,7 +132,8 @@ export function AppChrome({ children }: { children: React.ReactNode }) {
   if (!regReady || !regOk) {
     return (
       <div className="min-h-dvh pb-6">
-        <div className="p-8 text-center text-lg text-[#333333]" dir="rtl">
+        <AppBrandMark />
+        <div className="p-8 text-center text-lg text-[var(--cherry)]" dir="rtl">
           טוען…
         </div>
       </div>
@@ -146,12 +148,13 @@ export function AppChrome({ children }: { children: React.ReactNode }) {
           : "min-h-dvh pb-28 print:pb-0"
       }
     >
+      <AppBrandMark />
       {children}
       {!hideNav && (
         <Suspense
           fallback={
             <div
-              className="fixed bottom-0 left-0 right-0 z-[100] h-20 border-t-2 border-[#FADADD] bg-white print:hidden"
+              className="fixed bottom-0 left-0 right-0 z-[100] h-20 border-t-2 border-[var(--border-cherry-soft)] bg-white print:hidden"
               aria-hidden
             />
           }

@@ -260,21 +260,21 @@ export default function DictionaryPage() {
       </motion.h1>
 
       {appliedMealId && (
-        <p className="mb-4 rounded-xl border border-[#FADADD] bg-[#fffafb] py-2 text-center text-sm font-medium text-[#333333]">
+        <p className="mb-4 rounded-xl border border-[var(--border-cherry-soft)] bg-cherry-faint py-2 text-center text-sm font-semibold text-[var(--cherry)]">
           נוסף ליומן היום
         </p>
       )}
 
-      <p className="mb-4 rounded-2xl border-2 border-[#FADADD] bg-[#fffafb] px-4 py-3 text-center text-sm text-[#333333]">
+      <p className="mb-4 rounded-2xl border-2 border-[var(--border-cherry-soft)] bg-white/90 px-4 py-3 text-center text-sm text-[var(--stem)]">
         חיפוש במאגר המזונות (מקומי) ב־
-        <Link href="/" className="font-bold text-[#a9446a] underline">
+        <Link href="/" className="font-bold text-[var(--cherry)] underline decoration-[var(--cherry)]/40">
           מסך הבית
         </Link>
         .
       </p>
 
       <label className="mb-4 block">
-        <span className="mb-1 block text-xs font-semibold text-[#333333]">
+        <span className="mb-1 block text-xs font-semibold text-[var(--cherry)]">
           סינון הרשומות השמורות
         </span>
         <div className="relative">
@@ -295,7 +295,7 @@ export default function DictionaryPage() {
           {rawQ.length > 0 && (
             <button
               type="button"
-              className="absolute start-2 top-1/2 z-[1] flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-lg border border-[#FADADD] bg-white text-lg font-bold leading-none text-[#333333]/70 shadow-sm transition hover:bg-[#fffafb] hover:text-[#333333] focus-visible:outline focus-visible:ring-2 focus-visible:ring-[#FADADD]"
+              className="absolute start-2 top-1/2 z-[1] flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-lg border border-[var(--border-cherry-soft)] bg-white text-lg font-bold leading-none text-[var(--stem)] shadow-sm transition hover:bg-[var(--cherry-muted)] hover:text-[var(--cherry)] focus-visible:outline focus-visible:ring-2 focus-visible:ring-[var(--stem)]"
               aria-label="ניקוי חיפוש"
               title="ניקוי"
               onMouseDown={(e) => e.preventDefault()}
@@ -312,9 +312,9 @@ export default function DictionaryPage() {
         initial={{ opacity: 0, y: 8 }}
         animate={{ opacity: 1, y: 0 }}
       >
-        <h2 className="mb-3 text-lg font-bold text-[#333333]">המילון שלי</h2>
+        <h2 className="panel-title-cherry mb-3 text-lg">המילון שלי</h2>
         {filteredSaved.length === 0 ? (
-          <p className="text-[#333333]/85">
+          <p className="text-[var(--text)]/85">
             עדיין ריק או אין התאמה לחיפוש. פריטים מהיומן, ארוחות שמורות מבית
             וסריקות יופיעו כאן.
           </p>
@@ -333,21 +333,24 @@ export default function DictionaryPage() {
                 <motion.li
                   key={d.id}
                   layout
-                  className="rounded-xl border-2 border-[#FADADD] bg-white px-3 py-3"
-                  style={{ boxShadow: "0 2px 12px rgba(250,218,221,0.35)" }}
+                  className="rounded-xl border-2 border-[var(--border-cherry-soft)] bg-white px-3 py-3"
+                  style={{
+                    boxShadow:
+                      "0 2px 12px rgba(155,27,48,0.1), 0 4px 16px rgba(74,124,35,0.06)",
+                  }}
                 >
                   <div className="flex items-start justify-between gap-2">
                     <div className="min-w-0 flex-1">
-                      <p className="flex flex-wrap items-center gap-2 font-semibold text-[#333333]">
+                      <p className="flex flex-wrap items-center gap-2 font-semibold text-[var(--stem)]">
                         {d.food}
                         {isMeal && (
-                          <span className="rounded-md bg-[#FADADD]/60 px-2 py-0.5 text-xs font-semibold text-[#333333]">
+                          <span className="rounded-md bg-[var(--cherry-muted)] px-2 py-0.5 text-xs font-semibold text-[var(--cherry)]">
                             ארוחה שמורה
                           </span>
                         )}
                       </p>
                       {!isMeal && (
-                        <p className="mt-1 text-sm text-[#333333]/80">
+                        <p className="mt-1 text-sm text-[var(--text)]/80">
                           {d.quantity} {d.unit}
                           {d.lastCalories != null
                             ? ` · קלוריות (אחרון ביומן): ${d.lastCalories}`
@@ -355,7 +358,7 @@ export default function DictionaryPage() {
                         </p>
                       )}
                       {isMeal && preset && (
-                        <ul className="mt-2 space-y-1 text-sm text-[#333333]/90">
+                        <ul className="mt-2 space-y-1 text-sm text-[var(--text)]/90">
                           {preset.components.map((c, i) => (
                             <li key={`${d.id}-c-${i}`}>
                               {c.food} — {c.quantity} {c.unit} ({c.calories}{" "}
@@ -365,7 +368,7 @@ export default function DictionaryPage() {
                         </ul>
                       )}
                       {d.caloriesPer100g != null && !isMeal && (
-                        <p className="mt-1 text-xs text-[#333333]/70">
+                        <p className="mt-1 text-xs text-[var(--text)]/70">
                           ל־100 גרם: {Math.round(d.caloriesPer100g)} קק״ל
                           {d.proteinPer100g != null &&
                             d.carbsPer100g != null &&
@@ -397,7 +400,9 @@ export default function DictionaryPage() {
                         <button
                           type="button"
                           className={`btn-icon-luxury p-2 transition-colors ${
-                            inCart ? "bg-[#FADADD]/60 ring-2 ring-[#FADADD]" : ""
+                            inCart
+                              ? "bg-[var(--cherry-muted)] ring-2 ring-[var(--border-cherry-soft)]"
+                              : ""
                           }`}
                           title="רשימת קניות"
                           aria-label="הוספת מרכיבי הארוחה לרשימת קניות"
@@ -407,7 +412,7 @@ export default function DictionaryPage() {
                           <IconCart
                             filled={inCart}
                             className={`h-6 w-6 ${
-                              inCart ? "text-[#FADADD]" : "text-[#333333]"
+                              inCart ? "text-[var(--cherry)]" : "text-[var(--stem)]"
                             }`}
                           />
                         </button>
@@ -415,7 +420,9 @@ export default function DictionaryPage() {
                         <button
                           type="button"
                           className={`btn-icon-luxury p-2 transition-colors ${
-                            inCart ? "bg-[#FADADD]/60 ring-2 ring-[#FADADD]" : ""
+                            inCart
+                              ? "bg-[var(--cherry-muted)] ring-2 ring-[var(--border-cherry-soft)]"
+                              : ""
                           }`}
                           title="רשימת קניות"
                           aria-label="הוספה לרשימת קניות"
@@ -425,7 +432,7 @@ export default function DictionaryPage() {
                           <IconCart
                             filled={inCart}
                             className={`h-6 w-6 ${
-                              inCart ? "text-[#FADADD]" : "text-[#333333]"
+                              inCart ? "text-[var(--cherry)]" : "text-[var(--stem)]"
                             }`}
                           />
                         </button>
@@ -465,7 +472,7 @@ export default function DictionaryPage() {
         {shopToast && (
           <motion.div
             role="status"
-            className="fixed bottom-24 left-1/2 z-[150] -translate-x-1/2 rounded-2xl border-2 border-[#FADADD] bg-white px-5 py-3 text-center text-sm font-semibold text-[#333333] shadow-lg"
+            className="fixed bottom-24 left-1/2 z-[150] -translate-x-1/2 rounded-2xl border-2 border-[var(--border-cherry-soft)] bg-white px-5 py-3 text-center text-sm font-semibold text-[var(--cherry)] shadow-lg"
             initial={{ opacity: 0, y: 16 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: 8 }}
@@ -509,13 +516,13 @@ export default function DictionaryPage() {
                 <button
                   type="button"
                   onClick={closeEdit}
-                  className="rounded-lg border-2 border-[#fadadd] bg-white px-3 py-1.5 text-sm font-semibold text-[#333333] transition hover:bg-[#fadadd]/40"
+                  className="rounded-lg border-2 border-[var(--border-cherry-soft)] bg-white px-3 py-1.5 text-sm font-semibold text-[var(--text)] transition hover:bg-[var(--cherry-muted)]"
                 >
                   סגירה
                 </button>
               </div>
               <label className="block">
-                <span className="mb-1 block text-xs font-semibold text-[#333333]">
+                <span className="mb-1 block text-xs font-semibold text-[var(--cherry)]">
                   שם
                 </span>
                 <input
@@ -528,7 +535,7 @@ export default function DictionaryPage() {
               </label>
               <div className="flex flex-wrap gap-3">
                 <label className="min-w-[6rem] flex-1">
-                  <span className="mb-1 block text-xs font-semibold text-[#333333]">
+                  <span className="mb-1 block text-xs font-semibold text-[var(--cherry)]">
                     כמות
                   </span>
                   <input
@@ -565,7 +572,7 @@ export default function DictionaryPage() {
                   />
                 </label>
                 <label className="min-w-[8rem] flex-[2]">
-                  <span className="mb-1 block text-xs font-semibold text-[#333333]">
+                  <span className="mb-1 block text-xs font-semibold text-[var(--cherry)]">
                     יחידה
                   </span>
                   <select
@@ -590,7 +597,7 @@ export default function DictionaryPage() {
               </div>
               {editUnit === "יחידה" && (
                 <label className="block">
-                  <span className="mb-1 block text-xs font-semibold text-[#333333]">
+                  <span className="mb-1 block text-xs font-semibold text-[var(--cherry)]">
                     משקל יחידה (גרם, אופציונלי)
                   </span>
                   <input
@@ -627,7 +634,7 @@ export default function DictionaryPage() {
                 </label>
               )}
               {editTarget.caloriesPer100g != null && (
-                <p className="text-xs text-[#333333]/75">
+                <p className="text-xs text-[var(--text)]/75">
                   יש ערכי קלוריות ל־100 ג׳ — הקק״ל למנה יחושבו מחדש כשהכמות
                   בגרם או ביחידה עם משקל יחידה.
                 </p>
@@ -647,7 +654,7 @@ export default function DictionaryPage() {
                 </button>
                 <button
                   type="button"
-                  className="flex-1 rounded-xl border-2 border-[#FADADD] bg-white py-3 font-semibold text-[#333333]"
+                  className="btn-gold flex-1 rounded-xl py-3 font-semibold"
                   onClick={closeEdit}
                 >
                   ביטול

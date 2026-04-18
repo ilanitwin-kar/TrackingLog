@@ -121,7 +121,7 @@ export function CelebrationConfetti({ message }: { message?: string }) {
       </div>
       {message && (
         <motion.div
-          className="message relative z-[1] max-w-[min(92vw,28rem)] text-center text-[#333333]"
+          className="message relative z-[1] max-w-[min(92vw,28rem)] text-center text-[var(--text)]"
           initial={{ scale: 0.88, opacity: 0 }}
           animate={{
             scale: 1,

@@ -126,20 +126,20 @@ export function ManualFoodModal({
             <div className="mb-4 flex items-start justify-between gap-3">
               <h2
                 id={titleId}
-                className="text-lg font-bold leading-tight text-[#333333]"
+                className="panel-title-cherry text-lg leading-tight"
               >
                 הוספת מזון ידנית
               </h2>
               <button
                 type="button"
                 onClick={onClose}
-                className="shrink-0 rounded-lg border-2 border-[#fadadd] bg-white px-3 py-1.5 text-sm font-semibold text-[#333333] transition hover:bg-[#fadadd]/40"
+                className="shrink-0 rounded-lg border-2 border-[var(--border-cherry-soft)] bg-white px-3 py-1.5 text-sm font-semibold text-[var(--cherry)] transition hover:bg-[var(--cherry-muted)]"
               >
                 סגירה
               </button>
             </div>
 
-            <p className="mb-4 text-sm leading-relaxed text-[#333333]/85">
+            <p className="mb-4 text-sm leading-relaxed text-[var(--cherry)]/85">
               {(() => {
                 const t = manualFoodIntroParagraph(gender);
                 const m = "משקל יחידה";
@@ -157,93 +157,93 @@ export function ManualFoodModal({
 
             <div className="space-y-3" dir="rtl">
               <label className="block">
-                <span className="mb-1 block text-sm font-semibold text-[#333333]">
+                <span className="mb-1 block text-sm font-semibold text-[var(--cherry)]">
                   שם המוצר <span className="text-[#b91c1c]">*</span>
                 </span>
                 <input
                   value={food}
                   onChange={(e) => setFood(e.target.value)}
-                  className="input-luxury w-full rounded-xl border-2 border-[#fadadd] px-3 py-2.5 text-[#333333]"
+                  className="input-luxury w-full rounded-xl border-2 border-[var(--border-cherry-soft)] px-3 py-2.5 text-[var(--text)]"
                   placeholder={"למשל: " + "\u05d7\u05d8\u05d9\u05e3 \u05d7\u05dc\u05d1\u05d9"}
                   autoComplete="off"
                 />
               </label>
               <label className="block">
-                <span className="mb-1 block text-sm font-semibold text-[#333333]">
+                <span className="mb-1 block text-sm font-semibold text-[var(--cherry)]">
                   חברה / מותג (אופציונלי)
                 </span>
                 <input
                   value={brand}
                   onChange={(e) => setBrand(e.target.value)}
-                  className="input-luxury w-full rounded-xl border-2 border-[#fadadd] px-3 py-2.5 text-[#333333]"
+                  className="input-luxury w-full rounded-xl border-2 border-[var(--border-cherry-soft)] px-3 py-2.5 text-[var(--text)]"
                   placeholder="למשל: עלמא"
                   autoComplete="off"
                 />
               </label>
               <label className="block">
-                <span className="mb-1 block text-sm font-semibold text-[#333333]">
+                <span className="mb-1 block text-sm font-semibold text-[var(--cherry)]">
                   קלוריות ל-100 גרם <span className="text-[#b91c1c]">*</span>
                 </span>
                 <input
                   inputMode="decimal"
                   value={kcal100}
                   onChange={(e) => setKcal100(e.target.value)}
-                  className="input-luxury w-full rounded-xl border-2 border-[#fadadd] px-3 py-2.5 text-[#333333]"
+                  className="input-luxury w-full rounded-xl border-2 border-[var(--border-cherry-soft)] px-3 py-2.5 text-[var(--text)]"
                   placeholder="למשל: 480"
                 />
               </label>
               <div className="grid grid-cols-3 gap-2">
                 <label className="block">
-                  <span className="mb-1 block text-xs font-semibold text-[#333333]">
+                  <span className="mb-1 block text-xs font-semibold text-[var(--cherry)]">
                     חלבון ל-100ג
                   </span>
                   <input
                     inputMode="decimal"
                     value={protein100}
                     onChange={(e) => setProtein100(e.target.value)}
-                    className="w-full rounded-xl border-2 border-[#fadadd] px-2 py-2 text-sm text-[#333333]"
+                    className="w-full rounded-xl border-2 border-[var(--border-cherry-soft)] px-2 py-2 text-sm text-[var(--text)]"
                     placeholder="0"
                   />
                 </label>
                 <label className="block">
-                  <span className="mb-1 block text-xs font-semibold text-[#333333]">
+                  <span className="mb-1 block text-xs font-semibold text-[var(--cherry)]">
                     שומן ל-100ג
                   </span>
                   <input
                     inputMode="decimal"
                     value={fat100}
                     onChange={(e) => setFat100(e.target.value)}
-                    className="w-full rounded-xl border-2 border-[#fadadd] px-2 py-2 text-sm text-[#333333]"
+                    className="w-full rounded-xl border-2 border-[var(--border-cherry-soft)] px-2 py-2 text-sm text-[var(--text)]"
                     placeholder="0"
                   />
                 </label>
                 <label className="block">
-                  <span className="mb-1 block text-xs font-semibold text-[#333333]">
+                  <span className="mb-1 block text-xs font-semibold text-[var(--cherry)]">
                     פחמימות ל-100ג
                   </span>
                   <input
                     inputMode="decimal"
                     value={carbs100}
                     onChange={(e) => setCarbs100(e.target.value)}
-                    className="w-full rounded-xl border-2 border-[#fadadd] px-2 py-2 text-sm text-[#333333]"
+                    className="w-full rounded-xl border-2 border-[var(--border-cherry-soft)] px-2 py-2 text-sm text-[var(--text)]"
                     placeholder="0"
                   />
                 </label>
               </div>
               <label className="block">
-                <span className="mb-1 block text-sm font-semibold text-[#333333]">
+                <span className="mb-1 block text-sm font-semibold text-[var(--cherry)]">
                   משקל יחידה (גרם) — אופציונלי
                 </span>
                 <input
                   inputMode="decimal"
                   value={unitGrams}
                   onChange={(e) => setUnitGrams(e.target.value)}
-                  className="input-luxury w-full rounded-xl border-2 border-[#fadadd] px-3 py-2.5 text-[#333333]"
+                  className="input-luxury w-full rounded-xl border-2 border-[var(--border-cherry-soft)] px-3 py-2.5 text-[var(--text)]"
                   placeholder="ריק = נרשם כ-100 גרם"
                 />
               </label>
               {hasUnit && previewKcal != null && (
-                <p className="rounded-lg border border-[#fadadd] bg-[#fffafb] px-3 py-2 text-xs font-medium text-[#333333]/90">
+                <p className="rounded-lg border border-[var(--border-cherry-soft)] bg-[#fffafb] px-3 py-2 text-xs font-medium text-[var(--cherry)]/90">
                   לפי המשקל שציינת: כ-{previewKcal} {kcalLabel} למנה אחת
                   (יחידה), חלבון {pScaled.toLocaleString("he-IL")} גרם, שומן{" "}
                   {fScaled.toLocaleString("he-IL")} גרם, פחמימות{" "}

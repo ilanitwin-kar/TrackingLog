@@ -21,6 +21,7 @@ import {
   loadProfile,
   markWelcomeLeft,
 } from "@/lib/storage";
+import { CherryMark } from "@/components/CherryMark";
 
 const LANG_KEY = "cj_welcome_lang";
 
@@ -165,73 +166,6 @@ const COPY: Record<Lang, Copy> = {
 };
 
 const APP_VERSION = process.env.NEXT_PUBLIC_APP_VERSION ?? "1.0.0";
-
-function CherryMark({ className = "" }: { className?: string }) {
-  return (
-    <svg
-      className={className}
-      viewBox="0 0 120 100"
-      xmlns="http://www.w3.org/2000/svg"
-      aria-hidden
-    >
-      <defs>
-        <linearGradient id="ch-stem" x1="0%" y1="0%" x2="100%" y2="100%">
-          <stop offset="0%" stopColor="#5d8c3a" />
-          <stop offset="100%" stopColor="#3d6b28" />
-        </linearGradient>
-        <linearGradient id="ch-leaf" x1="0%" y1="0%" x2="100%" y2="100%">
-          <stop offset="0%" stopColor="#7cb342" />
-          <stop offset="100%" stopColor="#4a7c23" />
-        </linearGradient>
-        <radialGradient id="ch-berry1" cx="35%" cy="35%" r="65%">
-          <stop offset="0%" stopColor="#ff6b7a" />
-          <stop offset="45%" stopColor="#d81e3a" />
-          <stop offset="100%" stopColor="#8b1028" />
-        </radialGradient>
-        <radialGradient id="ch-berry2" cx="38%" cy="32%" r="65%">
-          <stop offset="0%" stopColor="#ff7585" />
-          <stop offset="45%" stopColor="#c91835" />
-          <stop offset="100%" stopColor="#7a0d22" />
-        </radialGradient>
-        <filter id="ch-glow" x="-20%" y="-20%" width="140%" height="140%">
-          <feGaussianBlur stdDeviation="0.8" result="b" />
-          <feMerge>
-            <feMergeNode in="b" />
-            <feMergeNode in="SourceGraphic" />
-          </feMerge>
-        </filter>
-      </defs>
-      <path
-        d="M58 8 C52 18 48 28 50 38 L54 48"
-        fill="none"
-        stroke="url(#ch-stem)"
-        strokeWidth="4"
-        strokeLinecap="round"
-      />
-      <path
-        d="M52 12 C42 8 28 12 22 22 C18 28 20 36 28 40 C36 44 46 40 52 32 C54 28 54 20 52 12 Z"
-        fill="url(#ch-leaf)"
-        opacity={0.95}
-      />
-      <circle
-        cx="42"
-        cy="68"
-        r="22"
-        fill="url(#ch-berry1)"
-        filter="url(#ch-glow)"
-      />
-      <ellipse cx="38" cy="62" rx="6" ry="4" fill="white" opacity={0.35} />
-      <circle
-        cx="78"
-        cy="72"
-        r="20"
-        fill="url(#ch-berry2)"
-        filter="url(#ch-glow)"
-      />
-      <ellipse cx="74" cy="66" rx="5" ry="3.5" fill="white" opacity={0.32} />
-    </svg>
-  );
-}
 
 function IconGoogle({ className = "" }: { className?: string }) {
   return (
@@ -459,14 +393,14 @@ export function WelcomeScreen() {
 
   return (
     <div
-      className="relative mx-auto flex min-h-dvh max-w-lg flex-col bg-white px-4 pb-[max(1rem,env(safe-area-inset-bottom))] pt-[max(0.75rem,env(safe-area-inset-top))]"
+      className="relative mx-auto flex min-h-dvh max-w-lg flex-col bg-gradient-to-b from-[#fff8fa] via-white to-[#f6faf3] px-4 pb-[max(1rem,env(safe-area-inset-bottom))] pt-[max(0.75rem,env(safe-area-inset-top))]"
       dir={dir}
     >
       <div className="flex items-start justify-between gap-2">
         <button
           type="button"
           onClick={() => setLang((l) => (l === "he" ? "en" : "he"))}
-          className="shrink-0 rounded-full border border-[#e8d4d8] bg-white px-2.5 py-1 text-xs font-semibold text-[#333] shadow-sm"
+          className="shrink-0 rounded-full border border-[var(--border-cherry-soft)] bg-white px-2.5 py-1 text-xs font-semibold text-[var(--text)] shadow-sm"
           aria-label={lang === "he" ? "Switch to English" : "עבור לעברית"}
         >
           {lang === "he" ? (
@@ -486,7 +420,7 @@ export function WelcomeScreen() {
         <button
           type="button"
           onClick={handleShare}
-          className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-[#e8d4d8] bg-white text-[#9b1b30] shadow-sm"
+          className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-[var(--border-cherry-soft)] bg-white text-[#9b1b30] shadow-sm"
           aria-label={t.shareAria}
         >
           <IconShare className="h-5 w-5" />
@@ -496,7 +430,7 @@ export function WelcomeScreen() {
       <div className="mt-2 flex flex-col items-center text-center">
         <CherryMark className="h-24 w-28 sm:h-28 sm:w-32" />
         <h1 className={cherryWordClass}>Cherry</h1>
-        <p className="mt-1 max-w-sm text-sm font-medium text-[#333]/85">
+        <p className="mt-1 max-w-sm text-sm font-medium text-[var(--text)]/85">
           {t.slogan}
         </p>
       </div>
@@ -514,8 +448,8 @@ export function WelcomeScreen() {
               aria-roledescription="slide"
               aria-label={`${i + 1} / ${slides.length}`}
             >
-              <div className="glass-panel mx-auto min-h-[7.5rem] rounded-2xl border-2 border-[#f5c8d4]/80 bg-white/95 px-4 py-5 shadow-[0_8px_28px_rgba(155,27,48,0.08)]">
-                <p className="text-center text-base font-semibold leading-relaxed text-[#333] sm:text-lg">
+              <div className="glass-panel mx-auto min-h-[7.5rem] rounded-2xl border-2 border-[var(--border-cherry-soft)] bg-white/95 px-4 py-5 shadow-[0_8px_28px_rgba(155,27,48,0.08)]">
+                <p className="text-center text-base font-semibold leading-relaxed text-[var(--text)] sm:text-lg">
                   {text}
                 </p>
               </div>
@@ -531,13 +465,13 @@ export function WelcomeScreen() {
               className={`h-2 rounded-full transition-all ${
                 i === slideIndex
                   ? "w-6 bg-[#9b1b30]"
-                  : "w-2 bg-[#fadadd]"
+                  : "w-2 bg-[var(--cherry-muted)]"
               }`}
               aria-label={`slide ${i + 1}`}
             />
           ))}
         </div>
-        <p className="mt-3 text-center text-sm font-medium italic text-[#555]">
+        <p className="mt-3 text-center text-sm font-medium italic text-[var(--stem)]/75">
           {mindsetLine}
         </p>
       </div>
@@ -560,12 +494,12 @@ export function WelcomeScreen() {
           </button>
           <Link
             href="/forgot-password"
-            className="flex w-[6.5rem] shrink-0 items-center justify-center rounded-2xl border border-[#e8d4d8] bg-white px-1 text-center text-[11px] font-semibold leading-tight text-[#9b1b30] underline decoration-[#9b1b30]/30 underline-offset-2"
+            className="flex w-[6.5rem] shrink-0 items-center justify-center rounded-2xl border border-[var(--border-cherry-soft)] bg-white px-1 text-center text-[11px] font-semibold leading-tight text-[#9b1b30] underline decoration-[#9b1b30]/30 underline-offset-2"
           >
             {t.forgotPassword}
           </Link>
         </div>
-        <p className="text-center text-xs font-semibold text-[#333]/60">
+        <p className="text-center text-xs font-semibold text-[var(--text)]/60">
           {t.quickConnect}
         </p>
         <div className="flex justify-center gap-6">
@@ -610,7 +544,7 @@ export function WelcomeScreen() {
             {t.devAdminOnly}
           </button>
         )}
-        <p className="text-[10px] text-[#333]/45">Cherry v{APP_VERSION}</p>
+        <p className="text-[10px] text-[var(--text)]/45">Cherry v{APP_VERSION}</p>
       </div>
 
       {authOpen && (
@@ -629,7 +563,7 @@ export function WelcomeScreen() {
             </h2>
             <div className="mt-4 space-y-3">
               <label className="block">
-                <span className="mb-1 block text-xs font-semibold text-[#333]/80">
+                <span className="mb-1 block text-xs font-semibold text-[var(--cherry)]">
                   {t.emailLabel}
                 </span>
                 <input
@@ -641,7 +575,7 @@ export function WelcomeScreen() {
                 />
               </label>
               <label className="block">
-                <span className="mb-1 block text-xs font-semibold text-[#333]/80">
+                <span className="mb-1 block text-xs font-semibold text-[var(--cherry)]">
                   {t.passwordLabel}
                 </span>
                 <input
@@ -656,7 +590,7 @@ export function WelcomeScreen() {
               </label>
               {authOpen === "signup" && (
                 <label className="block">
-                  <span className="mb-1 block text-xs font-semibold text-[#333]/80">
+                  <span className="mb-1 block text-xs font-semibold text-[var(--cherry)]">
                     {t.confirmPasswordLabel}
                   </span>
                   <input
@@ -712,16 +646,16 @@ export function WelcomeScreen() {
           aria-labelledby="manual-title"
         >
           <div
-            className="max-h-[85dvh] w-full max-w-md overflow-y-auto rounded-2xl border-2 border-[#fadadd] bg-white p-5 shadow-xl"
+            className="max-h-[85dvh] w-full max-w-md overflow-y-auto rounded-2xl border-2 border-[var(--border-cherry-soft)] bg-white p-5 shadow-xl"
             dir={dir}
           >
             <h2 id="manual-title" className="panel-title-cherry text-lg">
               {t.manualTitle}
             </h2>
-            <ol className="mt-4 list-none space-y-3 text-[#333]">
+            <ol className="mt-4 list-none space-y-3 text-[var(--text)]">
               {t.manualSteps.map((step, i) => (
                 <li key={i} className="flex gap-3 leading-relaxed">
-                  <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-[#fadadd] text-sm font-bold text-[#333]">
+                  <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-[var(--cherry-muted)] text-sm font-bold text-[var(--cherry)]">
                     {i + 1}
                   </span>
                   <span className="min-w-0 flex-1 pt-0.5">{step}</span>
@@ -741,7 +675,7 @@ export function WelcomeScreen() {
 
       {toast && (
         <div
-          className="fixed bottom-24 left-1/2 z-[220] -translate-x-1/2 rounded-full bg-[#333] px-4 py-2 text-sm font-medium text-white shadow-lg"
+          className="fixed bottom-24 left-1/2 z-[220] -translate-x-1/2 rounded-full bg-[var(--stem-deep)] px-4 py-2 text-sm font-medium text-white shadow-lg"
           role="status"
         >
           {toast}

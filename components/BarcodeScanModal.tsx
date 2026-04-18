@@ -151,26 +151,26 @@ export function BarcodeScanModal({
             <div className="mb-4 flex items-start justify-between gap-3">
               <h2
                 id={titleId}
-                className="text-lg font-bold leading-tight text-[#333333]"
+                className="panel-title-cherry text-lg leading-tight"
               >
                 סריקת ברקוד
               </h2>
               <button
                 type="button"
                 onClick={onClose}
-                className="rounded-lg border-2 border-[#fadadd] bg-white px-3 py-1.5 text-sm font-semibold text-[#333333] transition hover:bg-[#fadadd]/40"
+                className="rounded-lg border-2 border-[var(--border-cherry-soft)] bg-white px-3 py-1.5 text-sm font-semibold text-[var(--cherry)] transition hover:bg-[var(--cherry-muted)]"
               >
                 סגירה
               </button>
             </div>
             {phase === "scan" && (
               <div className="space-y-3">
-                <p className="text-sm text-[#333333]/85">
+                <p className="text-sm text-[var(--cherry)]/85">
                   כווני את הברקוד בתוך המסגרת — הסריקה מתבצעת אוטומטית.
                 </p>
                 <div
                   id="barcode-reader-region"
-                  className="min-h-[220px] w-full overflow-hidden rounded-xl border-2 border-[#fadadd] bg-black/5"
+                  className="min-h-[220px] w-full overflow-hidden rounded-xl border-2 border-[var(--border-cherry-soft)] bg-black/5"
                 />
               </div>
             )}
@@ -178,10 +178,10 @@ export function BarcodeScanModal({
             {phase === "loading" && (
               <div className="flex flex-col items-center justify-center gap-3 py-12">
                 <div
-                  className="h-10 w-10 animate-spin rounded-full border-2 border-[#fadadd] border-t-[#333333]"
+                  className="h-10 w-10 animate-spin rounded-full border-2 border-[var(--border-cherry-soft)] border-t-[var(--cherry)]"
                   aria-hidden
                 />
-                <p className="text-sm font-medium text-[#333333]">
+                <p className="text-sm font-medium text-[var(--cherry)]">
                   מחפשת במאגר המקומי…
                 </p>
               </div>
@@ -189,11 +189,11 @@ export function BarcodeScanModal({
 
             {phase === "result" && resultName && (
               <div className="space-y-4">
-                <div className="rounded-xl border-2 border-[#fadadd] bg-white/90 px-4 py-3">
-                  <p className="text-xs font-semibold uppercase tracking-wide text-[#333333]/60">
+                <div className="rounded-xl border-2 border-[var(--border-cherry-soft)] bg-white/90 px-4 py-3">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-[var(--cherry)]/60">
                     מוצר
                   </p>
-                  <p className="mt-1 text-base font-bold leading-snug text-[#333333]">
+                  <p className="mt-1 text-base font-bold leading-snug text-[var(--cherry)]">
                     {resultName}
                   </p>
                 </div>
@@ -212,7 +212,7 @@ export function BarcodeScanModal({
 
             {phase === "error" && errorMessage && (
               <div className="space-y-4 py-2">
-                <p className="text-center text-sm leading-relaxed text-[#333333]">
+                <p className="text-center text-sm leading-relaxed text-[var(--cherry)]">
                   {errorMessage}
                 </p>
                 <button

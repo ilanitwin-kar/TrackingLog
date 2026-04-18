@@ -1,7 +1,7 @@
 "use client";
 
 import { AnimatePresence, motion } from "framer-motion";
-import { useSearchParams } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import {
   useCallback,
   useEffect,
@@ -11,7 +11,7 @@ import {
 } from "react";
 import { stepsForKcal, walkMinutesForKcal } from "@/lib/burnOffset";
 import { formatWalkingMinutes } from "@/lib/formatWalkDuration";
-import { getTodayKey } from "@/lib/dateKey";
+import { addDaysToDateKey, getTodayKey } from "@/lib/dateKey";
 import {
   type FoodUnit,
   type LogEntry,
@@ -20,7 +20,9 @@ import {
   getEntriesForDate,
   type UserProfile,
   isFoodStarred,
+  loadDayJournalClosedMap,
   loadProfile,
+  saveDayJournalClosedMap,
   saveDayLogEntries,
   saveFoodMemoryKey,
   toggleDictionaryFromEntry,
@@ -134,7 +136,18 @@ function getRandom<T>(arr: readonly T[]): T {
   return arr[Math.floor(Math.random() * arr.length)]!;
 }
 
+function formatDateKeyHe(dateKey: string): string {
+  const d = new Date(`${dateKey}T12:00:00`);
+  if (Number.isNaN(d.getTime())) return dateKey;
+  return d.toLocaleDateString("he-IL", {
+    weekday: "short",
+    day: "numeric",
+    month: "short",
+  });
+}
+
 export function HomeClient() {
+  const router = useRouter();
   const searchParams = useSearchParams();
   const [entries, setEntries] = useState<LogEntry[]>([]);
   const [dictTick, setDictTick] = useState(0);
@@ -167,6 +180,40 @@ export function HomeClient() {
   }, [editQtyText]);
   const [editUnit, setEditUnit] = useState<FoodUnit>("גרם");
   const [editLoading, setEditLoading] = useState(false);
+
+  const [journalClosedMap, setJournalClosedMap] = useState<
+    Record<string, boolean>
+  >({});
+
+  useEffect(() => {
+    setJournalClosedMap(loadDayJournalClosedMap());
+  }, []);
+
+  const isDayClosed = journalClosedMap[viewDateKey] === true;
+  const todayKey = getTodayKey();
+  const canGoNextDay = viewDateKey < todayKey;
+
+  function navigateToDate(dk: string) {
+    setViewDateKey(dk);
+    if (dk === getTodayKey()) {
+      router.replace("/", { scroll: false });
+    } else {
+      router.replace(`/?date=${encodeURIComponent(dk)}`, { scroll: false });
+    }
+  }
+
+  function toggleJournalClosedForViewDay() {
+    const m = { ...loadDayJournalClosedMap() };
+    const k = viewDateKey;
+    if (m[k]) {
+      delete m[k];
+    } else {
+      m[k] = true;
+    }
+    saveDayJournalClosedMap(m);
+    setJournalClosedMap(m);
+    window.dispatchEvent(new Event("cj-journal-closed-changed"));
+  }
 
   useEffect(() => {
     setProfile(loadProfile());
@@ -315,10 +362,12 @@ export function HomeClient() {
   }, [total, target, profile, viewDateKey, milestones, triggerCelebration]);
 
   function removeEntry(id: string) {
+    if (isDayClosed) return;
     persistEntries(entries.filter((x) => x.id !== id));
   }
 
   function duplicateEntry(item: LogEntry) {
+    if (isDayClosed) return;
     const copy: LogEntry = {
       ...item,
       id: uid(),
@@ -330,6 +379,7 @@ export function HomeClient() {
   }
 
   function toggleMealStar(id: string) {
+    if (isDayClosed) return;
     persistEntries(
       entries.map((e) =>
         e.id === id ? { ...e, mealStarred: !e.mealStarred } : e
@@ -338,11 +388,13 @@ export function HomeClient() {
   }
 
   function openMealModal() {
+    if (isDayClosed) return;
     setMealNameDraft("");
     setMealModalOpen(true);
   }
 
   function confirmCreateMeal() {
+    if (isDayClosed) return;
     const name = mealNameDraft.trim();
     if (!name) return;
     const starred = entries.filter((e) => e.mealStarred);
@@ -364,6 +416,7 @@ export function HomeClient() {
   }
 
   function openEdit(item: LogEntry) {
+    if (isDayClosed) return;
     setEditEntry(item);
     setEditQtyText(String(item.quantity));
     setEditUnit(item.unit);
@@ -371,7 +424,7 @@ export function HomeClient() {
   }
 
   async function saveEdit() {
-    if (!editEntry) return;
+    if (!editEntry || isDayClosed) return;
     const q = clampQuantity(editQty, editUnit);
     setEditQtyText(String(q));
     setEditLoading(true);
@@ -427,7 +480,7 @@ export function HomeClient() {
 
   if (!profile) {
     return (
-      <div className="p-8 text-center text-lg text-[#333333]" dir="rtl">
+      <div className="p-8 text-center text-lg text-[var(--text)]" dir="rtl">
         טוען…
       </div>
     );
@@ -467,11 +520,11 @@ export function HomeClient() {
             >
               <h2
                 id="meal-modal-title"
-                className="text-lg font-bold text-[#333333]"
+                className="panel-title-cherry text-lg"
               >
                 שמירת ארוחה במילון
               </h2>
-              <p className="text-sm text-[#333333]/85">
+              <p className="text-sm text-[var(--text)]/85">
                 נשמרו {starredForMealCount} פריטים. תני שם — הארוחה תופיע
                 במילון האישי לחיפוש והוספה ליומן (למשל: בוקר קבוע).
               </p>
@@ -494,7 +547,7 @@ export function HomeClient() {
                 </button>
                 <button
                   type="button"
-                  className="flex-1 rounded-xl border-2 border-[#FADADD] bg-white py-3 font-semibold text-[#333333]"
+                  className="flex-1 rounded-xl border-2 border-[var(--border-cherry-soft)] bg-white py-3 font-semibold text-[var(--text)]"
                   onClick={() => setMealModalOpen(false)}
                 >
                   ביטול
@@ -528,10 +581,10 @@ export function HomeClient() {
               >
                 עריכת כמות
               </h2>
-              <p className="text-sm text-[#333333]/90">{editEntry.food}</p>
+              <p className="text-sm text-[var(--text)]/90">{editEntry.food}</p>
               <div className="flex flex-wrap gap-3">
                 <label className="min-w-[6rem] flex-1">
-                  <span className="mb-1 block text-xs font-semibold text-[#333333]">
+                  <span className="mb-1 block text-xs font-semibold text-[var(--text)]">
                     כמות
                   </span>
                   <input
@@ -573,7 +626,7 @@ export function HomeClient() {
                   />
                 </label>
                 <label className="min-w-[8rem] flex-[2]">
-                  <span className="mb-1 block text-xs font-semibold text-[#333333]">
+                  <span className="mb-1 block text-xs font-semibold text-[var(--text)]">
                     יחידה
                   </span>
                   <select
@@ -605,10 +658,10 @@ export function HomeClient() {
                       <button
                         key={label}
                         type="button"
-                        className={`shrink-0 cursor-pointer whitespace-nowrap rounded-[10px] px-3 py-2 text-sm font-semibold text-[#333333] ${
+                        className={`shrink-0 cursor-pointer whitespace-nowrap rounded-[10px] px-3 py-2 text-sm font-semibold text-[var(--text)] ${
                           selected
-                            ? "border-2 border-black bg-[#eee]"
-                            : "border border-[#ccc] bg-white"
+                            ? "border-2 border-[var(--stem)] bg-[var(--cherry-muted)]"
+                            : "border border-[var(--border-cherry-soft)] bg-white"
                         }`}
                         onClick={() =>
                           setEditQtyText(String(clampQuantity(num, editUnit)))
@@ -631,7 +684,7 @@ export function HomeClient() {
                 </button>
                 <button
                   type="button"
-                  className="flex-1 rounded-xl border-2 border-[#FADADD] bg-white py-3 font-semibold text-[#333333]"
+                  className="flex-1 rounded-xl border-2 border-[var(--border-cherry-soft)] bg-white py-3 font-semibold text-[var(--text)]"
                   onClick={() => {
                     setEditOpen(false);
                     setEditEntry(null);
@@ -647,53 +700,53 @@ export function HomeClient() {
 
       <header className="mb-8 text-center">
         <LiveClock />
-        <div className="mt-6 flex flex-wrap items-center justify-center gap-4 border-y border-[#FADADD] py-4">
-          <p className="text-center text-xl font-bold text-[#333333] md:text-2xl">
+        <div className="mt-6 flex flex-wrap items-center justify-center gap-4 border-y border-[var(--border-cherry-soft)] py-4">
+          <p className="text-center text-xl font-extrabold text-[var(--cherry)] md:text-2xl">
             יעד יומי: {target} קק״ל
           </p>
-          <span className="hidden text-[#333333]/40 sm:inline" aria-hidden>
+          <span className="hidden text-[var(--stem)]/35 sm:inline" aria-hidden>
             |
           </span>
-          <p className="text-center text-xl font-bold text-[#333333] md:text-2xl">
+          <p className="text-center text-xl font-extrabold text-[var(--cherry)] md:text-2xl">
             {isViewingToday ? "נצרכו היום" : "נצרכו ביום הנבחר"}: {total} קק״ל
-            <span className="mr-2 text-base font-semibold text-[#333333]/80">
+            <span className="mr-2 text-base font-semibold text-[var(--stem)]">
               {" "}
               ({displayPercentage}%)
             </span>
           </p>
         </div>
         <div className="mx-auto mt-5 flex max-w-xl flex-wrap items-stretch justify-center gap-3 md:mt-6 md:gap-4">
-          <div className="min-w-[8.25rem] flex-1 rounded-xl border border-[#e8cfd4] bg-[#fffafb] px-4 py-3 text-center shadow-sm sm:flex-initial">
-            <p className="font-[system-ui,Segoe_UI,sans-serif] text-sm font-semibold text-[#333333]">
+          <div className="min-w-[8.25rem] flex-1 rounded-xl border-2 border-stem-soft bg-white/90 px-4 py-3 text-center shadow-sm sm:flex-initial">
+            <p className="font-[system-ui,Segoe_UI,sans-serif] text-sm font-semibold text-[var(--cherry)]">
               חלבון:{" "}
-              <span className="text-lg font-bold tabular-nums text-[#2a2a2a]">
+              <span className="text-lg font-bold tabular-nums text-[var(--stem)]">
                 {totalProteinG}
               </span>
-              <span className="text-sm font-semibold text-[#333333]/85">
+              <span className="text-sm font-semibold text-[var(--text)]/85">
                 {" "}
                 ג&apos;
               </span>
             </p>
           </div>
-          <div className="min-w-[8.25rem] flex-1 rounded-xl border border-[#e8cfd4] bg-[#fffafb] px-4 py-3 text-center shadow-sm sm:flex-initial">
-            <p className="font-[system-ui,Segoe_UI,sans-serif] text-sm font-semibold text-[#333333]">
+          <div className="min-w-[8.25rem] flex-1 rounded-xl border-2 border-stem-soft bg-white/90 px-4 py-3 text-center shadow-sm sm:flex-initial">
+            <p className="font-[system-ui,Segoe_UI,sans-serif] text-sm font-semibold text-[var(--cherry)]">
               פחמימות:{" "}
-              <span className="text-lg font-bold tabular-nums text-[#2a2a2a]">
+              <span className="text-lg font-bold tabular-nums text-[var(--stem)]">
                 {totalCarbsG}
               </span>
-              <span className="text-sm font-semibold text-[#333333]/85">
+              <span className="text-sm font-semibold text-[var(--text)]/85">
                 {" "}
                 ג&apos;
               </span>
             </p>
           </div>
-          <div className="min-w-[8.25rem] flex-1 rounded-xl border border-[#e8cfd4] bg-[#fffafb] px-4 py-3 text-center shadow-sm sm:flex-initial">
-            <p className="font-[system-ui,Segoe_UI,sans-serif] text-sm font-semibold text-[#333333]">
+          <div className="min-w-[8.25rem] flex-1 rounded-xl border-2 border-stem-soft bg-white/90 px-4 py-3 text-center shadow-sm sm:flex-initial">
+            <p className="font-[system-ui,Segoe_UI,sans-serif] text-sm font-semibold text-[var(--cherry)]">
               שומן:{" "}
-              <span className="text-lg font-bold tabular-nums text-[#2a2a2a]">
+              <span className="text-lg font-bold tabular-nums text-[var(--stem)]">
                 {totalFatG}
               </span>
-              <span className="text-sm font-semibold text-[#333333]/85">
+              <span className="text-sm font-semibold text-[var(--text)]/85">
                 {" "}
                 ג&apos;
               </span>
@@ -708,7 +761,7 @@ export function HomeClient() {
         animate={{ opacity: 1, y: 0 }}
       >
         <div className="max-w-[min(100%,20rem)] text-center">
-          <p className="mb-2.5 text-base font-bold leading-snug tracking-wide text-[#1a1a1a] md:text-lg">
+          <p className="mb-2.5 text-base font-bold leading-snug tracking-wide text-[var(--stem)] md:text-lg">
             יומן המעקב של
           </p>
           <h1 className="app-title relative rounded-2xl border border-[rgba(155,27,48,0.22)] bg-gradient-to-b from-white to-[#fffafb] px-4 py-3 text-[1.35rem] leading-snug shadow-[0_2px_14px_rgba(250,218,221,0.4),0_0_0_1px_rgba(155,27,48,0.06)] md:px-5 md:py-3.5 md:text-2xl lg:text-[1.65rem]">
@@ -723,12 +776,12 @@ export function HomeClient() {
         animate={{ opacity: 1, y: 0 }}
         transition={{ delay: 0.05 }}
       >
-        <p className="mb-3 text-center text-sm font-semibold text-[#333333]">
+        <p className="mb-3 text-center text-sm font-bold text-[var(--cherry)]">
           התקדמות יומית
         </p>
-        <div className="h-3 overflow-hidden rounded-full border border-[#FADADD] bg-[#fafafa]">
+        <div className="h-3 overflow-hidden rounded-full border-2 border-[var(--border-cherry-soft)] bg-[#f8f8f8]">
           <motion.div
-            className="h-full rounded-full bg-[#FADADD]"
+            className="progress-bar-cherry-stem h-full rounded-full"
             initial={{ width: 0 }}
             animate={{
               width: `${target > 0 ? Math.min(100, (total / target) * 100) : 0}%`,
@@ -746,7 +799,7 @@ export function HomeClient() {
               מעל היעד – זה מצב זמני
             </h3>
             <p
-              className="mt-5 text-[15px] font-medium leading-[1.75] tracking-[0.01em] text-[#333333] antialiased md:text-base md:leading-[1.8]"
+              className="mt-5 text-[15px] font-medium leading-[1.75] tracking-[0.01em] text-[var(--text)] antialiased md:text-base md:leading-[1.8]"
               style={{ fontFeatureSettings: '"kern" 1, "liga" 1' }}
             >
               חריגה של {Math.round(overGoalKcal)} קק״ל.{" "}
@@ -763,7 +816,7 @@ export function HomeClient() {
         )}
       </motion.section>
 
-      {starredForMealCount >= 2 && (
+      {starredForMealCount >= 2 && !isDayClosed && (
         <motion.div
           className="mb-4"
           initial={{ opacity: 0, y: 6 }}
@@ -780,11 +833,72 @@ export function HomeClient() {
       )}
 
       <section className="glass-panel p-4">
-        <h2 className="mb-3 text-xl font-bold text-[#333333]">
-          {isViewingToday ? "היום ביומן" : `יומן — ${viewDateKey}`}
+        <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
+          <div className="flex flex-wrap items-center justify-center gap-2 sm:justify-start">
+            <button
+              type="button"
+              className="rounded-xl border-2 border-[var(--border-cherry-soft)] bg-white px-3 py-2 text-sm font-bold text-[var(--stem)] shadow-sm transition hover:bg-[rgba(74,124,35,0.08)]"
+              aria-label="יום קודם ביומן"
+              onClick={() =>
+                navigateToDate(addDaysToDateKey(viewDateKey, -1))
+              }
+            >
+              ‹ יום קודם
+            </button>
+            <button
+              type="button"
+              disabled={!canGoNextDay}
+              className="rounded-xl border-2 border-[var(--border-cherry-soft)] bg-white px-3 py-2 text-sm font-bold text-[var(--stem)] shadow-sm transition hover:bg-[rgba(74,124,35,0.08)] disabled:cursor-not-allowed disabled:opacity-40"
+              aria-label="יום הבא ביומן"
+              onClick={() => {
+                if (canGoNextDay) {
+                  navigateToDate(addDaysToDateKey(viewDateKey, 1));
+                }
+              }}
+            >
+              יום הבא ›
+            </button>
+            {!isViewingToday && (
+              <button
+                type="button"
+                className="rounded-xl border-2 border-dashed border-[var(--border-cherry-soft)] bg-[#fffafb] px-3 py-2 text-sm font-bold text-[var(--cherry)]"
+                onClick={() => navigateToDate(getTodayKey())}
+              >
+                חזרה להיום
+              </button>
+            )}
+          </div>
+          <button
+            type="button"
+            className={
+              isDayClosed
+                ? "w-full rounded-xl border-2 border-[var(--border-cherry-soft)] bg-white px-4 py-3 text-sm font-bold text-[var(--cherry)] shadow-sm sm:w-auto"
+                : "btn-stem w-full rounded-xl px-4 py-3 text-sm font-bold sm:w-auto sm:min-w-[11rem]"
+            }
+            onClick={toggleJournalClosedForViewDay}
+          >
+            {isDayClosed ? "פתיחת היום לעריכה" : "סגירת היום ביומן"}
+          </button>
+        </div>
+        {isDayClosed && (
+          <div
+            className="mb-4 rounded-xl border-2 border-[var(--border-cherry-soft)] bg-cherry-faint px-3 py-3 text-center text-sm font-semibold text-[var(--cherry)]"
+            role="status"
+          >
+            היום סגור ביומן — רק צפייה. לחצי «פתיחת היום לעריכה» כדי להוסיף או
+            לערוך.
+          </div>
+        )}
+        <h2 className="panel-title-cherry mb-1 text-xl">
+          {isViewingToday
+            ? "היום ביומן"
+            : `יומן — ${formatDateKeyHe(viewDateKey)}`}
         </h2>
+        <p className="mb-3 text-center text-xs font-medium tabular-nums text-[var(--text)]/55">
+          {viewDateKey}
+        </p>
         {entries.length === 0 ? (
-          <p className="text-[#333333]/85">
+          <p className="text-[var(--text)]/85">
             עדיין אין רשומות — לחצי על הכפתור המרכזי ״הוספה״ בתפריט התחתון,
             ואז על ״פתיחת מסך הוספת מזון״ (המקלדת לא מסתירה את תוצאות החיפוש).
           </p>
@@ -802,25 +916,25 @@ export function HomeClient() {
                   transition={{
                     layout: { type: "spring", damping: 28, stiffness: 400 },
                   }}
-                  className="flex flex-wrap items-center gap-2 rounded-xl border-2 border-[#FADADD] bg-white px-3 py-3"
+                  className={`flex flex-wrap items-center gap-2 rounded-xl border-2 border-[var(--border-cherry-soft)] bg-white px-3 py-3 ${isDayClosed ? "opacity-85" : ""}`}
                 >
                   <div className="min-w-0 flex-1">
-                    <p className="flex flex-wrap items-center gap-1 font-semibold text-[#333333]">
+                    <p className="flex flex-wrap items-center gap-1 font-semibold text-[var(--text)]">
                       {item.verified && (
                         <span
                           className="inline-flex shrink-0"
                           title="מאומת"
                           aria-label="מאומת"
                         >
-                          <IconVerified className="h-4 w-4 text-[#d4a017]" />
+                          <IconVerified className="h-4 w-4 text-[var(--stem)]" />
                         </span>
                       )}
                       <span>{item.food}</span>
                     </p>
-                    <p className="text-sm text-[#333333]/80">
+                    <p className="text-sm text-[var(--text)]/80">
                       {formatEntryTime(item.createdAt) ? (
                         <>
-                          <span className="tabular-nums font-medium text-[#333333]">
+                          <span className="tabular-nums font-medium text-[var(--text)]">
                             {formatEntryTime(item.createdAt)}
                           </span>
                           {" · "}
@@ -829,7 +943,7 @@ export function HomeClient() {
                       {formatQtyLabel(item.quantity, item.unit)} {item.unit} ·{" "}
                       {item.calories} קק״ל
                     </p>
-                    <p className="text-xs text-[#333333]/65">
+                    <p className="text-xs text-[var(--text)]/65">
                       חלבון {formatMacroCell(item.proteinG)} · פחמימות{" "}
                       {formatMacroCell(item.carbsG)} · שומן{" "}
                       {formatMacroCell(item.fatG)}
@@ -842,12 +956,10 @@ export function HomeClient() {
                       title="סימון לשמירה כארוחה במילון"
                       aria-label="סימון לשמירה כארוחה במילון"
                       aria-pressed={mealOn}
+                      disabled={isDayClosed}
                       onClick={() => toggleMealStar(item.id)}
                     >
-                      <IconStar
-                        filled={mealOn}
-                        className="h-5 w-5 text-[#333333]"
-                      />
+                      <IconStar filled={mealOn} className="h-5 w-5" />
                     </button>
                     <button
                       type="button"
@@ -855,39 +967,40 @@ export function HomeClient() {
                       title="שמירה למילון"
                       aria-label="שמירה למילון"
                       aria-pressed={inDictionary}
+                      disabled={isDayClosed}
                       onClick={() => {
                         toggleDictionaryFromEntry(item);
                         setDictTick((t) => t + 1);
                       }}
                     >
-                      <IconBookmark
-                        filled={inDictionary}
-                        className="h-5 w-5 text-[#333333]"
-                      />
+                      <IconBookmark filled={inDictionary} className="h-5 w-5" />
                     </button>
                     <button
                       type="button"
                       className="btn-icon-luxury"
                       title="עריכת כמות"
                       aria-label="עריכת כמות"
+                      disabled={isDayClosed}
                       onClick={() => openEdit(item)}
                     >
-                      <IconPencil className="h-5 w-5 text-[#333333]" />
+                      <IconPencil className="h-5 w-5" />
                     </button>
                     <button
                       type="button"
                       className="btn-icon-luxury"
                       title="שכפול"
                       aria-label="שכפול"
+                      disabled={isDayClosed}
                       onClick={() => duplicateEntry(item)}
                     >
-                      <IconDuplicate className="h-5 w-5 text-[#333333]" />
+                      <IconDuplicate className="h-5 w-5" />
                     </button>
                     <button
                       type="button"
                       className="btn-icon-luxury btn-icon-luxury-danger"
                       title="מחיקה"
                       aria-label="מחיקה"
+                      disabled={isDayClosed}
                       onClick={() => removeEntry(item.id)}
                     >
                       <IconTrash className="h-5 w-5" />

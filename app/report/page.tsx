@@ -76,23 +76,23 @@ export default function ReportPage() {
       </motion.h1>
 
       <motion.section
-        className="mb-8 overflow-hidden rounded-2xl border-2 border-[#FADADD] bg-gradient-to-b from-[#fff5f7] to-white shadow-[0_8px_32px_rgba(250,218,221,0.45)]"
+        className="mb-8 overflow-hidden rounded-2xl border-2 border-[var(--border-cherry-soft)] bg-gradient-to-b from-[#fff8fa] via-white to-[#f6faf3] shadow-[0_8px_32px_rgba(155,27,48,0.1),0_4px_20px_rgba(74,124,35,0.08)]"
         initial={{ opacity: 0, y: 10 }}
         animate={{ opacity: 1, y: 0 }}
       >
-        <div className="border-b border-[#FADADD] bg-white/80 px-4 py-6 text-center sm:px-6">
-          <p className="text-sm font-semibold text-[#333333]/80">
+        <div className="border-b border-[var(--border-cherry-soft)] bg-white/85 px-4 py-6 text-center sm:px-6">
+          <p className="text-sm font-semibold text-[var(--cherry)]">
             הון מצטבר (קלוריות חסכון מצטברות)
           </p>
-          <p className="mt-2 font-[system-ui,Segoe_UI,sans-serif] text-4xl font-extrabold tracking-tight text-[#2a2a2a] sm:text-5xl">
+          <p className="mt-2 font-[system-ui,Segoe_UI,sans-serif] text-4xl font-extrabold tracking-tight text-[var(--stem)] sm:text-5xl">
             {accumulation.totalAccumulatedKcal.toLocaleString("he-IL")}{" "}
-            <span className="text-2xl font-bold text-[#333333]/85 sm:text-3xl">
+            <span className="text-2xl font-bold text-[var(--cherry)]/90 sm:text-3xl">
               קק״ל
             </span>
           </p>
-          <p className="mt-2 text-sm font-medium text-[#333333]/75">
+          <p className="mt-2 text-sm font-medium text-[var(--stem)]/90">
             שקול שומן מצטבר:{" "}
-            <span className="font-semibold text-[#333333]">
+            <span className="font-semibold text-[var(--cherry)]">
               {totalFat.toLocaleString("he-IL", {
                 maximumFractionDigits: 1,
                 minimumFractionDigits: 0,
@@ -104,30 +104,30 @@ export default function ReportPage() {
 
         <div className="p-3 sm:p-4">
           {accumulation.rows.length === 0 ? (
-            <p className="py-8 text-center text-sm text-[#333333]/75">
+            <p className="py-8 text-center text-sm text-[var(--cherry)]/75">
               אין עדיין ימים עם רישום ביומן.
             </p>
           ) : (
-            <div className="overflow-x-auto rounded-xl border border-[#FADADD] bg-white">
+            <div className="overflow-x-auto rounded-xl border border-[var(--border-cherry-soft)] bg-white">
               <table className="w-full min-w-[20rem] border-collapse text-sm">
                 <thead>
-                  <tr className="bg-[#FADADD]/45 text-[#333333]">
-                    <th className="border-b border-[#FADADD] px-2 py-3 text-right font-bold sm:px-3">
+                  <tr className="bg-cherry-faint text-[var(--cherry)]">
+                    <th className="border-b border-[var(--border-cherry-soft)] px-2 py-3 text-right font-bold sm:px-3">
                       תאריך
                     </th>
-                    <th className="border-b border-[#FADADD] px-2 py-3 text-right font-bold sm:px-3">
+                    <th className="border-b border-[var(--border-cherry-soft)] px-2 py-3 text-right font-bold sm:px-3">
                       גירעון יומי
                       <span className="block text-[10px] font-semibold opacity-80">
                         (קק״ל)
                       </span>
                     </th>
-                    <th className="border-b border-[#FADADD] px-2 py-3 text-right font-bold sm:px-3">
+                    <th className="border-b border-[var(--border-cherry-soft)] px-2 py-3 text-right font-bold sm:px-3">
                       צבירה כללית
                       <span className="block text-[10px] font-semibold opacity-80">
                         (קק״ל)
                       </span>
                     </th>
-                    <th className="border-b border-[#FADADD] px-2 py-3 text-right font-bold sm:px-3">
+                    <th className="border-b border-[var(--border-cherry-soft)] px-2 py-3 text-right font-bold sm:px-3">
                       שווה ערך בשומן
                       <span className="block text-[10px] font-semibold opacity-80">
                         (גרם)
@@ -143,11 +143,11 @@ export default function ReportPage() {
                         i % 2 === 0 ? "bg-white" : "bg-[#fffafb]"
                       }
                     >
-                      <td className="border-b border-[#FADADD]/60 px-2 py-2.5 text-[#333333] sm:px-3">
+                      <td className="border-b border-[var(--border-cherry-soft)] px-2 py-2.5 text-[var(--stem)] sm:px-3">
                         {formatHeDate(row.dateKey)}
                       </td>
                       <td
-                        className={`border-b border-[#FADADD]/60 px-2 py-2.5 font-medium tabular-nums sm:px-3 ${
+                        className={`border-b border-[var(--border-cherry-soft)] px-2 py-2.5 font-medium tabular-nums sm:px-3 ${
                           row.dailyBalanceKcal >= 0
                             ? "text-[#1f5f3a]"
                             : "text-[#8b2e2e]"
@@ -156,10 +156,10 @@ export default function ReportPage() {
                         {row.dailyBalanceKcal > 0 ? "+" : ""}
                         {Math.round(row.dailyBalanceKcal).toLocaleString("he-IL")}
                       </td>
-                      <td className="border-b border-[#FADADD]/60 px-2 py-2.5 font-semibold tabular-nums text-[#333333] sm:px-3">
+                      <td className="border-b border-[var(--border-cherry-soft)] px-2 py-2.5 font-semibold tabular-nums text-[var(--stem)] sm:px-3">
                         {Math.round(row.accumulatedKcal).toLocaleString("he-IL")}
                       </td>
-                      <td className="border-b border-[#FADADD]/60 px-2 py-2.5 tabular-nums text-[#333333]/95 sm:px-3">
+                      <td className="border-b border-[var(--border-cherry-soft)] px-2 py-2.5 tabular-nums text-[var(--cherry)]/90 sm:px-3">
                         {row.fatEquivalentG.toLocaleString("he-IL", {
                           maximumFractionDigits: 1,
                           minimumFractionDigits: 0,
@@ -175,53 +175,53 @@ export default function ReportPage() {
       </motion.section>
 
       <motion.div
-        className="glass-panel space-y-5 p-5 text-[#333333]"
+        className="glass-panel space-y-5 p-5 text-[var(--text)]"
         initial={{ opacity: 0, y: 10 }}
         animate={{ opacity: 1, y: 0 }}
       >
         <div>
-          <p className="text-sm font-semibold text-[#333333]/85">
+          <p className="text-sm font-semibold text-[var(--cherry)]">
             סה״כ ירידה מתחילת המעקב
           </p>
-          <p className="text-2xl font-extrabold text-[#333333]">
+          <p className="text-2xl font-extrabold text-[var(--stem)]">
             {metrics.lost.toFixed(1)} ק״ג
           </p>
         </div>
 
         <div>
-          <p className="text-sm font-semibold text-[#333333]/85">
+          <p className="text-sm font-semibold text-[var(--cherry)]">
             נותר ליעד ({metrics.profile.goalWeightKg} ק״ג)
           </p>
-          <p className="text-2xl font-extrabold text-[#333333]">
+          <p className="text-2xl font-extrabold text-[var(--stem)]">
             {metrics.remaining.toFixed(1)} ק״ג
           </p>
         </div>
 
         <div>
-          <p className="text-sm font-semibold text-[#333333]/85">
+          <p className="text-sm font-semibold text-[var(--cherry)]">
             סה״כ קלוריות לשריפה
           </p>
-          <p className="text-2xl font-extrabold text-[#333333]">
+          <p className="text-2xl font-extrabold text-[var(--stem)]">
             {metrics.kcalToBurn.toLocaleString("he-IL")} קק״ל
           </p>
         </div>
 
         <div className="space-y-2">
-          <p className="text-sm font-semibold text-[#333333]/85">
+          <p className="text-sm font-semibold text-[var(--cherry)]">
             ספירה לאחור ליעד
           </p>
           {metrics.daysToGoal != null ? (
-            <p className="text-2xl font-extrabold text-[#333333]">
+            <p className="text-2xl font-extrabold text-[var(--stem)]">
               בערך {metrics.daysToGoal} ימים
             </p>
           ) : (
-            <p className="text-lg font-medium text-[#333333]/85">
+            <p className="text-lg font-medium text-[var(--cherry)]/85">
               לא ניתן לחשב
             </p>
           )}
         </div>
 
-        <p className="border-t border-[#FADADD] pt-3 text-sm text-[#333333]/85">
+        <p className="border-t border-[var(--border-cherry-soft)] pt-3 text-sm text-[var(--stem)]/90">
           משקל נוכחי: {metrics.current} ק״ג
         </p>
       </motion.div>

@@ -112,7 +112,7 @@ export default function TdeePage() {
     return (
       <div className="mx-auto max-w-lg px-4 py-8 md:py-12" dir="rtl">
         <BackToMenuButton />
-        <p className="text-center text-[#333333]">טוען…</p>
+        <p className="text-center text-[var(--cherry)]">טוען…</p>
       </div>
     );
   }
@@ -163,7 +163,7 @@ export default function TdeePage() {
       >
         {registered ? "עריכת פרטים ויעד TDEE" : "הרשמה — מחשבון TDEE"}
       </motion.h1>
-      <p className="mb-6 text-center text-sm font-medium text-[#333333]/85">
+      <p className="mb-6 text-center text-sm font-medium text-[var(--cherry)]/85">
         {registered
           ? "השינויים נשמרים אוטומטית. יעד הקלוריות בדשבורד מתעדכן מיד כשמשנים גירעון או פעילות."
           : "מלאי את כל השדות כדי להגדיר את היעד היומי ולהמשיך לדשבורד."}
@@ -175,7 +175,7 @@ export default function TdeePage() {
         animate={{ opacity: 1, y: 0 }}
       >
         <label className="block">
-          <span className="text-sm font-semibold text-[#333333]">אימייל</span>
+          <span className="text-sm font-semibold text-[var(--cherry)]">אימייל</span>
           <input
             type="email"
             autoComplete="email"
@@ -187,7 +187,7 @@ export default function TdeePage() {
         </label>
 
         <label className="block">
-          <span className="text-sm font-semibold text-[#333333]">שם פרטי</span>
+          <span className="text-sm font-semibold text-[var(--cherry)]">שם פרטי</span>
           <input
             type="text"
             autoComplete="given-name"
@@ -199,10 +199,10 @@ export default function TdeePage() {
         </label>
 
         <fieldset className="flex gap-4">
-          <legend className="mb-2 text-sm font-semibold text-[#333333]">
+          <legend className="mb-2 text-sm font-semibold text-[var(--cherry)]">
             מין
           </legend>
-          <label className="flex items-center gap-2 font-medium text-[#333333]">
+          <label className="flex items-center gap-2 font-medium text-[var(--stem)]">
             <input
               type="radio"
               name="gender"
@@ -211,7 +211,7 @@ export default function TdeePage() {
             />
             אישה
           </label>
-          <label className="flex items-center gap-2 font-medium text-[#333333]">
+          <label className="flex items-center gap-2 font-medium text-[var(--stem)]">
             <input
               type="radio"
               name="gender"
@@ -223,7 +223,7 @@ export default function TdeePage() {
         </fieldset>
 
         <label className="block">
-          <span className="text-sm font-semibold text-[#333333]">גיל</span>
+          <span className="text-sm font-semibold text-[var(--cherry)]">גיל</span>
           <input
             type="text"
             inputMode="numeric"
@@ -248,7 +248,7 @@ export default function TdeePage() {
         </label>
 
         <label className="block">
-          <span className="text-sm font-semibold text-[#333333]">
+          <span className="text-sm font-semibold text-[var(--cherry)]">
             גובה (ס״מ)
           </span>
           <input
@@ -278,7 +278,7 @@ export default function TdeePage() {
         </label>
 
         <label className="block">
-          <span className="text-sm font-semibold text-[#333333]">
+          <span className="text-sm font-semibold text-[var(--cherry)]">
             משקל נוכחי (ק״ג)
           </span>
           <input
@@ -305,7 +305,7 @@ export default function TdeePage() {
         </label>
 
         <label className="block">
-          <span className="text-sm font-semibold text-[#333333]">
+          <span className="text-sm font-semibold text-[var(--cherry)]">
             יעד משקל (ק״ג)
           </span>
           <input
@@ -332,7 +332,7 @@ export default function TdeePage() {
         </label>
 
         <label className="block">
-          <span className="text-sm font-semibold text-[#333333]">
+          <span className="text-sm font-semibold text-[var(--cherry)]">
             רמת פעילות
           </span>
           <select
@@ -351,7 +351,7 @@ export default function TdeePage() {
         </label>
 
         <label className="block">
-          <span className="text-sm font-semibold text-[#333333]">
+          <span className="text-sm font-semibold text-[var(--cherry)]">
             גירעון יומי מטרה (קק״ל)
           </span>
           <input
@@ -384,14 +384,14 @@ export default function TdeePage() {
         animate={{ opacity: 1 }}
         transition={{ delay: 0.1 }}
       >
-        <p className="text-sm font-semibold text-[#333333]/85">TDEE משוער</p>
+        <p className="text-sm font-semibold text-[var(--cherry)]/85">TDEE משוער</p>
         <p className="heading-page text-3xl">
           {Math.round(t)} קק״ל
         </p>
-        <p className="mt-3 text-sm font-semibold text-[#333333]/85">
+        <p className="mt-3 text-sm font-semibold text-[var(--cherry)]/85">
           יעד צריכה יומי (אחרי גירעון)
         </p>
-        <p className="text-2xl font-bold text-[#333333]">{target} קק״ל</p>
+        <p className="text-2xl font-bold text-[var(--stem)]">{target} קק״ל</p>
       </motion.div>
 
       {!registered && (

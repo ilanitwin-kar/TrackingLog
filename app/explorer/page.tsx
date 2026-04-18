@@ -160,7 +160,7 @@ export default function ExplorerPage() {
       </motion.h1>
 
       <motion.div
-        className="mb-4 rounded-2xl border-2 border-[#FADADD] bg-[#fffafb] px-4 py-3 text-center text-sm text-[#333333]"
+        className="mb-4 rounded-2xl border-2 border-[var(--border-cherry-soft)] bg-white/90 px-4 py-3 text-center text-sm text-[var(--stem)]"
         initial={{ opacity: 0, y: 6 }}
         animate={{ opacity: 1, y: 0 }}
       >
@@ -173,7 +173,7 @@ export default function ExplorerPage() {
         animate={{ opacity: 1, y: 0 }}
       >
         <label className="block">
-          <span className="mb-1 block text-xs font-semibold text-[#333333]">
+          <span className="mb-1 block text-xs font-semibold text-[var(--cherry)]">
             חיפוש
           </span>
           <input
@@ -189,13 +189,13 @@ export default function ExplorerPage() {
             autoCapitalize="none"
             spellCheck={false}
           />
-          <p className="mt-1 text-[11px] text-[#333333]/60">
+          <p className="mt-1 text-[11px] text-[var(--cherry)]/60">
             התחילי להקליד (לפחות 2 אותיות)
           </p>
         </label>
 
         <div>
-          <span className="mb-1 block text-xs font-semibold text-[#333333]">
+          <span className="mb-1 block text-xs font-semibold text-[var(--cherry)]">
             מיון
           </span>
           <div className="flex flex-wrap gap-2">
@@ -213,8 +213,8 @@ export default function ExplorerPage() {
                 onClick={() => setSort(key)}
                 className={`rounded-full border-2 px-3 py-1.5 text-xs font-semibold transition-colors ${
                   sort === key
-                    ? "border-[#f5c8d4] bg-[#FADADD] text-[#333333]"
-                    : "border-[#FADADD] bg-white text-[#333333]/85"
+                    ? "border-[var(--border-cherry-soft)] bg-cherry-faint text-[var(--cherry)]"
+                    : "border-[var(--border-cherry-soft)] bg-white text-[var(--stem)]/85"
                 }`}
               >
                 {label}
@@ -224,7 +224,7 @@ export default function ExplorerPage() {
         </div>
 
         <label className="block">
-          <span className="mb-1 block text-xs font-semibold text-[#333333]">
+          <span className="mb-1 block text-xs font-semibold text-[var(--cherry)]">
             קטגוריה
           </span>
           <select
@@ -248,9 +248,9 @@ export default function ExplorerPage() {
         transition={{ delay: 0.05 }}
       >
         {loading ? (
-          <p className="text-center text-sm text-[#333333]/80">טוען…</p>
+          <p className="text-center text-sm text-[var(--cherry)]/80">טוען…</p>
         ) : items.length === 0 ? (
-          <p className="text-center text-sm text-[#333333]/80">לא נמצאו פריטים</p>
+          <p className="text-center text-sm text-[var(--cherry)]/80">לא נמצאו פריטים</p>
         ) : (
           <ul className="space-y-2">
             {items.map((row) => {
@@ -259,19 +259,19 @@ export default function ExplorerPage() {
               return (
                 <li
                   key={`${row.id}-${row.name}`}
-                  className="flex flex-wrap items-start gap-2 rounded-2xl border-2 border-[#FADADD] bg-gradient-to-b from-white to-[#fffafd] px-3 py-3 shadow-[inset_0_2px_6px_rgba(255,255,255,0.95),0_4px_0_rgba(0,0,0,0.06),0_10px_28px_rgba(250,218,221,0.42)]"
+                  className="flex flex-wrap items-start gap-2 rounded-2xl border-2 border-[var(--border-cherry-soft)] bg-gradient-to-b from-white to-[#f6faf3] px-3 py-3 shadow-[inset_0_2px_6px_rgba(255,255,255,0.95),0_4px_0_rgba(0,0,0,0.05),0_10px_28px_rgba(155,27,48,0.1)]"
                 >
                   <div className="min-w-0 flex-1">
-                    <p className="flex flex-wrap items-center gap-1.5 font-semibold text-[#333333]">
+                    <p className="flex flex-wrap items-center gap-1.5 font-semibold text-[var(--stem)]">
                       <span className="inline-flex shrink-0" aria-label="מאומת">
                         <IconVerified className="h-4 w-4 text-[#d4a017]" />
                       </span>
                       <span>{row.name}</span>
                     </p>
-                    <p className="mt-0.5 text-xs text-[#333333]/75">
+                    <p className="mt-0.5 text-xs text-[var(--cherry)]/75">
                       {row.category}
                     </p>
-                    <p className="mt-1 text-sm leading-relaxed text-[#333333]/95">
+                    <p className="mt-1 text-sm leading-relaxed text-[var(--stem)]/95">
                       <span className="font-semibold">קלוריות</span>{" "}
                       {Math.round(row.calories)} (ל־100 גרם) ·{" "}
                       <span className="font-semibold">חלבון</span> {row.protein} ·{" "}
@@ -283,7 +283,9 @@ export default function ExplorerPage() {
                     <button
                       type="button"
                       className={`btn-icon-luxury transition-colors ${
-                        fav ? "bg-[#FADADD]/60 ring-2 ring-[#FADADD]" : ""
+                        fav
+                          ? "bg-[var(--cherry-muted)] ring-2 ring-[var(--border-cherry-soft)]"
+                          : ""
                       }`}
                       title="מועדפים"
                       aria-label="מועדפים"
@@ -293,14 +295,16 @@ export default function ExplorerPage() {
                       <IconHeart
                         filled={fav}
                         className={`h-5 w-5 ${
-                          fav ? "text-[#FADADD]" : "text-[#333333]"
+                          fav ? "text-[var(--cherry)]" : "text-[var(--stem)]"
                         }`}
                       />
                     </button>
                     <button
                       type="button"
                       className={`btn-icon-luxury transition-colors ${
-                        inCart ? "bg-[#FADADD]/60 ring-2 ring-[#FADADD]" : ""
+                        inCart
+                          ? "bg-[var(--cherry-muted)] ring-2 ring-[var(--border-cherry-soft)]"
+                          : ""
                       }`}
                       title="רשימת קניות"
                       aria-label="הוספה לרשימת קניות"
@@ -310,7 +314,7 @@ export default function ExplorerPage() {
                       <IconCart
                         filled={inCart}
                         className={`h-5 w-5 ${
-                          inCart ? "text-[#FADADD]" : "text-[#333333]"
+                          inCart ? "text-[var(--cherry)]" : "text-[var(--stem)]"
                         }`}
                       />
                     </button>
@@ -339,7 +343,7 @@ export default function ExplorerPage() {
         {toast && (
           <motion.div
             role="status"
-            className="fixed bottom-24 left-1/2 z-[150] -translate-x-1/2 rounded-2xl border-2 border-[#FADADD] bg-white px-5 py-3 text-center text-sm font-semibold text-[#333333] shadow-lg"
+            className="fixed bottom-24 left-1/2 z-[150] -translate-x-1/2 rounded-2xl border-2 border-[var(--border-cherry-soft)] bg-white px-5 py-3 text-center text-sm font-semibold text-[var(--cherry)] shadow-lg"
             initial={{ opacity: 0, y: 16 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: 8 }}

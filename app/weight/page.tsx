@@ -90,7 +90,7 @@ export default function WeightPage() {
 
       {lostSoFar > 0 && (
         <motion.p
-          className="mb-6 text-center text-xl font-bold text-[#333333]"
+          className="panel-title-cherry mb-6 text-center text-xl"
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
         >
@@ -103,7 +103,7 @@ export default function WeightPage() {
         className="glass-panel mb-6 flex flex-wrap items-end gap-3 p-4"
       >
         <label className="min-w-[8rem] flex-1">
-          <span className="mb-1 block text-sm font-semibold text-[#333333]">
+          <span className="mb-1 block text-sm font-semibold text-[var(--cherry)]">
             משקל (ק״ג)
           </span>
           <input
@@ -125,9 +125,9 @@ export default function WeightPage() {
       </form>
 
       <section className="glass-panel p-4">
-        <h2 className="mb-3 text-lg font-bold text-[#333333]">היסטוריה</h2>
+        <h2 className="panel-title-cherry mb-3 text-lg">היסטוריה</h2>
         {sorted.length === 0 ? (
-          <p className="text-[#333333]/85">
+          <p className="text-[var(--stem)]/85">
             אין עדיין שקילות — הוסיפי רשומה ראשונה
           </p>
         ) : (
@@ -140,18 +140,18 @@ export default function WeightPage() {
                   initial={{ opacity: 0, x: 10 }}
                   animate={{ opacity: 1, x: 0 }}
                   exit={{ opacity: 0 }}
-                  className="flex items-center justify-between rounded-xl border-2 border-[#FADADD] bg-white px-3 py-2"
+                  className="flex items-center justify-between rounded-xl border-2 border-[var(--border-cherry-soft)] bg-white px-3 py-2"
                 >
                   <div>
-                    <span className="font-bold text-[#333333]">{w.kg} ק״ג</span>
-                    <span className="mr-2 text-sm text-[#333333]/75">
+                    <span className="font-bold text-[var(--stem)]">{w.kg} ק״ג</span>
+                    <span className="mr-2 text-sm text-[var(--cherry)]/75">
                       {w.date}
                     </span>
                   </div>
                   <button
                     type="button"
                     onClick={() => remove(w.id)}
-                    className="rounded-lg px-2 py-1 text-sm font-semibold text-[#333333] ring-1 ring-[#FADADD] hover:bg-[#FADADD]/30"
+                    className="rounded-lg px-2 py-1 text-sm font-semibold text-[var(--cherry)] ring-1 ring-[var(--border-cherry-soft)] hover:bg-[var(--cherry-muted)]"
                   >
                     מחק
                   </button>

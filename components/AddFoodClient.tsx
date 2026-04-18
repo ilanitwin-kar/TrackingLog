@@ -16,6 +16,10 @@ import {
 import { optionalMacroGram } from "@/lib/macroGrams";
 import { SEARCH_DEBOUNCE_MS } from "@/lib/searchDebounce";
 import {
+  loadRecentFoodPicks,
+  rememberFoodPick,
+} from "@/lib/recentFoodPicks";
+import {
   type FoodUnit,
   type LogEntry,
   getEntriesForDate,
@@ -107,9 +111,10 @@ export function AddFoodClient() {
   const pickFeedbackTimerRef = useRef<number | null>(null);
   const pickTitleId = useId();
   const searchInputRef = useRef<HTMLInputElement>(null);
+  const [recentPicks, setRecentPicks] = useState<HomeSuggestRow[]>([]);
 
   const pickCubeBaseClass =
-    "flex min-h-[5.5rem] flex-col items-center justify-center gap-1 rounded-xl border-2 px-1.5 py-2.5 text-center text-[11px] font-bold leading-snug text-[#333333] transition-[transform,box-shadow,background-color,border-color] duration-200 ease-out sm:min-h-[5.75rem] sm:text-xs";
+    "flex min-h-[5.5rem] flex-col items-center justify-center gap-1 rounded-xl border-2 px-1.5 py-2.5 text-center text-[11px] font-bold leading-snug text-[var(--cherry)] transition-[transform,box-shadow,background-color,border-color] duration-200 ease-out sm:min-h-[5.75rem] sm:text-xs";
 
   /** מראה קובייה נלחצת (תלת־ממד) — בלי להחליף לצבעי הצלחה */
   const pickCubePressedWhite =
@@ -117,7 +122,7 @@ export function AddFoodClient() {
   const pickCubePressedGold =
     "translate-y-1 border-[#d4b24a] bg-[#fff3dd] shadow-[inset_0_3px_10px_rgba(0,0,0,0.11),inset_0_-1px_0_rgba(255,255,255,0.65)]";
   const pickCubeIdleWhite =
-    "border-[#FADADD] bg-white shadow-[0_2px_5px_rgba(0,0,0,0.06)] hover:bg-[#FADADD]/30";
+    "border-[var(--border-cherry-soft)] bg-white shadow-[0_2px_8px_rgba(155,27,48,0.08)] hover:bg-[var(--cherry-muted)]";
   const pickCubeIdleGold =
     "border-[#e6c65c] bg-[#fff9e6] shadow-[0_2px_5px_rgba(0,0,0,0.06)] hover:bg-[#fff3cc]";
 
@@ -426,6 +431,10 @@ export function AddFoodClient() {
     };
   }, []);
 
+  useEffect(() => {
+    setRecentPicks(loadRecentFoodPicks());
+  }, []);
+
   /** שינוי כמות / משקל יחידה / פריט אחר — מחזיר את הקוביות למצב רגיל */
   useEffect(() => {
     if (!pickModalRow) return;
@@ -439,13 +448,11 @@ export function AddFoodClient() {
     pickModalRow?.id,
   ]);
 
-  function openPickModal(row: HomeSuggestRow, e: React.MouseEvent) {
-    e.preventDefault();
-    e.stopPropagation();
+  function applyPickModalRow(row: HomeSuggestRow): boolean {
     const c100 = row.calories;
     if (c100 == null || !Number.isFinite(c100) || c100 <= 0) {
       setDictFeedback("אין נתוני קלוריות ל־100 ג׳ — בחרי פריט אחר");
-      return;
+      return false;
     }
     setPickPressedDiary(false);
     setPickPressedDictionary(false);
@@ -475,7 +482,21 @@ export function AddFoodClient() {
       setPickUnitsText("1");
       setPickGramsText("100");
     }
-    queueMicrotask(() => searchInputRef.current?.blur());
+    return true;
+  }
+
+  function openPickModal(row: HomeSuggestRow, e: React.MouseEvent) {
+    e.preventDefault();
+    e.stopPropagation();
+    if (applyPickModalRow(row)) {
+      queueMicrotask(() => searchInputRef.current?.blur());
+    }
+  }
+
+  function openPickModalFromRow(row: HomeSuggestRow) {
+    if (applyPickModalRow(row)) {
+      queueMicrotask(() => searchInputRef.current?.blur());
+    }
   }
 
   function closePickModal() {
@@ -577,6 +598,8 @@ export function AddFoodClient() {
     const existing = getEntriesForDate(dateKey);
     saveDayLogEntries(dateKey, [entry, ...existing]);
     saveFoodMemoryKey(row.name.trim(), srv.qty, srv.unit, srv.gramsPerUnit);
+    rememberFoodPick(row);
+    setRecentPicks(loadRecentFoodPicks());
     setPickPressedDiary(true);
     showPickModalNotice("נוסף ליומן. לשנות כמות — ערכי ולחצי שוב; לסיום — ×");
   }
@@ -613,6 +636,8 @@ export function AddFoodClient() {
     const existing = getEntriesForDate(dateKey);
     saveDayLogEntries(dateKey, [entry, ...existing]);
     saveFoodMemoryKey(row.name.trim(), srv.qty, srv.unit, srv.gramsPerUnit);
+    rememberFoodPick(row);
+    setRecentPicks(loadRecentFoodPicks());
     setPickPressedDiary(true);
     setPickPressedDictionary(true);
     setPickPressedBothShortcut(true);
@@ -636,6 +661,8 @@ export function AddFoodClient() {
       gramsPerUnit: srv.gramsPerUnit,
     });
     saveFoodMemoryKey(row.name.trim(), srv.qty, srv.unit, srv.gramsPerUnit);
+    rememberFoodPick(row);
+    setRecentPicks(loadRecentFoodPicks());
     setPickPressedDictionary(true);
     showPickModalNotice(
       `«${row.name.trim()}» במילון. אפשר גם ליומן או כמות אחרת; × לסגירה`
@@ -726,6 +753,17 @@ export function AddFoodClient() {
         gramsPerUnit,
       });
       saveFoodMemoryKey(name, qty, unit, gramsPerUnit);
+      rememberFoodPick({
+        id: `manual:${name}`,
+        name,
+        verified: false,
+        calories: c100,
+        protein: protein100,
+        carbs: carbs100,
+        fat: fat100,
+        source: "local",
+      });
+      setRecentPicks(loadRecentFoodPicks());
       setManualOpen(false);
       resetManualForm();
       router.push(`/?date=${encodeURIComponent(dateKey)}`);
@@ -743,14 +781,14 @@ export function AddFoodClient() {
 
   return (
     <div
-      className="flex h-[100dvh] min-h-0 flex-col overflow-hidden bg-[#fffafb]"
+      className="flex h-[100dvh] min-h-0 flex-col overflow-hidden bg-gradient-to-b from-[#fff8fa] via-white to-[#f6faf3]"
       dir="rtl"
     >
-      <header className="shrink-0 border-b-2 border-[#FADADD] bg-white/95 px-3 py-3 shadow-sm backdrop-blur-sm">
+      <header className="shrink-0 border-b-2 border-[var(--border-cherry-soft)] bg-white/95 px-3 py-3 shadow-sm backdrop-blur-sm">
         <div className="mx-auto flex max-w-lg items-start gap-2">
           <Link
             href={homeLink}
-            className="shrink-0 rounded-xl border-2 border-[#FADADD] bg-white px-3 py-2 text-sm font-semibold text-[#333333] shadow-sm transition hover:bg-[#fff5f7]"
+            className="shrink-0 rounded-xl border-2 border-[var(--border-cherry-soft)] bg-white px-3 py-2 text-sm font-semibold text-[var(--stem)] shadow-sm transition hover:bg-[#fff5f7]"
           >
             חזרה
           </Link>
@@ -759,7 +797,7 @@ export function AddFoodClient() {
             <div className="flex w-full max-w-[20rem] items-center justify-center gap-1.5">
               <button
                 type="button"
-                className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border-2 border-[#FADADD] bg-white text-xl font-bold leading-none text-[#333333] shadow-sm transition hover:bg-[#FADADD]/35 active:scale-[0.97]"
+                className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border-2 border-[var(--border-cherry-soft)] bg-white text-xl font-bold leading-none text-[var(--stem)] shadow-sm transition hover:bg-[var(--cherry-muted)] active:scale-[0.97]"
                 aria-label="יום קודם ביומן"
                 onClick={() => goAddFoodByDelta(-1)}
               >
@@ -773,17 +811,17 @@ export function AddFoodClient() {
                     value={dateKey}
                     max={todayKey}
                     onChange={onPickAddFoodDate}
-                    className="w-full cursor-pointer rounded-lg border-2 border-[#FADADD] bg-white px-1 py-1.5 text-center text-xs font-bold text-[#333333] shadow-sm"
+                    className="w-full cursor-pointer rounded-lg border-2 border-[var(--border-cherry-soft)] bg-white px-1 py-1.5 text-center text-xs font-bold text-[var(--stem)] shadow-sm"
                   />
                 </label>
-                <p className="max-w-full truncate px-1 text-[10px] font-medium text-[#333333]/70">
+                <p className="max-w-full truncate px-1 text-[10px] font-medium text-[var(--cherry)]/70">
                   {addFoodDateLabel}
                 </p>
               </div>
               <button
                 type="button"
                 disabled={!canNextDay}
-                className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border-2 border-[#FADADD] bg-white text-xl font-bold leading-none text-[#333333] shadow-sm transition hover:bg-[#FADADD]/35 active:scale-[0.97] disabled:cursor-not-allowed disabled:opacity-40"
+                className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border-2 border-[var(--border-cherry-soft)] bg-white text-xl font-bold leading-none text-[var(--stem)] shadow-sm transition hover:bg-[var(--cherry-muted)] active:scale-[0.97] disabled:cursor-not-allowed disabled:opacity-40"
                 aria-label="יום הבא ביומן"
                 onClick={() => goAddFoodByDelta(1)}
               >
@@ -797,17 +835,17 @@ export function AddFoodClient() {
 
       <div className="mx-auto flex min-h-0 w-full max-w-lg flex-1 flex-col overflow-hidden px-3 pt-3">
         <label className="shrink-0">
-          <span className="mb-1.5 flex flex-wrap items-center justify-between gap-2 text-sm font-semibold text-[#333333]">
+          <span className="mb-1.5 flex flex-wrap items-center justify-between gap-2 text-sm font-semibold text-[var(--stem)]">
             <span>חיפוש</span>
             <button
               type="button"
-              className="shrink-0 rounded-lg border-2 border-[#FADADD] bg-white px-2.5 py-1 text-xs font-bold text-[#333333] shadow-sm transition hover:bg-[#FADADD]/35"
+              className="shrink-0 rounded-lg border-2 border-[var(--border-cherry-soft)] bg-white px-2.5 py-1 text-xs font-bold text-[var(--stem)] shadow-sm transition hover:bg-[var(--cherry-muted)]"
               onClick={openManualModal}
             >
               הוספה ידנית
             </button>
           </span>
-          <p className="mb-2 text-[11px] font-medium text-[#333333]/65">
+          <p className="mb-2 text-[11px] font-medium text-[var(--cherry)]/65">
             לחצי <span className="font-bold">+</span> ליד מוצר כדי להוסיף ליומן
             (בחירת משקל בגרם).
           </p>
@@ -831,7 +869,7 @@ export function AddFoodClient() {
             />
             <button
               type="button"
-              className="absolute end-2 top-1/2 z-[11] flex h-10 w-10 -translate-y-1/2 items-center justify-center rounded-xl border-2 border-[#fadadd] bg-white text-[#333333] shadow-sm transition hover:bg-[#fadadd]/45"
+              className="absolute end-2 top-1/2 z-[11] flex h-10 w-10 -translate-y-1/2 items-center justify-center rounded-xl border-2 border-[var(--border-cherry-soft)] bg-white text-[var(--stem)] shadow-sm transition hover:bg-[var(--cherry-muted)]"
               aria-label="סריקת ברקוד"
               title="סריקת ברקוד"
               onClick={() => {
@@ -844,23 +882,44 @@ export function AddFoodClient() {
           </div>
         </label>
 
+        {recentPicks.length > 0 && (
+          <div className="mt-3 shrink-0">
+            <p className="mb-1.5 text-xs font-bold text-[var(--cherry)]">
+              נבחרו לאחרונה
+            </p>
+            <div className="flex gap-2 overflow-x-auto pb-1 [-webkit-overflow-scrolling:touch]">
+              {recentPicks.map((r) => (
+                <button
+                  key={`${r.id}-${r.name}`}
+                  type="button"
+                  className="max-w-[11rem] shrink-0 truncate rounded-xl border-2 border-[var(--border-cherry-soft)] bg-white px-3 py-2 text-start text-xs font-semibold text-[var(--stem)] shadow-sm transition hover:bg-[var(--cherry-muted)] active:scale-[0.99]"
+                  title={r.name}
+                  onClick={() => openPickModalFromRow(r)}
+                >
+                  {r.name}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
         <div className="mt-3 min-h-0 flex-1 overflow-y-auto overscroll-y-contain pb-6 [-webkit-overflow-scrolling:touch]">
           {!showResultsPanel ? (
-            <p className="py-8 text-center text-sm text-[#333333]/70">
+            <p className="py-8 text-center text-sm text-[var(--cherry)]/70">
               הקלידי לפחות שתי אותיות כדי לראות תוצאות.
             </p>
           ) : (
-            <div className="space-y-3 rounded-xl border border-[#FADADD]/80 bg-white/90 p-2 shadow-sm">
+            <div className="space-y-3 rounded-xl border border-[var(--border-cherry-soft)] bg-white/90 p-2 shadow-sm">
               {dictFeedback && (
                 <p
-                  className="rounded-lg border border-[#FADADD] bg-[#fff9e6] px-2 py-2 text-center text-xs font-semibold text-[#333333]"
+                  className="rounded-lg border border-[var(--border-cherry-soft)] bg-[#fff9e6] px-2 py-2 text-center text-xs font-semibold text-[var(--stem)]"
                   role="status"
                 >
                   {dictFeedback}
                 </p>
               )}
               {debouncePending && (
-                <p className="px-2 py-1 text-xs text-[#333333]/70" role="status">
+                <p className="px-2 py-1 text-xs text-[var(--cherry)]/70" role="status">
                   ממתינים לסיום הקלדה…
                 </p>
               )}
@@ -868,22 +927,22 @@ export function AddFoodClient() {
               {searchPanelSync && (
                 <>
                   <div>
-                    <p className="px-2 pb-2 text-sm font-bold text-[#333333]">
+                    <p className="px-2 pb-2 text-sm font-bold text-[var(--cherry)]">
                       מאגר אינטליגנציה קלורית
                     </p>
                     {homeSearchLoading && homeLocalRows.length === 0 ? (
                       <div
-                        className="flex items-center gap-2 px-2 py-2 text-sm text-[#333333]"
+                        className="flex items-center gap-2 px-2 py-2 text-sm text-[var(--stem)]"
                         role="status"
                       >
                         <span
-                          className="inline-block size-4 animate-spin rounded-full border-2 border-[#FADADD] border-t-[#c45c74]"
+                          className="inline-block size-4 animate-spin rounded-full border-2 border-[var(--border-cherry-soft)] border-t-[var(--cherry)]"
                           aria-hidden
                         />
                         טוען…
                       </div>
                     ) : homeLocalRows.length === 0 ? (
-                      <p className="px-2 py-1 text-xs text-[#333333]/65">
+                      <p className="px-2 py-1 text-xs text-[var(--cherry)]/65">
                         אין התאמות במאגר
                       </p>
                     ) : (
@@ -895,10 +954,10 @@ export function AddFoodClient() {
                           >
                             <button
                               type="button"
-                              className="suggestion-item flex min-w-0 flex-1 flex-col items-stretch gap-0.5 rounded-lg px-3 py-2.5 text-right transition hover:bg-[#FADADD]/35"
+                              className="suggestion-item flex min-w-0 flex-1 flex-col items-stretch gap-0.5 rounded-lg px-3 py-2.5 text-right transition hover:bg-[var(--cherry-muted)]"
                               onClick={() => setFood(s.name)}
                             >
-                              <span className="flex flex-wrap items-center justify-end gap-x-2 gap-y-1 font-semibold text-[#333333]">
+                              <span className="flex flex-wrap items-center justify-end gap-x-2 gap-y-1 font-semibold text-[var(--stem)]">
                                 <span>{s.name}</span>
                                 {(s.source ?? "local") !== "openFoodFacts" && (
                                   <span
@@ -919,16 +978,16 @@ export function AddFoodClient() {
                                 )}
                               </span>
                               {s.category != null && (
-                                <span className="text-[11px] text-[#333333]/65">
+                                <span className="text-[11px] text-[var(--cherry)]/65">
                                   {s.category}
                                 </span>
                               )}
                               {s.calories != null && (
-                                <span className="text-[11px] text-[#333333]/75">
+                                <span className="text-[11px] text-[var(--cherry)]/75">
                                   קלוריות: {Math.round(s.calories)} · חלבון:{" "}
                                   {s.protein ?? "—"} · פחמימות:{" "}
                                   {s.carbs ?? "—"} · שומן: {s.fat ?? "—"}{" "}
-                                  <span className="text-[#333333]/55">
+                                  <span className="text-[var(--cherry)]/55">
                                     (ל־100 ג׳)
                                   </span>
                                 </span>
@@ -936,7 +995,7 @@ export function AddFoodClient() {
                             </button>
                             <button
                               type="button"
-                              className="flex w-11 shrink-0 flex-col items-center justify-center rounded-lg border-2 border-[#FADADD] bg-white py-1 text-[#333333] shadow-sm transition hover:bg-[#FADADD]/40 active:scale-[0.98]"
+                              className="flex w-11 shrink-0 flex-col items-center justify-center rounded-lg border-2 border-[var(--border-cherry-soft)] bg-white py-1 text-[var(--stem)] shadow-sm transition hover:bg-[var(--cherry-muted)] active:scale-[0.98]"
                               aria-label={`הוספת «${s.name}» — בחירת כמות ויעד`}
                               title="הוספת מזון"
                               onClick={(e) => openPickModal(s, e)}
@@ -949,23 +1008,23 @@ export function AddFoodClient() {
                     )}
                   </div>
 
-                  <div className="border-t border-[#FADADD]/80 pt-2">
-                    <p className="px-2 pb-2 text-sm font-bold text-[#333333]">
+                  <div className="border-t border-[var(--border-cherry-soft)] pt-2">
+                    <p className="px-2 pb-2 text-sm font-bold text-[var(--cherry)]">
                       מאגר עולמי
                     </p>
                     {worldSearchLoading && worldRows.length === 0 ? (
                         <div
-                          className="flex items-center gap-2 px-2 py-2 text-sm text-[#333333]"
+                          className="flex items-center gap-2 px-2 py-2 text-sm text-[var(--stem)]"
                           role="status"
                         >
                           <span
-                            className="inline-block size-4 animate-spin rounded-full border-2 border-[#FADADD] border-t-[#c45c74]"
+                            className="inline-block size-4 animate-spin rounded-full border-2 border-[var(--border-cherry-soft)] border-t-[var(--cherry)]"
                             aria-hidden
                           />
                           טוען מאגר עולמי…
                         </div>
                       ) : worldRows.length === 0 ? (
-                        <p className="px-2 py-1 text-xs text-[#333333]/65">
+                        <p className="px-2 py-1 text-xs text-[var(--cherry)]/65">
                           לא נמצאו תוצאות במאגר העולמי.
                         </p>
                       ) : (
@@ -977,18 +1036,18 @@ export function AddFoodClient() {
                             >
                               <button
                                 type="button"
-                                className="suggestion-item flex min-w-0 flex-1 flex-col items-stretch gap-0.5 rounded-lg px-3 py-2.5 text-right transition hover:bg-[#FADADD]/35"
+                                className="suggestion-item flex min-w-0 flex-1 flex-col items-stretch gap-0.5 rounded-lg px-3 py-2.5 text-right transition hover:bg-[var(--cherry-muted)]"
                                 onClick={() => setFood(s.name)}
                               >
-                                <span className="font-semibold text-[#333333]">
+                                <span className="font-semibold text-[var(--stem)]">
                                   {s.name}
                                 </span>
                                 {s.calories != null && (
-                                  <span className="text-[11px] text-[#333333]/75">
+                                  <span className="text-[11px] text-[var(--cherry)]/75">
                                     קלוריות: {Math.round(s.calories)} · חלבון:{" "}
                                     {s.protein ?? "—"} · פחמימות:{" "}
                                     {s.carbs ?? "—"} · שומן: {s.fat ?? "—"}{" "}
-                                    <span className="text-[#333333]/55">
+                                    <span className="text-[var(--cherry)]/55">
                                       (ל־100 ג׳)
                                     </span>
                                   </span>
@@ -996,7 +1055,7 @@ export function AddFoodClient() {
                               </button>
                               <button
                                 type="button"
-                                className="flex w-11 shrink-0 flex-col items-center justify-center rounded-lg border-2 border-[#FADADD] bg-white py-1 text-[#333333] shadow-sm transition hover:bg-[#FADADD]/40 active:scale-[0.98]"
+                                className="flex w-11 shrink-0 flex-col items-center justify-center rounded-lg border-2 border-[var(--border-cherry-soft)] bg-white py-1 text-[var(--stem)] shadow-sm transition hover:bg-[var(--cherry-muted)] active:scale-[0.98]"
                                 aria-label={`הוספת «${s.name}» — בחירת כמות ויעד`}
                                 title="הוספת מזון"
                                 onClick={(e) => openPickModal(s, e)}
@@ -1013,17 +1072,17 @@ export function AddFoodClient() {
                     homeLocalRows.length === 0 &&
                     !worldSearchLoading &&
                     worldRows.length === 0 && (
-                      <div className="border-t border-[#FADADD]/80 pt-2">
-                        <p className="px-2 pb-2 text-sm font-bold text-[#333333]">
+                      <div className="border-t border-[var(--border-cherry-soft)] pt-2">
+                        <p className="px-2 pb-2 text-sm font-bold text-[var(--cherry)]">
                           השלמה חכמה
                         </p>
                         {geminiInsight.kind === "loading" && (
                           <div
-                            className="flex items-center gap-2 px-2 py-2 text-sm text-[#333333]"
+                            className="flex items-center gap-2 px-2 py-2 text-sm text-[var(--stem)]"
                             role="status"
                           >
                             <span
-                              className="inline-block size-4 animate-spin rounded-full border-2 border-[#FADADD] border-t-[#c45c74]"
+                              className="inline-block size-4 animate-spin rounded-full border-2 border-[var(--border-cherry-soft)] border-t-[var(--cherry)]"
                               aria-hidden
                             />
                             טוען…
@@ -1035,7 +1094,7 @@ export function AddFoodClient() {
                           </p>
                         )}
                         {geminiInsight.kind === "notFood" && (
-                          <p className="px-2 py-1 text-xs text-[#333333]/70">
+                          <p className="px-2 py-1 text-xs text-[var(--cherry)]/70">
                             לא זוהה כמזון.
                           </p>
                         )}
@@ -1043,18 +1102,18 @@ export function AddFoodClient() {
                           <div className="flex items-stretch gap-1.5 px-1">
                             <button
                               type="button"
-                              className="suggestion-item flex min-w-0 flex-1 flex-col items-stretch gap-0.5 rounded-lg py-2 pe-3 ps-2 text-right hover:bg-[#FADADD]/35"
+                              className="suggestion-item flex min-w-0 flex-1 flex-col items-stretch gap-0.5 rounded-lg py-2 pe-3 ps-2 text-right hover:bg-[var(--cherry-muted)]"
                               onClick={() => setFood(geminiInsight.name)}
                             >
-                              <span className="font-semibold text-[#333333]">
+                              <span className="font-semibold text-[var(--stem)]">
                                 {geminiInsight.name}
                               </span>
-                              <span className="text-[11px] text-[#333333]/75">
+                              <span className="text-[11px] text-[var(--cherry)]/75">
                                 קלוריות: {Math.round(geminiInsight.calories)} ·
                                 חלבון: {Math.round(geminiInsight.protein)} ·
                                 פחמימות: {Math.round(geminiInsight.carbs)} ·
                                 שומן: {Math.round(geminiInsight.fat)}
-                                <span className="text-[#333333]/55">
+                                <span className="text-[var(--cherry)]/55">
                                   {" "}
                                   (ל־100 ג׳ — הערכה)
                                 </span>
@@ -1062,7 +1121,7 @@ export function AddFoodClient() {
                             </button>
                             <button
                               type="button"
-                              className="flex w-11 shrink-0 flex-col items-center justify-center rounded-lg border-2 border-[#FADADD] bg-white py-1 text-[#333333] shadow-sm transition hover:bg-[#FADADD]/40 active:scale-[0.98]"
+                              className="flex w-11 shrink-0 flex-col items-center justify-center rounded-lg border-2 border-[var(--border-cherry-soft)] bg-white py-1 text-[var(--stem)] shadow-sm transition hover:bg-[var(--cherry-muted)] active:scale-[0.98]"
                               aria-label={`הוספת «${geminiInsight.name}» — בחירת כמות ויעד`}
                               title="הוספת מזון"
                               onClick={(e) =>
@@ -1085,7 +1144,7 @@ export function AddFoodClient() {
                           </div>
                         )}
                         {geminiInsight.kind === "idle" && (
-                          <p className="px-2 py-1 text-[11px] text-[#333333]/55">
+                          <p className="px-2 py-1 text-[11px] text-[var(--cherry)]/55">
                             ממתין…
                           </p>
                         )}
@@ -1133,52 +1192,52 @@ export function AddFoodClient() {
               <div className="mb-4 flex items-start justify-between gap-3">
                 <h2
                   id={pickTitleId}
-                  className="text-lg font-bold leading-snug text-[#333333]"
+                  className="panel-title-cherry text-lg leading-snug"
                 >
                   הוספת מזון
                 </h2>
                 <button
                   type="button"
                   onClick={closePickModal}
-                  className="rounded-lg border-2 border-[#fadadd] bg-white px-3 py-1.5 text-sm font-semibold text-[#333333] transition hover:bg-[#fadadd]/40"
+                  className="rounded-lg border-2 border-[var(--border-cherry-soft)] bg-white px-3 py-1.5 text-sm font-semibold text-[var(--stem)] transition hover:bg-[var(--cherry-muted)]"
                 >
                   סגירה
                 </button>
               </div>
-              <p className="mb-3 text-base font-semibold text-[#333333]">
+              <p className="mb-3 text-base font-semibold text-[var(--stem)]">
                 {pickModalRow.name}
               </p>
-              <p className="mb-2 text-xs font-semibold text-[#333333]/65">
+              <p className="mb-2 text-xs font-semibold text-[var(--stem)]/65">
                 ל־100 גרם
               </p>
-              <div className="mb-4 grid grid-cols-2 gap-2 rounded-xl border border-[#FADADD]/90 bg-white/80 px-3 py-3 text-sm">
+              <div className="mb-4 grid grid-cols-2 gap-2 rounded-xl border border-[var(--border-cherry-soft)] bg-white/80 px-3 py-3 text-sm">
                 <div>
-                  <span className="text-[#333333]/60">קלוריות</span>
-                  <p className="font-bold text-[#333333]">
+                  <span className="text-[var(--cherry)]/65">קלוריות</span>
+                  <p className="font-bold text-[var(--stem)]">
                     {Math.round(pickModalRow.calories ?? 0)} קק״ל
                   </p>
                 </div>
                 <div>
-                  <span className="text-[#333333]/60">חלבון</span>
-                  <p className="font-bold text-[#333333]">
+                  <span className="text-[var(--cherry)]/65">חלבון</span>
+                  <p className="font-bold text-[var(--stem)]">
                     {pickModalRow.protein ?? "—"} ג׳
                   </p>
                 </div>
                 <div>
-                  <span className="text-[#333333]/60">פחמימות</span>
-                  <p className="font-bold text-[#333333]">
+                  <span className="text-[var(--cherry)]/65">פחמימות</span>
+                  <p className="font-bold text-[var(--stem)]">
                     {pickModalRow.carbs ?? "—"} ג׳
                   </p>
                 </div>
                 <div>
-                  <span className="text-[#333333]/60">שומן</span>
-                  <p className="font-bold text-[#333333]">
+                  <span className="text-[var(--cherry)]/65">שומן</span>
+                  <p className="font-bold text-[var(--stem)]">
                     {pickModalRow.fat ?? "—"} ג׳
                   </p>
                 </div>
               </div>
               <label className="mb-3 block">
-                <span className="mb-1 block text-xs font-semibold text-[#333333]">
+                <span className="mb-1 block text-xs font-semibold text-[var(--stem)]">
                   משקל יחידה (גרם, אופציונלי)
                 </span>
                 <input
@@ -1206,7 +1265,7 @@ export function AddFoodClient() {
               </label>
               {pickUnitWeightG != null ? (
                 <label className="mb-3 block">
-                  <span className="mb-1 block text-xs font-semibold text-[#333333]">
+                  <span className="mb-1 block text-xs font-semibold text-[var(--stem)]">
                     כמות יחידות
                   </span>
                   <input
@@ -1231,7 +1290,7 @@ export function AddFoodClient() {
                 </label>
               ) : (
                 <label className="mb-3 block">
-                  <span className="mb-1 block text-xs font-semibold text-[#333333]">
+                  <span className="mb-1 block text-xs font-semibold text-[var(--stem)]">
                     משקל המנה (גרם)
                   </span>
                   <input
@@ -1269,7 +1328,7 @@ export function AddFoodClient() {
                   />
                 </label>
               )}
-              <div className="mb-4 rounded-xl border border-[#e6c65c]/50 bg-[#fff9e6] px-3 py-2.5 text-sm text-[#333333]">
+              <div className="mb-4 rounded-xl border border-[#e6c65c]/50 bg-[#fff9e6] px-3 py-2.5 text-sm text-[var(--stem)]">
                 <p className="font-bold">
                   {pickUnitWeightG != null
                     ? `למנה: ${pickUnitsQty} יחידות (סה״כ ${pickEffectiveTotalGrams} ג׳)`
@@ -1367,7 +1426,7 @@ export function AddFoodClient() {
               <div className="mb-4 flex items-start justify-between gap-3">
                 <h2
                   id={manualTitleId}
-                  className="text-lg font-bold leading-tight text-[#333333]"
+                  className="panel-title-cherry text-lg leading-tight"
                 >
                   הוספה ידנית
                 </h2>
@@ -1377,14 +1436,14 @@ export function AddFoodClient() {
                     setManualOpen(false);
                     resetManualForm();
                   }}
-                  className="rounded-lg border-2 border-[#fadadd] bg-white px-3 py-1.5 text-sm font-semibold text-[#333333] transition hover:bg-[#fadadd]/40"
+                  className="rounded-lg border-2 border-[var(--border-cherry-soft)] bg-white px-3 py-1.5 text-sm font-semibold text-[var(--stem)] transition hover:bg-[var(--cherry-muted)]"
                 >
                   סגירה
                 </button>
               </div>
               <form className="space-y-3" onSubmit={(e) => void handleManualSubmit(e)}>
                 <label className="block">
-                  <span className="mb-1 block text-xs font-semibold text-[#333333]">
+                  <span className="mb-1 block text-xs font-semibold text-[var(--stem)]">
                     שם המזון
                   </span>
                   <input
@@ -1396,7 +1455,7 @@ export function AddFoodClient() {
                   />
                 </label>
                 <label className="block">
-                  <span className="mb-1 block text-xs font-semibold text-[#333333]">
+                  <span className="mb-1 block text-xs font-semibold text-[var(--stem)]">
                     קלוריות ל־100 ג׳
                   </span>
                   <input
@@ -1413,7 +1472,7 @@ export function AddFoodClient() {
                 </label>
                 <div className="grid grid-cols-3 gap-2">
                   <label className="block">
-                    <span className="mb-1 block text-[10px] font-semibold text-[#333333]">
+                    <span className="mb-1 block text-[10px] font-semibold text-[var(--stem)]">
                       חלבון /100ג
                     </span>
                     <input
@@ -1429,7 +1488,7 @@ export function AddFoodClient() {
                     />
                   </label>
                   <label className="block">
-                    <span className="mb-1 block text-[10px] font-semibold text-[#333333]">
+                    <span className="mb-1 block text-[10px] font-semibold text-[var(--stem)]">
                       פחמימות /100ג
                     </span>
                     <input
@@ -1445,7 +1504,7 @@ export function AddFoodClient() {
                     />
                   </label>
                   <label className="block">
-                    <span className="mb-1 block text-[10px] font-semibold text-[#333333]">
+                    <span className="mb-1 block text-[10px] font-semibold text-[var(--stem)]">
                       שומן /100ג
                     </span>
                     <input
@@ -1462,7 +1521,7 @@ export function AddFoodClient() {
                   </label>
                 </div>
                 <label className="block">
-                  <span className="mb-1 block text-xs font-semibold text-[#333333]">
+                  <span className="mb-1 block text-xs font-semibold text-[var(--stem)]">
                     משקל יחידה (גרם, אופציונלי)
                   </span>
                   <input
@@ -1488,7 +1547,7 @@ export function AddFoodClient() {
                 </label>
                 {manUnitWeightG != null ? (
                   <label className="block">
-                    <span className="mb-1 block text-xs font-semibold text-[#333333]">
+                    <span className="mb-1 block text-xs font-semibold text-[var(--stem)]">
                       כמות יחידות
                     </span>
                     <input
@@ -1511,7 +1570,7 @@ export function AddFoodClient() {
                   </label>
                 ) : (
                   <label className="block">
-                    <span className="mb-1 block text-xs font-semibold text-[#333333]">
+                    <span className="mb-1 block text-xs font-semibold text-[var(--stem)]">
                       משקל המנה (גרם)
                     </span>
                     <input
