@@ -81,7 +81,7 @@ export default function WeightPage() {
       )}
 
       <motion.h1
-        className="mb-2 text-center text-3xl font-extrabold text-[#333333] md:text-4xl"
+        className="heading-page mb-2 text-center text-3xl md:text-4xl"
         initial={{ opacity: 0, y: -8 }}
         animate={{ opacity: 1, y: 0 }}
       >
@@ -117,7 +117,7 @@ export default function WeightPage() {
         </label>
         <motion.button
           type="submit"
-          className="btn-gold rounded-xl px-6 py-3 font-bold"
+          className="btn-stem rounded-xl px-6 py-3 font-bold"
           whileTap={{ scale: 0.98 }}
         >
           שמירה

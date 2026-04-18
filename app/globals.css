@@ -4,6 +4,13 @@
   --bg: #ffffff;
   --accent: #fadadd;
   --accent-deep: #f5c8d4;
+  --cherry: #9b1b30;
+  --cherry-muted: rgba(155, 27, 48, 0.14);
+  --border-cherry-soft: color-mix(in srgb, var(--cherry) 18%, var(--accent) 82%);
+  --stem: #4a7c23;
+  --stem-mid: #5d8c3a;
+  --stem-deep: #3d6b28;
+  --stem-shadow: rgba(74, 124, 35, 0.38);
   --text: #333333;
 }
 
@@ -26,11 +33,20 @@ input[type="checkbox"] {
 }
 
 @layer utilities {
+  /** כותרות מסך ראשי — דובדבן */
   .app-title {
-    color: #333333;
+    color: var(--cherry);
     font-weight: 800;
     letter-spacing: -0.02em;
     line-height: 1.1;
+  }
+
+  /** כותרות עמוד (h1) */
+  .heading-page {
+    color: var(--cherry);
+    font-weight: 800;
+    letter-spacing: -0.02em;
+    line-height: 1.15;
   }
 
   .title-glow {
@@ -54,19 +70,48 @@ input[type="checkbox"] {
   .glass-panel {
     border-radius: 1rem;
     background-color: #ffffff;
-    border: 2px solid #fadadd;
-    box-shadow: 0 4px 24px rgba(250, 218, 221, 0.45);
+    border: 2px solid var(--border-cherry-soft);
+    box-shadow:
+      0 4px 24px rgba(250, 218, 221, 0.42),
+      0 0 0 1px rgba(155, 27, 48, 0.06);
   }
 
+  /** כפתורי הדגשה רכים — ורוד עדין */
   .btn-gold {
-    background-color: #fadadd;
-    color: #333333;
-    border: 2px solid #f5c8d4;
-    box-shadow: 0 2px 12px rgba(250, 218, 221, 0.7);
+    background: linear-gradient(to bottom, #fff6f8, var(--accent));
+    color: var(--text);
+    border: 2px solid var(--accent-deep);
+    box-shadow: 0 2px 12px rgba(250, 218, 221, 0.65);
+  }
+
+  .btn-gold:hover {
+    filter: brightness(1.03);
   }
 
   .btn-gold:active {
     box-shadow: 0 1px 6px rgba(250, 218, 221, 0.5);
+  }
+
+  /** שמירה / אישור עיקרי — ירוק גיבעול (כמו בענף הדובדבן) */
+  .btn-stem {
+    background: linear-gradient(to bottom, var(--stem-mid), var(--stem));
+    color: #ffffff;
+    border: 2px solid var(--stem-deep);
+    box-shadow: 0 2px 14px var(--stem-shadow);
+  }
+
+  .btn-stem:hover {
+    filter: brightness(1.06);
+  }
+
+  .btn-stem:active {
+    box-shadow: 0 1px 8px var(--stem-shadow);
+  }
+
+  .btn-stem:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+    filter: none;
   }
 
   .input-luxury-search {
@@ -201,9 +246,15 @@ input[type="checkbox"] {
   }
 
   .luxury-hero-title {
-    color: #333333;
+    color: var(--cherry);
     font-weight: 800;
     text-shadow: none;
+  }
+
+  /** כותרת משנה בדיאלוגים — דובדבן */
+  .panel-title-cherry {
+    color: var(--cherry);
+    font-weight: 700;
   }
 }
 

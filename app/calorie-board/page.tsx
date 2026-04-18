@@ -45,7 +45,7 @@ export default function CalorieBoardPage() {
       <BackToMenuButton />
 
       <motion.h1
-        className="mb-6 text-center text-2xl font-extrabold text-[#333333] md:text-3xl"
+        className="heading-page mb-6 text-center text-2xl md:text-3xl"
         initial={{ opacity: 0, y: -8 }}
         animate={{ opacity: 1, y: 0 }}
       >

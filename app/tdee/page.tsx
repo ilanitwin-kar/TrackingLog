@@ -7,6 +7,7 @@ import {
   type UserProfile,
   isProfileFormValid,
   loadProfile,
+  markWelcomeLeft,
   saveProfile,
 } from "@/lib/storage";
 import { BackToMenuButton } from "@/components/BackToMenuButton";
@@ -141,6 +142,7 @@ export default function TdeePage() {
 
   function finishRegistration() {
     if (!canFinishRegistration) return;
+    markWelcomeLeft();
     setP((prev) => {
       if (!prev) return prev;
       const next: UserProfile = { ...prev, onboardingComplete: true };
@@ -155,7 +157,7 @@ export default function TdeePage() {
       <BackToMenuButton />
 
       <motion.h1
-        className="mb-2 text-center text-3xl font-extrabold text-[#333333] md:text-4xl"
+        className="heading-page mb-2 text-center text-3xl md:text-4xl"
         initial={{ opacity: 0, y: -8 }}
         animate={{ opacity: 1, y: 0 }}
       >
@@ -383,7 +385,7 @@ export default function TdeePage() {
         transition={{ delay: 0.1 }}
       >
         <p className="text-sm font-semibold text-[#333333]/85">TDEE משוער</p>
-        <p className="text-3xl font-extrabold text-[#333333]">
+        <p className="heading-page text-3xl">
           {Math.round(t)} קק״ל
         </p>
         <p className="mt-3 text-sm font-semibold text-[#333333]/85">
@@ -400,7 +402,7 @@ export default function TdeePage() {
         >
           <button
             type="button"
-            className="btn-gold w-full rounded-xl py-3 text-base font-semibold disabled:cursor-not-allowed disabled:opacity-45"
+            className="btn-stem w-full rounded-xl py-3 text-base font-semibold disabled:cursor-not-allowed disabled:opacity-45"
             disabled={!canFinishRegistration}
             onClick={finishRegistration}
           >

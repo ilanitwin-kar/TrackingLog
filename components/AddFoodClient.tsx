@@ -755,7 +755,7 @@ export function AddFoodClient() {
             חזרה
           </Link>
           <div className="flex min-w-0 flex-1 flex-col items-center gap-2 text-center">
-            <h1 className="text-lg font-extrabold text-[#333333]">הוסף מזון</h1>
+            <h1 className="panel-title-cherry text-lg">הוסף מזון</h1>
             <div className="flex w-full max-w-[20rem] items-center justify-center gap-1.5">
               <button
                 type="button"
@@ -1531,7 +1531,7 @@ export function AddFoodClient() {
                 <motion.button
                   type="submit"
                   disabled={manLoading}
-                  className="btn-gold w-full rounded-xl py-3 text-base font-bold disabled:opacity-50"
+                  className="btn-stem w-full rounded-xl py-3 text-base font-bold disabled:opacity-50"
                   whileTap={{ scale: 0.98 }}
                 >
                   {manLoading ? "שומר…" : "הוספה ליומן"}

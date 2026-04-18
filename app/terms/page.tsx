@@ -12,7 +12,7 @@ export default function TermsPage() {
       >
         ← חזרה
       </Link>
-      <h1 className="mt-6 text-2xl font-extrabold text-[#333]">
+      <h1 className="heading-page mt-6 text-2xl">
         תנאי שימוש — Cherry
       </h1>
       <p className="mt-4 text-sm leading-relaxed text-[#333]/90">

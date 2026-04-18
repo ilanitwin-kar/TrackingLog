@@ -9,6 +9,18 @@ import {
   useRef,
   useState,
 } from "react";
+import {
+  activateDevAdminBypass,
+  registerAccount,
+  seedDevAdminProfileIfNeeded,
+  startSession,
+  verifyLogin,
+} from "@/lib/localAuth";
+import {
+  isRegistrationComplete,
+  loadProfile,
+  markWelcomeLeft,
+} from "@/lib/storage";
 
 const LANG_KEY = "cj_welcome_lang";
 
@@ -31,6 +43,22 @@ type Copy = {
   toastCopied: string;
   shareSoon: string;
   forgotPassword: string;
+  registerTitle: string;
+  loginTitle: string;
+  emailLabel: string;
+  passwordLabel: string;
+  confirmPasswordLabel: string;
+  submitRegister: string;
+  submitLogin: string;
+  cancel: string;
+  devAdminOnly: string;
+  errEmail: string;
+  errPasswordShort: string;
+  errPasswordMismatch: string;
+  errWrongCreds: string;
+  errAlreadyRegistered: string;
+  loggingIn: string;
+  registering: string;
 };
 
 const COPY: Record<Lang, Copy> = {
@@ -67,6 +95,22 @@ const COPY: Record<Lang, Copy> = {
     toastCopied: "הועתק ללוח",
     shareSoon: "בקרוב",
     forgotPassword: "שכחתי סיסמה",
+    registerTitle: "יצירת חשבון",
+    loginTitle: "התחברות",
+    emailLabel: "אימייל",
+    passwordLabel: "סיסמה",
+    confirmPasswordLabel: "אימות סיסמה",
+    submitRegister: "המשך למילוי פרטים",
+    submitLogin: "כניסה",
+    cancel: "ביטול",
+    devAdminOnly: "כניסת מנהלת (פיתוח בלבד)",
+    errEmail: "נא להזין כתובת אימייל תקינה",
+    errPasswordShort: "הסיסמה חייבת להכיל לפחות 6 תווים",
+    errPasswordMismatch: "הסיסמאות אינן תואמות",
+    errWrongCreds: "אימייל או סיסמה שגויים",
+    errAlreadyRegistered: "כבר קיים חשבון במכשיר — התחברי",
+    loggingIn: "מתחברת…",
+    registering: "יוצרת חשבון…",
   },
   en: {
     slogan: "A tracking journal from Caloric Intelligence",
@@ -101,6 +145,22 @@ const COPY: Record<Lang, Copy> = {
     toastCopied: "Copied to clipboard",
     shareSoon: "Coming soon",
     forgotPassword: "Forgot password?",
+    registerTitle: "Create account",
+    loginTitle: "Log in",
+    emailLabel: "Email",
+    passwordLabel: "Password",
+    confirmPasswordLabel: "Confirm password",
+    submitRegister: "Continue to profile setup",
+    submitLogin: "Sign in",
+    cancel: "Cancel",
+    devAdminOnly: "Admin entry (development only)",
+    errEmail: "Please enter a valid email address",
+    errPasswordShort: "Password must be at least 6 characters",
+    errPasswordMismatch: "Passwords do not match",
+    errWrongCreds: "Wrong email or password",
+    errAlreadyRegistered: "An account already exists on this device — log in",
+    loggingIn: "Signing in…",
+    registering: "Creating account…",
   },
 };
 
@@ -255,6 +315,12 @@ export function WelcomeScreen() {
   const [slideIndex, setSlideIndex] = useState(0);
   const [manualOpen, setManualOpen] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
+  const [authOpen, setAuthOpen] = useState<null | "signup" | "login">(null);
+  const [authEmail, setAuthEmail] = useState("");
+  const [authPassword, setAuthPassword] = useState("");
+  const [authConfirm, setAuthConfirm] = useState("");
+  const [authBusy, setAuthBusy] = useState(false);
+  const [authError, setAuthError] = useState<string | null>(null);
   const scrollerRef = useRef<HTMLDivElement>(null);
 
   const t = COPY[lang];
@@ -331,8 +397,65 @@ export function WelcomeScreen() {
   }, [lang, showToast, t.toastCopied]);
 
   const cherryWordClass =
-    "text-4xl font-extrabold tracking-tight sm:text-5xl";
-  const cherryColor = { color: "#9b1b30" };
+    "heading-page text-4xl tracking-tight sm:text-5xl";
+
+  function openAuth(mode: "signup" | "login") {
+    setAuthEmail("");
+    setAuthPassword("");
+    setAuthConfirm("");
+    setAuthError(null);
+    setAuthOpen(mode);
+  }
+
+  function closeAuth() {
+    setAuthOpen(null);
+    setAuthBusy(false);
+    setAuthError(null);
+  }
+
+  async function submitSignup() {
+    setAuthError(null);
+    if (authPassword !== authConfirm) {
+      setAuthError(t.errPasswordMismatch);
+      return;
+    }
+    setAuthBusy(true);
+    try {
+      const r = await registerAccount(authEmail, authPassword);
+      if (!r.ok) {
+        if (r.error === "email") setAuthError(t.errEmail);
+        else if (r.error === "short") setAuthError(t.errPasswordShort);
+        else setAuthError(t.errAlreadyRegistered);
+        return;
+      }
+      startSession();
+      markWelcomeLeft();
+      closeAuth();
+      router.push("/tdee");
+    } finally {
+      setAuthBusy(false);
+    }
+  }
+
+  async function submitLoginForm() {
+    setAuthError(null);
+    setAuthBusy(true);
+    try {
+      const ok = await verifyLogin(authEmail, authPassword);
+      if (!ok) {
+        setAuthError(t.errWrongCreds);
+        return;
+      }
+      startSession();
+      markWelcomeLeft();
+      closeAuth();
+      const profile = loadProfile();
+      if (isRegistrationComplete(profile)) router.push("/");
+      else router.push("/tdee");
+    } finally {
+      setAuthBusy(false);
+    }
+  }
 
   return (
     <div
@@ -372,9 +495,7 @@ export function WelcomeScreen() {
 
       <div className="mt-2 flex flex-col items-center text-center">
         <CherryMark className="h-24 w-28 sm:h-28 sm:w-32" />
-        <h1 className={cherryWordClass} style={cherryColor}>
-          Cherry
-        </h1>
+        <h1 className={cherryWordClass}>Cherry</h1>
         <p className="mt-1 max-w-sm text-sm font-medium text-[#333]/85">
           {t.slogan}
         </p>
@@ -424,7 +545,7 @@ export function WelcomeScreen() {
       <div className="mt-6 space-y-3">
         <button
           type="button"
-          onClick={() => router.push("/tdee")}
+          onClick={() => openAuth("signup")}
           className="w-full rounded-2xl bg-[#9b1b30] py-3.5 text-center text-base font-bold text-white shadow-[0_4px_20px_rgba(155,27,48,0.35)] transition active:scale-[0.99]"
         >
           {t.signup}
@@ -432,7 +553,7 @@ export function WelcomeScreen() {
         <div className="flex items-stretch gap-2">
           <button
             type="button"
-            onClick={() => router.push("/tdee")}
+            onClick={() => openAuth("login")}
             className="min-w-0 flex-1 rounded-2xl border-2 border-[#9b1b30]/35 bg-white py-3 text-center text-base font-semibold text-[#9b1b30] transition active:scale-[0.99]"
           >
             {t.login}
@@ -475,8 +596,113 @@ export function WelcomeScreen() {
         >
           {t.howItWorks}
         </button>
+        {process.env.NODE_ENV === "development" && (
+          <button
+            type="button"
+            onClick={() => {
+              seedDevAdminProfileIfNeeded();
+              activateDevAdminBypass();
+              markWelcomeLeft();
+              router.replace("/");
+            }}
+            className="w-full rounded-xl border-2 border-dashed border-[rgba(155,27,48,0.38)] bg-[#fffafb] py-2.5 text-center text-xs font-semibold text-[#9b1b30]"
+          >
+            {t.devAdminOnly}
+          </button>
+        )}
         <p className="text-[10px] text-[#333]/45">Cherry v{APP_VERSION}</p>
       </div>
+
+      {authOpen && (
+        <div
+          className="fixed inset-0 z-[210] flex items-end justify-center bg-black/45 p-4 sm:items-center"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="auth-dialog-title"
+        >
+          <div
+            className="glass-panel w-full max-w-md rounded-2xl border-2 border-[var(--border-cherry-soft)] p-5 shadow-xl"
+            dir={dir}
+          >
+            <h2 id="auth-dialog-title" className="panel-title-cherry text-lg">
+              {authOpen === "signup" ? t.registerTitle : t.loginTitle}
+            </h2>
+            <div className="mt-4 space-y-3">
+              <label className="block">
+                <span className="mb-1 block text-xs font-semibold text-[#333]/80">
+                  {t.emailLabel}
+                </span>
+                <input
+                  type="email"
+                  autoComplete="email"
+                  value={authEmail}
+                  onChange={(e) => setAuthEmail(e.target.value)}
+                  className="input-luxury-search rounded-xl border-2 border-[var(--border-cherry-soft)] px-3 py-2.5 text-sm"
+                />
+              </label>
+              <label className="block">
+                <span className="mb-1 block text-xs font-semibold text-[#333]/80">
+                  {t.passwordLabel}
+                </span>
+                <input
+                  type="password"
+                  autoComplete={
+                    authOpen === "signup" ? "new-password" : "current-password"
+                  }
+                  value={authPassword}
+                  onChange={(e) => setAuthPassword(e.target.value)}
+                  className="input-luxury-search rounded-xl border-2 border-[var(--border-cherry-soft)] px-3 py-2.5 text-sm"
+                />
+              </label>
+              {authOpen === "signup" && (
+                <label className="block">
+                  <span className="mb-1 block text-xs font-semibold text-[#333]/80">
+                    {t.confirmPasswordLabel}
+                  </span>
+                  <input
+                    type="password"
+                    autoComplete="new-password"
+                    value={authConfirm}
+                    onChange={(e) => setAuthConfirm(e.target.value)}
+                    className="input-luxury-search rounded-xl border-2 border-[var(--border-cherry-soft)] px-3 py-2.5 text-sm"
+                  />
+                </label>
+              )}
+            </div>
+            {authError && (
+              <p className="mt-3 text-sm font-medium text-[#9b1b30]" role="alert">
+                {authError}
+              </p>
+            )}
+            <div className="mt-5 flex flex-col gap-2 sm:flex-row-reverse">
+              <button
+                type="button"
+                disabled={authBusy}
+                onClick={() =>
+                  void (authOpen === "signup" ? submitSignup() : submitLoginForm())
+                }
+                className="btn-stem flex-1 rounded-xl py-3 text-center text-sm font-bold disabled:opacity-50"
+              >
+                {authBusy
+                  ? authOpen === "signup"
+                    ? t.registering
+                    : t.loggingIn
+                  : authOpen === "signup"
+                    ? t.submitRegister
+                    : t.submitLogin}
+              </button>
+              <button
+                type="button"
+                disabled={authBusy}
+                onClick={closeAuth}
+                className="btn-gold flex-1 rounded-xl py-3 text-center text-sm font-bold"
+              >
+                {t.cancel}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {manualOpen && (
         <div
@@ -489,10 +715,7 @@ export function WelcomeScreen() {
             className="max-h-[85dvh] w-full max-w-md overflow-y-auto rounded-2xl border-2 border-[#fadadd] bg-white p-5 shadow-xl"
             dir={dir}
           >
-            <h2
-              id="manual-title"
-              className="text-lg font-extrabold text-[#333]"
-            >
+            <h2 id="manual-title" className="panel-title-cherry text-lg">
               {t.manualTitle}
             </h2>
             <ol className="mt-4 list-none space-y-3 text-[#333]">
@@ -508,7 +731,7 @@ export function WelcomeScreen() {
             <button
               type="button"
               onClick={() => setManualOpen(false)}
-              className="btn-gold mt-6 w-full rounded-xl py-2.5 text-center text-sm font-bold text-[#333]"
+              className="btn-gold mt-6 w-full rounded-xl py-2.5 text-center text-sm font-bold"
             >
               {t.manualClose}
             </button>

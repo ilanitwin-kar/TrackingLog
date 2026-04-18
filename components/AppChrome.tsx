@@ -3,7 +3,25 @@
 import { usePathname, useRouter } from "next/navigation";
 import { Suspense, useEffect, useState } from "react";
 import { BottomNav } from "@/components/BottomNav";
-import { isRegistrationComplete, loadProfile } from "@/lib/storage";
+import {
+  hasAuthRecord,
+  isDevAdminBypassActive,
+  isSessionActive,
+} from "@/lib/localAuth";
+import {
+  hasLeftWelcome,
+  isRegistrationComplete,
+  loadProfile,
+  markWelcomeLeft,
+} from "@/lib/storage";
+
+function isStandalonePublicPath(pathname: string): boolean {
+  return (
+    pathname.startsWith("/forgot-password") ||
+    pathname.startsWith("/terms") ||
+    pathname.startsWith("/privacy")
+  );
+}
 
 export function AppChrome({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
@@ -11,9 +29,16 @@ export function AppChrome({ children }: { children: React.ReactNode }) {
   const [hideNav, setHideNav] = useState(false);
   const [regReady, setRegReady] = useState(false);
   const [regOk, setRegOk] = useState(false);
+  const [authTick, setAuthTick] = useState(0);
 
   useEffect(() => {
-    if (pathname === "/add-food") {
+    const onAuth = () => setAuthTick((n) => n + 1);
+    window.addEventListener("cj-auth-changed", onAuth);
+    return () => window.removeEventListener("cj-auth-changed", onAuth);
+  }, []);
+
+  useEffect(() => {
+    if (pathname === "/add-food" || pathname === "/welcome") {
       setHideNav(true);
       return;
     }
@@ -26,7 +51,7 @@ export function AppChrome({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     const sync = () => {
-      if (pathname === "/add-food") {
+      if (pathname === "/add-food" || pathname === "/welcome") {
         setHideNav(true);
         return;
       }
@@ -38,22 +63,72 @@ export function AppChrome({ children }: { children: React.ReactNode }) {
   }, [pathname]);
 
   useEffect(() => {
-    if (pathname === "/tdee") {
+    const profile = loadProfile();
+    if (
+      !hasLeftWelcome() &&
+      (profile.onboardingComplete === true ||
+        (profile.age >= 12 && profile.weightKg > 0))
+    ) {
+      markWelcomeLeft();
+    }
+    const complete = isRegistrationComplete(profile);
+    const welcomeDone = hasLeftWelcome();
+
+    if (pathname === "/welcome") {
       setRegOk(true);
       setRegReady(true);
       return;
     }
-    if (!isRegistrationComplete(loadProfile())) {
-      router.replace("/tdee");
+
+    if (isStandalonePublicPath(pathname)) {
+      setRegOk(true);
+      setRegReady(true);
+      return;
+    }
+
+    const devBypass = isDevAdminBypassActive();
+    const session = isSessionActive();
+    const authExists = hasAuthRecord();
+    const legacyUnlock = !authExists && isRegistrationComplete(profile);
+
+    if (!devBypass && !session && !legacyUnlock) {
+      router.replace("/welcome");
       setRegOk(false);
       setRegReady(true);
       return;
     }
-    setRegOk(true);
-    setRegReady(true);
-  }, [pathname, router]);
 
-  if (!regReady) {
+    if (pathname === "/tdee") {
+      if (!complete && !welcomeDone) {
+        router.replace("/welcome");
+        setRegOk(false);
+        setRegReady(true);
+        return;
+      }
+      setRegOk(true);
+      setRegReady(true);
+      return;
+    }
+
+    if (complete) {
+      setRegOk(true);
+      setRegReady(true);
+      return;
+    }
+
+    if (!welcomeDone) {
+      router.replace("/welcome");
+      setRegOk(false);
+      setRegReady(true);
+      return;
+    }
+
+    router.replace("/tdee");
+    setRegOk(false);
+    setRegReady(true);
+  }, [pathname, router, authTick]);
+
+  if (!regReady || !regOk) {
     return (
       <div className="min-h-dvh pb-6">
         <div className="p-8 text-center text-lg text-[#333333]" dir="rtl">
@@ -61,9 +136,6 @@ export function AppChrome({ children }: { children: React.ReactNode }) {
         </div>
       </div>
     );
-  }
-  if (!regOk && pathname !== "/tdee") {
-    return null;
   }
 
   return (

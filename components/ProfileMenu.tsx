@@ -5,19 +5,49 @@ import { AnimatePresence, motion } from "framer-motion";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { IconUser } from "@/components/Icons";
-import { loadProfile, saveProfile } from "@/lib/storage";
+import {
+  clearAuthCompletely,
+  clearDevAdminBypass,
+  clearSession,
+  isDevAdminBypassActive,
+  isSessionActive,
+} from "@/lib/localAuth";
+import {
+  clearWelcomeLeft,
+  getDefaultUserProfile,
+  saveProfile,
+} from "@/lib/storage";
 
 export function ProfileMenu() {
   const router = useRouter();
   const [open, setOpen] = useState(false);
+  const [showLogout, setShowLogout] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
 
-  // פונקציה שמחזירה את המשתמש למסך הכניסה
+  useEffect(() => {
+    function syncLogout() {
+      setShowLogout(isSessionActive() || isDevAdminBypassActive());
+    }
+    syncLogout();
+    window.addEventListener("cj-auth-changed", syncLogout);
+    return () => window.removeEventListener("cj-auth-changed", syncLogout);
+  }, []);
+
+  /** התחלה מחדש: מסך כניסה ואז שוב מילוי פרטים (כמו משתמש חדש) */
   function goToWelcomeScreen() {
-    const p = loadProfile();
-    saveProfile({ ...p, onboardingComplete: false });
+    clearDevAdminBypass();
+    clearAuthCompletely();
+    clearWelcomeLeft();
+    saveProfile(getDefaultUserProfile());
     setOpen(false);
     router.push("/welcome");
+  }
+
+  function logout() {
+    clearDevAdminBypass();
+    clearSession();
+    setOpen(false);
+    router.replace("/welcome");
   }
 
   // סגירת התפריט בלחיצה מחוץ אליו
@@ -69,7 +99,7 @@ export function ProfileMenu() {
               className="block px-4 py-3 text-sm font-semibold text-[#333333] hover:bg-[#FADADD]/40"
               onClick={() => setOpen(false)}
             >
-              מילוי פרטים
+              עריכת פרטים ויעד (TDEE)
             </Link>
             <Link
               href="/explorer"
@@ -95,14 +125,25 @@ export function ProfileMenu() {
             >
               לוח צבירת קלוריות
             </Link>
-            
+
+            {showLogout && (
+              <button
+                type="button"
+                role="menuitem"
+                className="block w-full px-4 py-3 text-start text-sm font-semibold text-[#333333] hover:bg-[#FADADD]/40"
+                onClick={logout}
+              >
+                התנתקות
+              </button>
+            )}
+
             <button
               type="button"
               role="menuitem"
               className="block w-full border-t border-[#fadadd] px-4 py-3 text-start text-sm font-semibold text-[#9b1b30] hover:bg-[#fff5f6]"
               onClick={goToWelcomeScreen}
             >
-              מסך כניסה (התחלה מחדש) 🍒
+              מסך כניסה — התחלה מחדש 🍒
             </button>
           </motion.div>
         )}

@@ -14,7 +14,7 @@ export function BackToMenuButton({
     >
       <Link
         href="/"
-        className="inline-flex min-w-[12rem] items-center justify-center rounded-xl border-2 border-[#FADADD] bg-white px-6 py-2.5 text-sm font-semibold text-[#333333] shadow-sm transition hover:bg-[#fffafb] active:scale-[0.99]"
+        className="inline-flex min-w-[12rem] items-center justify-center rounded-xl border-2 border-[var(--border-cherry-soft)] bg-white px-6 py-2.5 text-sm font-semibold text-[#333333] shadow-sm transition hover:bg-[#fffafb] active:scale-[0.99]"
       >
         חזרה לתפריט
       </Link>

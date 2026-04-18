@@ -252,7 +252,7 @@ export default function DictionaryPage() {
       dir="rtl"
     >
       <motion.h1
-        className="mb-6 text-center text-3xl font-extrabold text-[#333333] md:text-4xl"
+        className="heading-page mb-6 text-center text-3xl md:text-4xl"
         initial={{ opacity: 0, y: -8 }}
         animate={{ opacity: 1, y: 0 }}
       >
@@ -443,7 +443,7 @@ export default function DictionaryPage() {
                   {isMeal && preset && (
                     <button
                       type="button"
-                      className="btn-gold mt-3 w-full rounded-xl py-3 text-sm font-semibold"
+                      className="btn-stem mt-3 w-full rounded-xl py-3 text-sm font-semibold"
                       onClick={() => applyPreset(preset)}
                     >
                       הוספה ליומן היום
@@ -502,7 +502,7 @@ export default function DictionaryPage() {
               <div className="flex items-start justify-between gap-3">
                 <h2
                   id={editTitleId}
-                  className="text-lg font-bold text-[#333333]"
+                  className="panel-title-cherry text-lg"
                 >
                   עריכת פריט במילון
                 </h2>
@@ -640,7 +640,7 @@ export default function DictionaryPage() {
               <div className="flex gap-2">
                 <button
                   type="button"
-                  className="btn-gold flex-1 rounded-xl py-3 font-semibold"
+                  className="btn-stem flex-1 rounded-xl py-3 font-semibold"
                   onClick={saveDictionaryEdit}
                 >
                   שמירה

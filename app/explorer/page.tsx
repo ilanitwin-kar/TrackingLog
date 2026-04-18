@@ -152,7 +152,7 @@ export default function ExplorerPage() {
     >
       <BackToMenuButton />
       <motion.h1
-        className="mb-6 text-center text-3xl font-extrabold text-[#333333] md:text-4xl"
+        className="heading-page mb-6 text-center text-3xl md:text-4xl"
         initial={{ opacity: 0, y: -8 }}
         animate={{ opacity: 1, y: 0 }}
       >
@@ -325,7 +325,7 @@ export default function ExplorerPage() {
           <div className="mt-4 flex justify-center">
             <button
               type="button"
-              className="btn-gold rounded-xl px-6 py-2.5 text-sm font-semibold disabled:opacity-50"
+              className="btn-stem rounded-xl px-6 py-2.5 text-sm font-semibold disabled:opacity-50"
               disabled={loadingMore}
               onClick={() => void loadMore()}
             >

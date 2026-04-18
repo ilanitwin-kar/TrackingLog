@@ -118,7 +118,7 @@ export default function ShoppingPage() {
         </div>
 
         <motion.h1
-          className="mb-6 text-center text-3xl font-extrabold text-[#333333] md:text-4xl"
+          className="heading-page mb-6 text-center text-3xl md:text-4xl"
           initial={{ opacity: 0, y: -8 }}
           animate={{ opacity: 1, y: 0 }}
         >

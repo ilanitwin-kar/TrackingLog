@@ -115,7 +115,24 @@ const KEYS = {
   storyRevealUnlock: "cj_story_reveal_unlock_v1",
   /** ימים שסומנו כסגורים ביומן (תאריך → true) */
   dayJournalClosed: "cj_day_journal_closed_v1",
+  /** המשתמש עבר ממסך הכניסה (הרשמה/התחברות) — מותר להמשיך ל־TDEE */
+  welcomeLeft: "cj_welcome_left_v1",
 } as const;
+
+export function hasLeftWelcome(): boolean {
+  if (typeof window === "undefined") return false;
+  return localStorage.getItem(KEYS.welcomeLeft) === "1";
+}
+
+export function markWelcomeLeft(): void {
+  if (typeof window === "undefined") return;
+  localStorage.setItem(KEYS.welcomeLeft, "1");
+}
+
+export function clearWelcomeLeft(): void {
+  if (typeof window === "undefined") return;
+  localStorage.removeItem(KEYS.welcomeLeft);
+}
 
 export type DictionaryItem = {
   id: string;
@@ -148,6 +165,10 @@ const defaultProfile: UserProfile = {
   goalWeightKg: 62,
   onboardingComplete: false,
 };
+
+export function getDefaultUserProfile(): UserProfile {
+  return { ...defaultProfile };
+}
 
 function normalizeLoadedProfile(parsed: Partial<UserProfile>): UserProfile {
   return {

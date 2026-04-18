@@ -257,7 +257,7 @@ export function ManualFoodModal({
               )}
               <button
                 type="button"
-                className="btn-gold w-full rounded-xl py-3 text-base font-bold"
+                className="btn-stem w-full rounded-xl py-3 text-base font-bold"
                 onClick={submit}
               >
                 הוספה ליומן ולמילון

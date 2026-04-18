@@ -182,7 +182,7 @@ export function BottomNav() {
               </p>
               <motion.button
                 type="button"
-                className="btn-gold mt-5 w-full rounded-xl py-3.5 text-base font-bold transition-colors hover:bg-[#ffd0d8]"
+                className="btn-gold mt-5 w-full rounded-xl py-3.5 text-base font-bold"
                 whileTap={{ scale: 0.98 }}
                 onClick={goAddFood}
               >

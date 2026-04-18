@@ -13,7 +13,7 @@ export default function ForgotPasswordPage() {
       >
         ← חזרה למסך הכניסה
       </Link>
-      <h1 className="mt-8 text-2xl font-extrabold text-[#333]">
+      <h1 className="heading-page mt-8 text-2xl">
         שכחתי סיסמה
       </h1>
       <p className="mt-4 text-sm leading-relaxed text-[#333]/90">

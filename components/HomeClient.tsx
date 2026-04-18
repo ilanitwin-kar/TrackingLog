@@ -486,7 +486,7 @@ export function HomeClient() {
               <div className="flex gap-2">
                 <button
                   type="button"
-                  className="btn-gold flex-1 rounded-xl py-3 font-semibold"
+                  className="btn-stem flex-1 rounded-xl py-3 font-semibold"
                   onClick={confirmCreateMeal}
                   disabled={!mealNameDraft.trim()}
                 >
@@ -524,7 +524,7 @@ export function HomeClient() {
             >
               <h2
                 id="edit-entry-title"
-                className="text-lg font-bold text-[#333333]"
+                className="panel-title-cherry text-lg"
               >
                 עריכת כמות
               </h2>
@@ -623,7 +623,7 @@ export function HomeClient() {
               <div className="flex gap-2">
                 <button
                   type="button"
-                  className="btn-gold flex-1 rounded-xl py-3 font-semibold disabled:opacity-50"
+                  className="btn-stem flex-1 rounded-xl py-3 font-semibold disabled:opacity-50"
                   disabled={editLoading}
                   onClick={() => void saveEdit()}
                 >
@@ -711,7 +711,7 @@ export function HomeClient() {
           <p className="mb-2.5 text-base font-bold leading-snug tracking-wide text-[#1a1a1a] md:text-lg">
             יומן המעקב של
           </p>
-          <h1 className="app-title relative rounded-2xl border border-[#FADADD]/90 bg-gradient-to-b from-white to-[#fffafb] px-4 py-3 text-[1.35rem] leading-snug shadow-[0_2px_14px_rgba(250,218,221,0.35)] md:px-5 md:py-3.5 md:text-2xl lg:text-[1.65rem]">
+          <h1 className="app-title relative rounded-2xl border border-[rgba(155,27,48,0.22)] bg-gradient-to-b from-white to-[#fffafb] px-4 py-3 text-[1.35rem] leading-snug shadow-[0_2px_14px_rgba(250,218,221,0.4),0_0_0_1px_rgba(155,27,48,0.06)] md:px-5 md:py-3.5 md:text-2xl lg:text-[1.65rem]">
             אינטליגנציה קלורית
           </h1>
         </div>
@@ -771,7 +771,7 @@ export function HomeClient() {
         >
           <button
             type="button"
-            className="btn-gold w-full rounded-xl py-3 text-base font-semibold"
+            className="btn-stem w-full rounded-xl py-3 text-base font-semibold"
             onClick={openMealModal}
           >
             שמירה במילון מהפריטים המסומנים ({starredForMealCount})
