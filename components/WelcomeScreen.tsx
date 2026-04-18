@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import {
   activateDevAdminBypass,
+  isSessionActive,
   registerAccount,
   seedDevAdminProfileIfNeeded,
   startSession,
@@ -15,7 +16,10 @@ import {
   loadProfile,
   markWelcomeLeft,
 } from "@/lib/storage";
+import { BlueberryMark } from "@/components/BlueberryMark";
 import { CherryMark } from "@/components/CherryMark";
+import { useAppVariant } from "@/components/useAppVariant";
+import { getBrandName, type AppVariant } from "@/lib/appVariant";
 
 const LANG_KEY = "cj_welcome_lang";
 
@@ -196,20 +200,22 @@ function loadLang(): Lang {
   return raw === "en" ? "en" : "he";
 }
 
-function shareMessage(appUrl: string, lang: Lang): string {
+function shareMessage(appUrl: string, lang: Lang, variant: AppVariant): string {
+  const brand = getBrandName(variant);
+  const emoji = variant === "blueberry" ? "🫐" : "🍒";
   if (lang === "en") {
     return [
-      "I started using CHERRY — the Caloric Intelligence tracking journal.",
+      `I started using ${brand} — the Caloric Intelligence tracking journal.`,
       "",
-      "An app that takes you straight toward your dream body 🍒",
+      `An app that takes you straight toward your dream body ${emoji}`,
       "",
       `Join: ${appUrl}`,
     ].join("\n");
   }
   return [
-    "התחלתי להשתמש ב-CHERRY – יומן המעקב של אינטליגנציה קלורית.",
+    `התחלתי להשתמש ב-${brand} – יומן המעקב של אינטליגנציה קלורית.`,
     "",
-    "אפליקציה שתיקח אותך ישירות לגוף החלומות שלך🍒",
+    `אפליקציה שתיקח אותך ישירות לגוף החלומות שלך${emoji}`,
     "",
     `להצטרפות : ${appUrl}`,
   ].join("\n");
@@ -217,6 +223,7 @@ function shareMessage(appUrl: string, lang: Lang): string {
 
 export function WelcomeScreen() {
   const router = useRouter();
+  const appVariant = useAppVariant();
   const [lang, setLang] = useState<Lang>("he");
   const [mounted, setMounted] = useState(false);
   const [manualOpen, setManualOpen] = useState(false);
@@ -236,6 +243,15 @@ export function WelcomeScreen() {
     setLang(loadLang());
   }, []);
 
+  /** כבר מחוברים (למשל אחרי בחירת מסלול מחדש) — לא לעצור במסך הכניסה */
+  useEffect(() => {
+    if (!mounted) return;
+    if (!isSessionActive()) return;
+    const profile = loadProfile();
+    if (isRegistrationComplete(profile)) router.replace("/");
+    else router.replace("/tdee");
+  }, [mounted, router]);
+
   useEffect(() => {
     if (!mounted) return;
     localStorage.setItem(LANG_KEY, lang);
@@ -250,10 +266,14 @@ export function WelcomeScreen() {
     const origin =
       typeof window !== "undefined" ? window.location.origin : "";
     const appUrl = origin ? `${origin}/welcome` : "";
-    const text = shareMessage(appUrl, lang);
+    const text = shareMessage(appUrl, lang, appVariant);
     try {
       if (navigator.share) {
-        await navigator.share({ title: "CHERRY", text, url: appUrl });
+        await navigator.share({
+          title: getBrandName(appVariant),
+          text,
+          url: appUrl,
+        });
         return;
       }
       await navigator.clipboard.writeText(text);
@@ -266,7 +286,7 @@ export function WelcomeScreen() {
         /* ignore */
       }
     }
-  }, [lang, showToast, t.toastCopied]);
+  }, [appVariant, lang, showToast, t.toastCopied]);
 
   const cherryWordClass =
     "heading-page text-4xl tracking-tight sm:text-5xl";
@@ -331,7 +351,7 @@ export function WelcomeScreen() {
 
   return (
     <div
-      className="relative mx-auto flex min-h-dvh max-w-lg flex-col bg-gradient-to-b from-[#fff8fa] via-white to-[#f6faf3] px-4 pb-[max(1rem,env(safe-area-inset-bottom))] pt-[max(0.75rem,env(safe-area-inset-top))]"
+      className="welcome-screen-bg relative mx-auto flex min-h-dvh max-w-lg flex-col px-4 pb-[max(1rem,env(safe-area-inset-bottom))] pt-[max(0.75rem,env(safe-area-inset-top))]"
       dir={dir}
     >
       <div className="flex items-start justify-between gap-2">
@@ -343,7 +363,7 @@ export function WelcomeScreen() {
         >
           {lang === "he" ? (
             <>
-              <span className="text-[#9b1b30]">{t.langHe}</span>
+              <span className="text-[var(--cherry)]">{t.langHe}</span>
               <span className="mx-1 opacity-40">|</span>
               <span className="opacity-60">{t.langEn}</span>
             </>
@@ -351,14 +371,14 @@ export function WelcomeScreen() {
             <>
               <span className="opacity-60">{t.langHe}</span>
               <span className="mx-1 opacity-40">|</span>
-              <span className="text-[#9b1b30]">{t.langEn}</span>
+              <span className="text-[var(--cherry)]">{t.langEn}</span>
             </>
           )}
         </button>
         <button
           type="button"
           onClick={handleShare}
-          className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-[var(--border-cherry-soft)] bg-white text-[#9b1b30] shadow-sm"
+          className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-[var(--border-cherry-soft)] bg-white text-[var(--cherry)] shadow-sm"
           aria-label={t.shareAria}
         >
           <IconShare className="h-5 w-5" />
@@ -366,16 +386,20 @@ export function WelcomeScreen() {
       </div>
 
       <div className="mt-2 flex flex-col items-center text-center">
-        <CherryMark className="h-24 w-28 sm:h-28 sm:w-32" />
-        <h1 className={cherryWordClass}>Cherry</h1>
+        {appVariant === "blueberry" ? (
+          <BlueberryMark className="h-24 w-28 sm:h-28 sm:w-32" />
+        ) : (
+          <CherryMark className="h-24 w-28 sm:h-28 sm:w-32" />
+        )}
+        <h1 className={cherryWordClass}>{getBrandName(appVariant)}</h1>
       </div>
 
       <div className="mt-5 min-h-0 flex-1 px-0.5">
         <div
-          className="glass-panel mx-auto max-w-md rounded-2xl border-2 border-[var(--border-cherry-soft)] bg-white/95 px-4 py-6 shadow-[0_8px_28px_rgba(155,27,48,0.08)]"
+          className="glass-panel mx-auto max-w-md rounded-2xl border-2 border-[var(--border-cherry-soft)] bg-white/95 px-4 py-6 shadow-[0_8px_28px_var(--panel-shadow-soft)]"
           dir={dir}
         >
-          <p className="text-balance text-center text-lg font-extrabold leading-snug text-[var(--cherry)] sm:text-xl">
+          <p className="text-balance text-center text-lg font-extrabold leading-snug text-[var(--ui-welcome-tagline)] sm:text-xl">
             {t.taglinePrimary}
           </p>
           <p className="mt-4 text-balance text-center text-base font-bold leading-relaxed text-[var(--stem)] sm:text-lg">
@@ -388,7 +412,7 @@ export function WelcomeScreen() {
         <button
           type="button"
           onClick={() => openAuth("signup")}
-          className="w-full rounded-2xl bg-[#9b1b30] py-3.5 text-center text-base font-bold text-white shadow-[0_4px_20px_rgba(155,27,48,0.35)] transition active:scale-[0.99]"
+          className="shadow-brand-cta w-full rounded-2xl bg-[var(--cherry)] py-3.5 text-center text-base font-bold text-white transition active:scale-[0.99]"
         >
           {t.signup}
         </button>
@@ -396,13 +420,13 @@ export function WelcomeScreen() {
           <button
             type="button"
             onClick={() => openAuth("login")}
-            className="min-w-0 flex-1 rounded-2xl border-2 border-[#9b1b30]/35 bg-white py-3 text-center text-base font-semibold text-[#9b1b30] transition active:scale-[0.99]"
+            className="min-w-0 flex-1 rounded-2xl border-2 border-[color-mix(in_srgb,var(--cherry)_35%,transparent)] bg-white py-3 text-center text-base font-semibold text-[var(--cherry)] transition active:scale-[0.99]"
           >
             {t.login}
           </button>
           <Link
             href="/forgot-password"
-            className="flex w-[6.5rem] shrink-0 items-center justify-center rounded-2xl border border-[var(--border-cherry-soft)] bg-white px-1 text-center text-[11px] font-semibold leading-tight text-[#9b1b30] underline decoration-[#9b1b30]/30 underline-offset-2"
+            className="flex w-[6.5rem] shrink-0 items-center justify-center rounded-2xl border border-[var(--border-cherry-soft)] bg-white px-1 text-center text-[11px] font-semibold leading-tight text-[var(--cherry)] underline decoration-[color-mix(in_srgb,var(--cherry)_30%,transparent)] underline-offset-2"
           >
             {t.forgotPassword}
           </Link>
@@ -434,7 +458,7 @@ export function WelcomeScreen() {
         <button
           type="button"
           onClick={() => setManualOpen(true)}
-          className="text-sm font-semibold text-[#9b1b30] underline decoration-[#9b1b30]/40 underline-offset-4"
+          className="text-sm font-semibold text-[var(--cherry)] underline decoration-[color-mix(in_srgb,var(--cherry)_40%,transparent)] underline-offset-4"
         >
           {t.howItWorks}
         </button>
@@ -447,12 +471,14 @@ export function WelcomeScreen() {
               markWelcomeLeft();
               router.replace("/");
             }}
-            className="w-full rounded-xl border-2 border-dashed border-[rgba(155,27,48,0.38)] bg-[#fffafb] py-2.5 text-center text-xs font-semibold text-[#9b1b30]"
+            className="w-full rounded-xl border-2 border-dashed border-[var(--welcome-dev-border)] bg-[var(--welcome-dev-bg)] py-2.5 text-center text-xs font-semibold text-[var(--cherry)]"
           >
             {t.devAdminOnly}
           </button>
         )}
-        <p className="text-[10px] text-[var(--text)]/45">Cherry v{APP_VERSION}</p>
+        <p className="text-[10px] text-[var(--text)]/45">
+          {getBrandName(appVariant)} v{APP_VERSION}
+        </p>
       </div>
 
       {authOpen && (
@@ -512,7 +538,7 @@ export function WelcomeScreen() {
               )}
             </div>
             {authError && (
-              <p className="mt-3 text-sm font-medium text-[#9b1b30]" role="alert">
+              <p className="mt-3 text-sm font-medium text-[var(--cherry)]" role="alert">
                 {authError}
               </p>
             )}
