@@ -5,8 +5,9 @@ import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import {
   activateDevAdminBypass,
-  isSessionActive,
+  hasWelcomeAutoResume,
   registerAccount,
+  seedBypassProfileIfNeeded,
   seedDevAdminProfileIfNeeded,
   startSession,
   verifyLogin,
@@ -19,7 +20,12 @@ import {
 import { BlueberryMark } from "@/components/BlueberryMark";
 import { CherryMark } from "@/components/CherryMark";
 import { useAppVariant } from "@/components/useAppVariant";
-import { getBrandName, type AppVariant } from "@/lib/appVariant";
+import {
+  clearAppVariant,
+  getBrandName,
+  type AppVariant,
+} from "@/lib/appVariant";
+import { StaffBypassEntry } from "@/components/StaffBypassEntry";
 
 const LANG_KEY = "cj_welcome_lang";
 
@@ -52,6 +58,12 @@ type Copy = {
   submitLogin: string;
   cancel: string;
   devAdminOnly: string;
+  staffEntry: string;
+  staffPinPrompt: string;
+  staffPinWrong: string;
+  switchTrack: string;
+  switchTrackConfirm: string;
+  staffNotConfigured: string;
   errEmail: string;
   errPasswordShort: string;
   errPasswordMismatch: string;
@@ -93,6 +105,14 @@ const COPY: Record<Lang, Copy> = {
     submitLogin: "כניסה",
     cancel: "ביטול",
     devAdminOnly: "כניסת מנהלת (פיתוח בלבד)",
+    staffEntry: "כניסת מנהלת (קוד צוות)",
+    staffPinPrompt: "קוד צוות",
+    staffPinWrong: "קוד שגוי",
+    switchTrack: "החלפת מסלול (גברים / נשים)",
+    switchTrackConfirm:
+      "לעבור למסך בחירת המסלול? תוכלי לבחור מחדש צ׳רי או בלו.",
+    staffNotConfigured:
+      "קוד צוות עדיין לא הוגדר בפריסה. ב-Netlify → Environment variables הוסיפי NEXT_PUBLIC_STAFF_UNLOCK (לפחות 4 תווים), שמרי ופרסמו מחדש. עד אז: התחברות רגילה נשמרת במכשיר עד «התנתקות».",
     errEmail: "נא להזין כתובת אימייל תקינה",
     errPasswordShort: "הסיסמה חייבת להכיל לפחות 6 תווים",
     errPasswordMismatch: "הסיסמאות אינן תואמות",
@@ -132,6 +152,14 @@ const COPY: Record<Lang, Copy> = {
     submitLogin: "Sign in",
     cancel: "Cancel",
     devAdminOnly: "Admin entry (development only)",
+    staffEntry: "Staff entry (passcode)",
+    staffPinPrompt: "Team passcode",
+    staffPinWrong: "Wrong passcode",
+    switchTrack: "Switch track (men / women)",
+    switchTrackConfirm:
+      "Open track selection again? You can pick Cherry or BLUE anew.",
+    staffNotConfigured:
+      "Staff code is not set on the server. In Netlify → Environment variables add NEXT_PUBLIC_STAFF_UNLOCK (4+ characters), save, and redeploy. Until then: normal login stays on this device until you log out.",
     errEmail: "Please enter a valid email address",
     errPasswordShort: "Password must be at least 6 characters",
     errPasswordMismatch: "Passwords do not match",
@@ -243,10 +271,10 @@ export function WelcomeScreen() {
     setLang(loadLang());
   }, []);
 
-  /** כבר מחוברים (למשל אחרי בחירת מסלול מחדש) — לא לעצור במסך הכניסה */
+  /** כבר מחוברים או דילוג מנהלת/צוות — לא לעצור במסך הכניסה */
   useEffect(() => {
     if (!mounted) return;
-    if (!isSessionActive()) return;
+    if (!hasWelcomeAutoResume()) return;
     const profile = loadProfile();
     if (isRegistrationComplete(profile)) router.replace("/");
     else router.replace("/tdee");
@@ -431,6 +459,24 @@ export function WelcomeScreen() {
             {t.forgotPassword}
           </Link>
         </div>
+        <StaffBypassEntry
+          theme="welcome"
+          dir={dir}
+          onNotify={showToast}
+          labels={{
+            staffEntry: t.staffEntry,
+            staffPinPrompt: t.staffPinPrompt,
+            staffPinWrong: t.staffPinWrong,
+            staffNotConfigured: t.staffNotConfigured,
+            submitLabel: t.submitLogin,
+            cancel: t.cancel,
+          }}
+          onStaffSuccess={() => {
+            seedBypassProfileIfNeeded();
+            markWelcomeLeft();
+            router.replace("/");
+          }}
+        />
         <p className="text-center text-xs font-semibold text-[var(--text)]/60">
           {t.quickConnect}
         </p>
@@ -455,13 +501,31 @@ export function WelcomeScreen() {
       </div>
 
       <div className="mt-4 space-y-2 pb-1 text-center">
-        <button
-          type="button"
-          onClick={() => setManualOpen(true)}
-          className="text-sm font-semibold text-[var(--cherry)] underline decoration-[color-mix(in_srgb,var(--cherry)_40%,transparent)] underline-offset-4"
-        >
-          {t.howItWorks}
-        </button>
+        <div className="flex flex-col items-center gap-2">
+          <button
+            type="button"
+            onClick={() => setManualOpen(true)}
+            className="text-sm font-semibold text-[var(--cherry)] underline decoration-[color-mix(in_srgb,var(--cherry)_40%,transparent)] underline-offset-4"
+          >
+            {t.howItWorks}
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              if (
+                typeof window !== "undefined" &&
+                !window.confirm(t.switchTrackConfirm)
+              ) {
+                return;
+              }
+              clearAppVariant();
+              window.location.assign("/pick-theme");
+            }}
+            className="text-sm font-semibold text-[var(--stem)] underline decoration-[color-mix(in_srgb,var(--stem)_35%,transparent)] underline-offset-4"
+          >
+            {t.switchTrack}
+          </button>
+        </div>
         {process.env.NODE_ENV === "development" && (
           <button
             type="button"
@@ -609,7 +673,7 @@ export function WelcomeScreen() {
 
       {toast && (
         <div
-          className="fixed bottom-24 left-1/2 z-[220] -translate-x-1/2 rounded-full bg-[var(--stem-deep)] px-4 py-2 text-sm font-medium text-white shadow-lg"
+          className="fixed bottom-[max(1rem,env(safe-area-inset-bottom,0px)+0.5rem)] left-1/2 z-[280] max-w-[min(100vw-1.5rem,24rem)] -translate-x-1/2 rounded-full bg-[var(--stem-deep)] px-4 py-2.5 text-center text-sm font-medium text-white shadow-lg"
           role="status"
         >
           {toast}

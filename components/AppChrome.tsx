@@ -6,7 +6,7 @@ import { AppBrandMark } from "@/components/AppBrandMark";
 import { BottomNav } from "@/components/BottomNav";
 import {
   hasAuthRecord,
-  isDevAdminBypassActive,
+  isInternalAuthBypassActive,
   isSessionActive,
 } from "@/lib/localAuth";
 import { hasChosenAppVariant } from "@/lib/appVariant";
@@ -106,12 +106,12 @@ export function AppChrome({ children }: { children: React.ReactNode }) {
       return;
     }
 
-    const devBypass = isDevAdminBypassActive();
+    const internalBypass = isInternalAuthBypassActive();
     const session = isSessionActive();
     const authExists = hasAuthRecord();
     const legacyUnlock = !authExists && isRegistrationComplete(profile);
 
-    if (!devBypass && !session && !legacyUnlock) {
+    if (!internalBypass && !session && !legacyUnlock) {
       window.location.replace("/welcome");
       return;
     }

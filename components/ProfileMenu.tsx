@@ -11,7 +11,8 @@ import {
   clearAuthCompletely,
   clearDevAdminBypass,
   clearSession,
-  isDevAdminBypassActive,
+  clearStaffBypass,
+  isInternalAuthBypassActive,
   isSessionActive,
 } from "@/lib/localAuth";
 import {
@@ -36,7 +37,9 @@ export function ProfileMenu() {
 
   useEffect(() => {
     function syncLogout() {
-      setShowLogout(isSessionActive() || isDevAdminBypassActive());
+      setShowLogout(
+        isSessionActive() || isInternalAuthBypassActive(),
+      );
     }
     syncLogout();
     window.addEventListener("cj-auth-changed", syncLogout);
@@ -57,6 +60,7 @@ export function ProfileMenu() {
   /** התחלה מחדש: מסך כניסה ואז שוב מילוי פרטים (כמו משתמש חדש) */
   function goToWelcomeScreen() {
     clearDevAdminBypass();
+    clearStaffBypass();
     clearAuthCompletely();
     clearWelcomeLeft();
     saveProfile(getDefaultUserProfile());
@@ -65,7 +69,6 @@ export function ProfileMenu() {
   }
 
   function logout() {
-    clearDevAdminBypass();
     clearSession();
     setOpen(false);
     router.replace("/welcome");
@@ -223,7 +226,7 @@ export function ProfileMenu() {
             )}
 
             {(process.env.NODE_ENV === "development" ||
-              isDevAdminBypassActive()) && (
+              isInternalAuthBypassActive()) && (
               <button
                 type="button"
                 role="menuitem"
