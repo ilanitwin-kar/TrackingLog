@@ -232,7 +232,7 @@ export default function TdeePage() {
               setAgeText(next);
               const n = parseOrNull(next);
               if (n == null) return;
-              update("age", Math.max(12, Math.min(120, Math.round(n))) as any);
+              update("age", Math.max(12, Math.min(120, Math.round(n))));
             }}
             onBlur={() => {
               const n = parseOrNull(ageText);
@@ -261,7 +261,7 @@ export default function TdeePage() {
               if (n == null) return;
               update(
                 "heightCm",
-                Math.max(100, Math.min(230, Math.round(n))) as any
+                Math.max(100, Math.min(230, Math.round(n)))
               );
             }}
             onBlur={() => {
@@ -289,7 +289,7 @@ export default function TdeePage() {
               setWeightText(next);
               const n = parseOrNull(next);
               if (n == null) return;
-              update("weightKg", Math.max(30, Math.min(250, n)) as any);
+              update("weightKg", Math.max(30, Math.min(250, n)));
             }}
             onBlur={() => {
               const n = parseOrNull(weightText);
@@ -316,7 +316,7 @@ export default function TdeePage() {
               setGoalWeightText(next);
               const n = parseOrNull(next);
               if (n == null) return;
-              update("goalWeightKg", Math.max(30, Math.min(250, n)) as any);
+              update("goalWeightKg", Math.max(30, Math.min(250, n)));
             }}
             onBlur={() => {
               const n = parseOrNull(goalWeightText);
@@ -362,7 +362,7 @@ export default function TdeePage() {
               setDeficitText(next);
               const n = parseOrNull(next);
               if (n == null) return;
-              update("deficit", Math.max(100, Math.min(1500, Math.round(n))) as any);
+              update("deficit", Math.max(100, Math.min(1500, Math.round(n))));
             }}
             onBlur={() => {
               const n = parseOrNull(deficitText);

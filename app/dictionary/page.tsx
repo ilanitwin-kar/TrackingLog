@@ -236,7 +236,7 @@ export default function DictionaryPage() {
     }
 
     if (editUnit === "יחידה") {
-      patch.gramsPerUnit = gPerU ?? null;
+      patch.gramsPerUnit = gPerU ?? undefined;
     }
 
     const next = patchDictionaryItemById(editTarget.id, patch);

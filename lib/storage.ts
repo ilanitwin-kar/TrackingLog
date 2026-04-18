@@ -113,6 +113,8 @@ const KEYS = {
   calorieBoardGold: "cj_calorie_board_gold_v1",
   /** גילוי מילות סיפור (אינדקס משבצת → נפתח) */
   storyRevealUnlock: "cj_story_reveal_unlock_v1",
+  /** ימים שסומנו כסגורים ביומן (תאריך → true) */
+  dayJournalClosed: "cj_day_journal_closed_v1",
 } as const;
 
 export type DictionaryItem = {
@@ -483,6 +485,78 @@ function makeId(): string {
   return `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
 }
 
+/** הוספת מנה ידנית (לפי 100 ג׳ ואופציונלית משקל יחידה) ליומן תאריך + מילון */
+export function addManualNutritionToToday(
+  item: {
+    food: string;
+    brand?: string;
+    caloriesPer100g: number;
+    proteinPer100g: number;
+    fatPer100g: number;
+    carbsPer100g: number;
+    unitGrams?: number;
+  },
+  dateKey: string
+): void {
+  const k100 = Math.max(0, item.caloriesPer100g);
+  const p100 = Math.max(0, item.proteinPer100g);
+  const f100 = Math.max(0, item.fatPer100g);
+  const c100 = Math.max(0, item.carbsPer100g);
+  const ug = item.unitGrams;
+  const hasUnit = ug != null && Number.isFinite(ug) && ug > 0;
+  const factor = hasUnit ? ug / 100 : 1;
+
+  const displayName = item.brand?.trim()
+    ? `${item.food.trim()} (${item.brand.trim()})`
+    : item.food.trim();
+
+  const calories = Math.max(1, Math.round(k100 * factor));
+  const proteinG = Math.round(p100 * factor * 10) / 10;
+  const fatG = Math.round(f100 * factor * 10) / 10;
+  const carbsG = Math.round(c100 * factor * 10) / 10;
+
+  const entry: LogEntry = {
+    id: makeId(),
+    food: displayName,
+    calories,
+    quantity: hasUnit ? 1 : 100,
+    unit: hasUnit ? "יחידה" : "גרם",
+    createdAt: new Date().toISOString(),
+    verified: false,
+    proteinG,
+    fatG,
+    carbsG,
+  };
+
+  const existing = getEntriesForDate(dateKey);
+  saveDayLogEntries(dateKey, [entry, ...existing]);
+
+  if (hasUnit) {
+    upsertDictionaryFromScan({
+      food: displayName,
+      quantity: 1,
+      unit: "יחידה",
+      lastCalories: calories,
+      caloriesPer100g: Math.round(k100),
+      proteinPer100g: p100,
+      carbsPer100g: c100,
+      fatPer100g: f100,
+      gramsPerUnit: ug,
+    });
+  } else {
+    upsertDictionaryFromScan({
+      food: displayName,
+      quantity: 100,
+      unit: "גרם",
+      lastCalories: calories,
+      caloriesPer100g: Math.round(k100),
+      proteinPer100g: p100,
+      carbsPer100g: c100,
+      fatPer100g: f100,
+    });
+  }
+}
+
 export function loadMealPresets(): MealPreset[] {
   if (typeof window === "undefined") return [];
   try {
@@ -601,4 +675,21 @@ export function toggleStoryRevealUnlock(squareIndex: number): Record<string, boo
   m[k] = !m[k];
   saveStoryRevealUnlock(m);
   return m;
+}
+
+export function loadDayJournalClosedMap(): Record<string, boolean> {
+  if (typeof window === "undefined") return {};
+  try {
+    const raw = localStorage.getItem(KEYS.dayJournalClosed);
+    if (!raw) return {};
+    const parsed = JSON.parse(raw) as Record<string, boolean>;
+    return typeof parsed === "object" && parsed !== null ? parsed : {};
+  } catch {
+    return {};
+  }
+}
+
+export function saveDayJournalClosedMap(marks: Record<string, boolean>): void {
+  if (typeof window === "undefined") return;
+  localStorage.setItem(KEYS.dayJournalClosed, JSON.stringify(marks));
 }

@@ -1,7 +1,6 @@
 "use client";
 
 import { AnimatePresence, motion } from "framer-motion";
-import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { BackToMenuButton } from "@/components/BackToMenuButton";
 import { IconCart, IconHeart, IconVerified } from "@/components/Icons";

@@ -104,9 +104,7 @@ export function AddFoodClient() {
   const [pickModalFeedback, setPickModalFeedback] = useState<string | null>(
     null
   );
-  const pickFeedbackTimerRef = useRef<ReturnType<typeof setTimeout> | null>(
-    null
-  );
+  const pickFeedbackTimerRef = useRef<number | null>(null);
   const pickTitleId = useId();
   const searchInputRef = useRef<HTMLInputElement>(null);
 
