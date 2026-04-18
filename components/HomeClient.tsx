@@ -882,11 +882,19 @@ export function HomeClient() {
         </div>
         {isDayClosed && (
           <div
-            className="mb-4 rounded-xl border-2 border-[var(--border-cherry-soft)] bg-cherry-faint px-3 py-3 text-center text-sm font-semibold text-[var(--cherry)]"
+            className="mb-4 space-y-3 rounded-xl border-2 border-[var(--border-cherry-soft)] bg-cherry-faint px-3 py-3 text-center"
             role="status"
           >
-            היום סגור ביומן — רק צפייה. לחצי «פתיחת היום לעריכה» כדי להוסיף או
-            לערוך.
+            <p className="text-sm font-semibold text-[var(--cherry)]">
+              היום סגור ביומן — רק צפייה. אפשר לפתוח שוב אם שכחת להזין משהו.
+            </p>
+            <button
+              type="button"
+              className="btn-stem w-full rounded-xl py-2.5 text-sm font-bold shadow-sm"
+              onClick={toggleJournalClosedForViewDay}
+            >
+              פתיחת היום לעריכה
+            </button>
           </div>
         )}
         <h2 className="panel-title-cherry mb-1 text-xl">

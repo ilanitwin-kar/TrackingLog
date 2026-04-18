@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { AnimatePresence, motion } from "framer-motion";
-import { useId, useMemo, useState } from "react";
+import { useEffect, useId, useMemo, useState } from "react";
 import {
   IconNavBook,
   IconNavChart,
@@ -11,6 +11,10 @@ import {
   IconPlusCircle,
 } from "@/components/Icons";
 import { getTodayKey } from "@/lib/dateKey";
+import {
+  loadDayJournalClosedMap,
+  saveDayJournalClosedMap,
+} from "@/lib/storage";
 
 const navLinks = [
   { href: "/", label: "בית", Icon: IconNavHome },
@@ -42,9 +46,30 @@ export function BottomNav() {
     [pathname, searchParams]
   );
 
+  const [journalClosedTick, setJournalClosedTick] = useState(0);
+  useEffect(() => {
+    const onClosed = () => setJournalClosedTick((n) => n + 1);
+    window.addEventListener("cj-journal-closed-changed", onClosed);
+    return () =>
+      window.removeEventListener("cj-journal-closed-changed", onClosed);
+  }, []);
+
+  const isAddFoodDateClosed = useMemo(() => {
+    void journalClosedTick;
+    return loadDayJournalClosedMap()[addFoodDateKey] === true;
+  }, [addFoodDateKey, journalClosedTick]);
+
   function goAddFood() {
     setSheetOpen(false);
     router.push(`/add-food?date=${encodeURIComponent(addFoodDateKey)}`);
+  }
+
+  function openJournalDayAndGoAddFood() {
+    const m = { ...loadDayJournalClosedMap() };
+    delete m[addFoodDateKey];
+    saveDayJournalClosedMap(m);
+    window.dispatchEvent(new Event("cj-journal-closed-changed"));
+    goAddFood();
   }
 
   return (
@@ -184,13 +209,26 @@ export function BottomNav() {
                   {addFoodDateKey}
                 </span>
               </p>
+              {isAddFoodDateClosed && (
+                <p
+                  className="mt-3 rounded-xl border border-[var(--border-cherry-soft)] bg-cherry-faint px-3 py-2.5 text-center text-xs font-semibold leading-relaxed text-[var(--cherry)]"
+                  role="status"
+                >
+                  היום הזה סגור ביומן. לחצי למטה כדי לפתוח אותו שוב ואז להוסיף
+                  רשומות.
+                </p>
+              )}
               <motion.button
                 type="button"
                 className="btn-stem mt-5 w-full rounded-xl py-3.5 text-base font-bold"
                 whileTap={{ scale: 0.98 }}
-                onClick={goAddFood}
+                onClick={
+                  isAddFoodDateClosed ? openJournalDayAndGoAddFood : goAddFood
+                }
               >
-                פתיחת מסך הוספת מזון
+                {isAddFoodDateClosed
+                  ? "פתיחת היום ומעבר להוספת מזון"
+                  : "פתיחת מסך הוספת מזון"}
               </motion.button>
               <button
                 type="button"
