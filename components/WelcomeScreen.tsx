@@ -462,6 +462,20 @@ export function WelcomeScreen() {
             {t.forgotPassword}
           </Link>
         </div>
+        <button
+          type="button"
+          onClick={() => {
+            if (!isStaffUnlockConfigured()) {
+              showToast(t.staffNotConfigured);
+              return;
+            }
+            setStaffPinInput("");
+            setStaffPinOpen(true);
+          }}
+          className="w-full rounded-xl border-2 border-dashed border-[var(--welcome-dev-border)] bg-[var(--welcome-dev-bg)] py-2.5 text-center text-sm font-semibold text-[var(--cherry)] sm:text-base"
+        >
+          {t.staffEntry}
+        </button>
         <p className="text-center text-xs font-semibold text-[var(--text)]/60">
           {t.quickConnect}
         </p>
@@ -525,20 +539,6 @@ export function WelcomeScreen() {
             {t.devAdminOnly}
           </button>
         )}
-        <button
-          type="button"
-          onClick={() => {
-            if (!isStaffUnlockConfigured()) {
-              showToast(t.staffNotConfigured);
-              return;
-            }
-            setStaffPinInput("");
-            setStaffPinOpen(true);
-          }}
-          className="w-full rounded-xl border-2 border-dashed border-[var(--welcome-dev-border)] bg-[var(--welcome-dev-bg)] py-2.5 text-center text-sm font-semibold text-[var(--cherry)] sm:text-base"
-        >
-          {t.staffEntry}
-        </button>
         <p className="text-[10px] text-[var(--text)]/45">
           {getBrandName(appVariant)} v{APP_VERSION}
         </p>
@@ -637,7 +637,7 @@ export function WelcomeScreen() {
 
       {staffPinOpen && (
         <div
-          className="fixed inset-0 z-[220] flex items-end justify-center bg-black/45 p-4 sm:items-center"
+          className="fixed inset-0 z-[240] flex items-end justify-center bg-black/45 p-4 pb-[max(1rem,env(safe-area-inset-bottom))] sm:items-center sm:pb-4"
           role="dialog"
           aria-modal="true"
           aria-labelledby="staff-pin-title"
@@ -728,7 +728,7 @@ export function WelcomeScreen() {
 
       {toast && (
         <div
-          className="fixed bottom-24 left-1/2 z-[220] -translate-x-1/2 rounded-full bg-[var(--stem-deep)] px-4 py-2 text-sm font-medium text-white shadow-lg"
+          className="fixed bottom-[max(1rem,env(safe-area-inset-bottom,0px)+0.5rem)] left-1/2 z-[230] max-w-[min(100vw-1.5rem,24rem)] -translate-x-1/2 rounded-full bg-[var(--stem-deep)] px-4 py-2.5 text-center text-sm font-medium text-white shadow-lg"
           role="status"
         >
           {toast}
