@@ -4,7 +4,9 @@ import Link from "next/link";
 import { AnimatePresence, motion } from "framer-motion";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
+import { BlueberryMark } from "@/components/BlueberryMark";
 import { CherryMark } from "@/components/CherryMark";
+import { useAppVariant } from "@/components/useAppVariant";
 import {
   clearAuthCompletely,
   clearDevAdminBypass,
@@ -16,6 +18,7 @@ import {
   loadProfileAvatarDataUrl,
   saveProfileAvatarDataUrl,
 } from "@/lib/profileAvatar";
+import { clearAppVariant } from "@/lib/appVariant";
 import {
   clearWelcomeLeft,
   getDefaultUserProfile,
@@ -24,6 +27,7 @@ import {
 
 export function ProfileMenu() {
   const router = useRouter();
+  const appVariant = useAppVariant();
   const [open, setOpen] = useState(false);
   const [showLogout, setShowLogout] = useState(false);
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
@@ -115,7 +119,7 @@ export function ProfileMenu() {
       />
       <button
         type="button"
-        className="flex h-11 min-w-[5.5rem] items-center justify-center gap-1.5 rounded-xl border-2 border-[var(--border-cherry-soft)] bg-white px-2.5 text-[var(--cherry)] shadow-sm transition hover:bg-[#fffafb] sm:min-w-[6rem]"
+        className="flex h-11 min-w-[5.5rem] items-center justify-center gap-1.5 rounded-xl border-2 border-[var(--border-cherry-soft)] bg-white px-2.5 text-[var(--cherry)] shadow-sm transition hover:bg-[var(--cherry-muted)] sm:min-w-[6rem]"
         aria-expanded={open}
         aria-haspopup="true"
         aria-label="תפריט פרופיל"
@@ -127,6 +131,8 @@ export function ProfileMenu() {
             alt=""
             className="h-8 w-8 shrink-0 rounded-full border-2 border-[var(--border-cherry-soft)] object-cover"
           />
+        ) : appVariant === "blueberry" ? (
+          <BlueberryMark className="h-8 w-10 shrink-0" />
         ) : (
           <CherryMark className="h-8 w-10 shrink-0" />
         )}
@@ -161,7 +167,7 @@ export function ProfileMenu() {
                 className="block w-full px-4 py-3 text-start text-sm font-semibold text-[var(--cherry)] hover:bg-[var(--cherry-muted)]"
                 onClick={clearAvatar}
               >
-                הסרת תמונה — חזרה לאייקון דובדבן
+                הסרת תמונה — חזרה לאייקון המותג
               </button>
             )}
             <Link
@@ -213,6 +219,22 @@ export function ProfileMenu() {
                 onClick={logout}
               >
                 התנתקות
+              </button>
+            )}
+
+            {(process.env.NODE_ENV === "development" ||
+              isDevAdminBypassActive()) && (
+              <button
+                type="button"
+                role="menuitem"
+                className="block w-full px-4 py-3 text-start text-sm font-semibold text-[var(--stem)] hover:bg-[var(--cherry-muted)]"
+                onClick={() => {
+                  clearAppVariant();
+                  setOpen(false);
+                  router.push("/pick-theme");
+                }}
+              >
+                מסך בחירת מסלול — מנהלת
               </button>
             )}
 

@@ -21,6 +21,7 @@ import {
   toggleStoryRevealUnlock,
 } from "@/lib/storage";
 import { CelebrationFireworks } from "@/components/CelebrationFireworks";
+import { useAppVariant } from "@/components/useAppVariant";
 const fontBoard =
   "font-[Calibri,'Segoe_UI','Helvetica_Neue',system-ui,sans-serif]";
 
@@ -30,6 +31,9 @@ const stem3d =
 /** לחיצה / נפתח — דובדבן */
 const cherry3d =
   "border-[color-mix(in_srgb,var(--cherry)_55%,#c91835_45%)] bg-gradient-to-b from-[#ffd6dc] via-[#f08090] to-[#9b1b30] shadow-[inset_0_3px_6px_rgba(255,255,255,0.75),inset_0_-3px_8px_rgba(0,0,0,0.14),0_5px_0_rgba(120,20,40,0.4),0_8px_18px_rgba(155,27,48,0.28)]";
+/** לחיצה / זהב — אוכמניה כחולה (מסלול BLUEBERRY) */
+const berry3d =
+  "border-[color-mix(in_srgb,var(--cherry)_55%,#1d4ed8_45%)] bg-gradient-to-b from-[#bfdbfe] via-[#3b82f6] to-[#1e3a5f] shadow-[inset_0_3px_6px_rgba(255,255,255,0.78),inset_0_-3px_8px_rgba(0,0,0,0.16),0_5px_0_rgba(15,40,80,0.45),0_8px_18px_rgba(30,58,95,0.32)]";
 const futureGrey3d =
   "border-[#9ca3af] bg-gradient-to-b from-[#eceef2] to-[#bfc2c9] shadow-[inset_0_3px_6px_rgba(255,255,255,0.85),inset_0_-3px_8px_rgba(0,0,0,0.14),0_5px_0_rgba(0,0,0,0.18),0_8px_16px_rgba(0,0,0,0.1)] cursor-not-allowed opacity-[0.93] saturate-[0.95]";
 
@@ -71,6 +75,7 @@ function buildGridModel(): GridModel | null {
 }
 
 export function CalorieBoardGrid({ profileRev = 0 }: { profileRev?: number }) {
+  const appVariant = useAppVariant();
   const [goldMap, setGoldMap] = useState<Record<string, boolean>>({});
   const [board, setBoard] = useState<GridModel | null | undefined>(undefined);
   const [celebrationOpen, setCelebrationOpen] = useState(false);
@@ -202,7 +207,11 @@ export function CalorieBoardGrid({ profileRev = 0 }: { profileRev?: number }) {
                   <span
                     dir="rtl"
                     className={`line-clamp-3 w-full max-h-full overflow-hidden text-center text-[clamp(0.95rem,2.8vw,1.35rem)] font-black leading-tight tracking-tight sm:text-[clamp(1.05rem,3vw,1.5rem)] sm:leading-tight ${
-                      isGold ? "text-[#1f060c]" : "text-[#14280a]"
+                      isGold
+                        ? appVariant === "blueberry"
+                          ? "text-[#0a1628]"
+                          : "text-[#1f060c]"
+                        : "text-[#14280a]"
                     }`}
                   >
                     {goldMainText}
@@ -247,7 +256,11 @@ export function CalorieBoardGrid({ profileRev = 0 }: { profileRev?: number }) {
                     : ""
                 }${isLastSquare && isGold ? ", חגיגת סיום" : ""}`}
                 className={`relative flex ${cellFixed} flex-col items-stretch justify-between gap-0.5 rounded-2xl border-2 px-1.5 py-1.5 text-center transition-shadow focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--cherry)] focus-visible:ring-offset-2 active:shadow-[inset_0_4px_10px_rgba(0,0,0,0.15)] ${fontBoard} ${
-                  isGold ? cherry3d : stem3d
+                  isGold
+                    ? appVariant === "blueberry"
+                      ? berry3d
+                      : cherry3d
+                    : stem3d
                 } `}
                 onClick={() => {
                   if (isLastSquare && isGold) {
@@ -259,7 +272,11 @@ export function CalorieBoardGrid({ profileRev = 0 }: { profileRev?: number }) {
               >
                 <span
                   className={`shrink-0 truncate text-xs font-bold tracking-tight sm:text-sm ${
-                    isGold ? "text-[#3d0a12]" : "text-[#1a3d0f]"
+                    isGold
+                      ? appVariant === "blueberry"
+                        ? "text-[#0c1a2e]"
+                        : "text-[#3d0a12]"
+                      : "text-[#1a3d0f]"
                   }`}
                 >
                   {formatDayMonth(dateKey)}

@@ -701,13 +701,13 @@ export function HomeClient() {
       <header className="mb-8 text-center">
         <LiveClock />
         <div className="mt-6 flex flex-wrap items-center justify-center gap-4 border-y border-[var(--border-cherry-soft)] py-4">
-          <p className="text-center text-xl font-extrabold text-[var(--cherry)] md:text-2xl">
+          <p className="text-center text-xl font-extrabold text-[var(--ui-home-daily-line)] md:text-2xl">
             יעד יומי: {target} קק״ל
           </p>
           <span className="hidden text-[var(--stem)]/35 sm:inline" aria-hidden>
             |
           </span>
-          <p className="text-center text-xl font-extrabold text-[var(--cherry)] md:text-2xl">
+          <p className="text-center text-xl font-extrabold text-[var(--ui-home-daily-line)] md:text-2xl">
             {isViewingToday ? "נצרכו היום" : "נצרכו ביום הנבחר"}: {total} קק״ל
             <span className="mr-2 text-base font-semibold text-[var(--stem)]">
               {" "}
@@ -763,7 +763,7 @@ export function HomeClient() {
         <span className="text-base font-bold leading-snug tracking-wide text-[var(--stem)] md:text-lg">
           יומן המעקב של
         </span>
-        <h1 className="app-title relative inline-block rounded-2xl border border-[rgba(155,27,48,0.22)] bg-gradient-to-b from-white to-[#fffafb] px-3 py-2 text-[1.2rem] leading-snug shadow-[0_2px_14px_rgba(250,218,221,0.4),0_0_0_1px_rgba(155,27,48,0.06)] md:px-4 md:py-2.5 md:text-2xl lg:text-[1.55rem]">
+        <h1 className="app-title relative inline-block rounded-2xl border border-[var(--home-title-border)] bg-gradient-to-b from-white to-[var(--home-title-bg-end)] px-3 py-2 text-[1.2rem] leading-snug shadow-[0_2px_14px_var(--home-title-glow),0_0_0_1px_var(--glass-glow-inner)] md:px-4 md:py-2.5 md:text-2xl lg:text-[1.55rem]">
           אינטליגנציה קלורית
         </h1>
       </motion.div>
@@ -774,7 +774,7 @@ export function HomeClient() {
         animate={{ opacity: 1, y: 0 }}
         transition={{ delay: 0.05 }}
       >
-        <p className="mb-3 text-center text-sm font-bold text-[var(--cherry)]">
+        <p className="mb-3 text-center text-sm font-bold text-[var(--ui-home-progress-label)]">
           התקדמות יומית
         </p>
         <div className="h-3 overflow-hidden rounded-full border-2 border-[var(--border-cherry-soft)] bg-[#f8f8f8]">
@@ -793,7 +793,7 @@ export function HomeClient() {
             initial={{ opacity: 0, height: 0 }}
             animate={{ opacity: 1, height: "auto" }}
           >
-            <h3 className="text-center text-3xl font-extrabold leading-snug tracking-tight text-[#8b2e2e] md:text-4xl">
+            <h3 className="text-center text-3xl font-extrabold leading-snug tracking-tight text-[var(--ui-home-over-budget-h3)] md:text-4xl">
               מעל היעד – זה מצב זמני
             </h3>
             <p

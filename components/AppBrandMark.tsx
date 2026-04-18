@@ -1,12 +1,18 @@
 "use client";
 
 import { usePathname } from "next/navigation";
+import { BlueberryMark } from "@/components/BlueberryMark";
 import { CherryMark } from "@/components/CherryMark";
+import { useAppVariant } from "@/components/useAppVariant";
+import { getBrandName } from "@/lib/appVariant";
 
-/** מותג Cherry בפינה השמאלית העליונה (LTR) — בכל המסכים פרט למסך כניסה */
+/** מותג Cherry / BLUEBERRY בפינה השמאלית העליונה (LTR) */
 export function AppBrandMark() {
   const pathname = usePathname();
-  if (pathname === "/welcome") return null;
+  const variant = useAppVariant();
+  if (pathname === "/welcome" || pathname === "/pick-theme") return null;
+
+  const Mark = variant === "blueberry" ? BlueberryMark : CherryMark;
 
   return (
     <div
@@ -14,9 +20,9 @@ export function AppBrandMark() {
       dir="ltr"
       aria-hidden
     >
-      <CherryMark className="h-7 w-9 shrink-0 drop-shadow-sm sm:h-8 sm:w-10" />
-      <span className="select-none font-[system-ui,'Segoe_UI',sans-serif] text-[0.88rem] font-extrabold tracking-tight text-[var(--cherry)] drop-shadow-[0_1px_0_rgba(255,255,255,0.85)] sm:text-[0.95rem]">
-        Cherry
+      <Mark className="h-7 w-9 shrink-0 drop-shadow-sm sm:h-8 sm:w-10" />
+      <span className="select-none font-[system-ui,'Segoe_UI',sans-serif] text-[0.88rem] font-extrabold tracking-tight text-[var(--ui-brand-wordmark)] drop-shadow-[0_1px_0_rgba(255,255,255,0.85)] sm:text-[0.95rem]">
+        {getBrandName(variant)}
       </span>
     </div>
   );

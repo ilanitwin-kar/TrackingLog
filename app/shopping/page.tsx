@@ -141,10 +141,7 @@ export default function ShoppingPage() {
                   className={`flex flex-wrap items-center gap-3 rounded-xl border-2 border-[var(--border-cherry-soft)] bg-white px-3 py-3 ${
                     it.checked ? "opacity-70" : ""
                   }`}
-                  style={{
-                    boxShadow:
-                      "0 2px 12px rgba(155,27,48,0.08), 0 4px 16px rgba(74,124,35,0.06)",
-                  }}
+                  style={{ boxShadow: "var(--list-row-shadow)" }}
                 >
                   <label className="flex min-w-0 flex-1 cursor-pointer items-start gap-3">
                     <input

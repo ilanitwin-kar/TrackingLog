@@ -259,7 +259,8 @@ export default function ExplorerPage() {
               return (
                 <li
                   key={`${row.id}-${row.name}`}
-                  className="flex flex-wrap items-start gap-2 rounded-2xl border-2 border-[var(--border-cherry-soft)] bg-gradient-to-b from-white to-[#f6faf3] px-3 py-3 shadow-[inset_0_2px_6px_rgba(255,255,255,0.95),0_4px_0_rgba(0,0,0,0.05),0_10px_28px_rgba(155,27,48,0.1)]"
+                  className="flex flex-wrap items-start gap-2 rounded-2xl border-2 border-[var(--border-cherry-soft)] bg-gradient-to-b from-white to-[var(--welcome-gradient-to)] px-3 py-3"
+                  style={{ boxShadow: "var(--explorer-bubble-shadow)" }}
                 >
                   <div className="min-w-0 flex-1">
                     <p className="flex flex-wrap items-center gap-1.5 font-semibold text-[var(--stem)]">

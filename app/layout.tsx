@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import { AppChrome } from "@/components/AppChrome";
+import { ThemeRoot } from "@/components/ThemeRoot";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -22,6 +23,7 @@ export default function RootLayout({
   return (
     <html lang="he" dir="rtl">
       <body className="min-h-dvh antialiased">
+        <ThemeRoot />
         <AppChrome>{children}</AppChrome>
       </body>
     </html>

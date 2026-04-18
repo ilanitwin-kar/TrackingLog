@@ -391,7 +391,9 @@ export default function TdeePage() {
         <p className="mt-3 text-sm font-semibold text-[var(--cherry)]/85">
           יעד צריכה יומי (אחרי גירעון)
         </p>
-        <p className="text-2xl font-bold text-[var(--stem)]">{target} קק״ל</p>
+        <p className="text-2xl font-bold text-[var(--ui-hero-metric)]">
+          {target} קק״ל
+        </p>
       </motion.div>
 
       {!registered && (

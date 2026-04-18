@@ -75,7 +75,7 @@ export function BottomNav() {
   return (
     <>
       <nav
-        className="fixed bottom-0 left-0 right-0 z-[100] border-t-2 border-[var(--border-cherry-soft)] bg-white/95 pb-[max(0.35rem,env(safe-area-inset-bottom))] pt-1 shadow-[0_-6px_24px_rgba(155,27,48,0.08),0_-2px_16px_rgba(74,124,35,0.06)] backdrop-blur-sm print:hidden"
+        className="bottom-nav-shell fixed bottom-0 left-0 right-0 z-[100] border-t-2 border-[var(--border-cherry-soft)] bg-white/95 pb-[max(0.35rem,env(safe-area-inset-bottom))] pt-1 backdrop-blur-sm print:hidden"
         aria-label="ניווט ראשי"
       >
         <ul className="mx-auto grid max-w-md grid-cols-4 items-center gap-0.5 px-0.5 sm:gap-1 sm:px-1">

@@ -76,7 +76,7 @@ export default function ReportPage() {
       </motion.h1>
 
       <motion.section
-        className="mb-8 overflow-hidden rounded-2xl border-2 border-[var(--border-cherry-soft)] bg-gradient-to-b from-[#fff8fa] via-white to-[#f6faf3] shadow-[0_8px_32px_rgba(155,27,48,0.1),0_4px_20px_rgba(74,124,35,0.08)]"
+        className="page-hero-surface mb-8 overflow-hidden rounded-2xl border-2 border-[var(--border-cherry-soft)]"
         initial={{ opacity: 0, y: 10 }}
         animate={{ opacity: 1, y: 0 }}
       >
@@ -84,9 +84,9 @@ export default function ReportPage() {
           <p className="text-sm font-semibold text-[var(--cherry)]">
             הון מצטבר (קלוריות חסכון מצטברות)
           </p>
-          <p className="mt-2 font-[system-ui,Segoe_UI,sans-serif] text-4xl font-extrabold tracking-tight text-[var(--stem)] sm:text-5xl">
+          <p className="mt-2 font-[system-ui,Segoe_UI,sans-serif] text-4xl font-extrabold tracking-tight text-[var(--ui-hero-metric)] sm:text-5xl">
             {accumulation.totalAccumulatedKcal.toLocaleString("he-IL")}{" "}
-            <span className="text-2xl font-bold text-[var(--cherry)]/90 sm:text-3xl">
+            <span className="text-2xl font-bold text-[var(--ui-hero-metric-unit)]/90 sm:text-3xl">
               קק״ל
             </span>
           </p>
@@ -183,7 +183,7 @@ export default function ReportPage() {
           <p className="text-sm font-semibold text-[var(--cherry)]">
             סה״כ ירידה מתחילת המעקב
           </p>
-          <p className="text-2xl font-extrabold text-[var(--stem)]">
+          <p className="text-2xl font-extrabold text-[var(--ui-hero-metric)]">
             {metrics.lost.toFixed(1)} ק״ג
           </p>
         </div>
@@ -192,7 +192,7 @@ export default function ReportPage() {
           <p className="text-sm font-semibold text-[var(--cherry)]">
             נותר ליעד ({metrics.profile.goalWeightKg} ק״ג)
           </p>
-          <p className="text-2xl font-extrabold text-[var(--stem)]">
+          <p className="text-2xl font-extrabold text-[var(--ui-hero-metric)]">
             {metrics.remaining.toFixed(1)} ק״ג
           </p>
         </div>
@@ -201,7 +201,7 @@ export default function ReportPage() {
           <p className="text-sm font-semibold text-[var(--cherry)]">
             סה״כ קלוריות לשריפה
           </p>
-          <p className="text-2xl font-extrabold text-[var(--stem)]">
+          <p className="text-2xl font-extrabold text-[var(--ui-hero-metric)]">
             {metrics.kcalToBurn.toLocaleString("he-IL")} קק״ל
           </p>
         </div>
@@ -211,7 +211,7 @@ export default function ReportPage() {
             ספירה לאחור ליעד
           </p>
           {metrics.daysToGoal != null ? (
-            <p className="text-2xl font-extrabold text-[var(--stem)]">
+            <p className="text-2xl font-extrabold text-[var(--ui-hero-metric)]">
               בערך {metrics.daysToGoal} ימים
             </p>
           ) : (

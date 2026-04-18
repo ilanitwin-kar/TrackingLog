@@ -9,6 +9,7 @@ import {
   isDevAdminBypassActive,
   isSessionActive,
 } from "@/lib/localAuth";
+import { hasChosenAppVariant } from "@/lib/appVariant";
 import {
   hasLeftWelcome,
   isRegistrationComplete,
@@ -38,7 +39,11 @@ export function AppChrome({ children }: { children: React.ReactNode }) {
   }, []);
 
   useEffect(() => {
-    if (pathname === "/add-food" || pathname === "/welcome") {
+    if (
+      pathname === "/add-food" ||
+      pathname === "/welcome" ||
+      pathname === "/pick-theme"
+    ) {
       setHideNav(true);
       return;
     }
@@ -51,7 +56,11 @@ export function AppChrome({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     const sync = () => {
-      if (pathname === "/add-food" || pathname === "/welcome") {
+      if (
+        pathname === "/add-food" ||
+        pathname === "/welcome" ||
+        pathname === "/pick-theme"
+      ) {
         setHideNav(true);
         return;
       }
@@ -73,6 +82,17 @@ export function AppChrome({ children }: { children: React.ReactNode }) {
     }
     const complete = isRegistrationComplete(profile);
     const welcomeDone = hasLeftWelcome();
+
+    if (pathname === "/pick-theme") {
+      setRegOk(true);
+      setRegReady(true);
+      return;
+    }
+
+    if (!hasChosenAppVariant()) {
+      window.location.replace("/pick-theme");
+      return;
+    }
 
     if (pathname === "/welcome") {
       setRegOk(true);

@@ -9,7 +9,7 @@ export default function ForgotPasswordPage() {
     >
       <Link
         href="/welcome"
-        className="text-sm font-semibold text-[#9b1b30] underline underline-offset-4"
+        className="text-sm font-semibold text-[var(--cherry)] underline underline-offset-4"
       >
         ← חזרה למסך הכניסה
       </Link>
