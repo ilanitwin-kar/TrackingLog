@@ -92,8 +92,6 @@ export function BottomNav() {
               className="absolute -top-8 flex h-[3.25rem] w-[3.25rem] items-center justify-center rounded-full border-[3px] border-white bg-gradient-to-b from-[#ffe4e8] to-[#ffd0d8] text-[#4a1522] shadow-[0_6px_22px_rgba(200,100,120,0.5)] transition hover:brightness-105 active:scale-[0.96] sm:h-14 sm:w-14"
               aria-haspopup="dialog"
               aria-expanded={sheetOpen}
-              aria-controls={sheetOpen ? "add-food-sheet" : undefined}
-              aria-label="הוספת מזון ליומן"
               onClick={() => setSheetOpen(true)}
             >
               <IconPlusCircle className="h-8 w-8 sm:h-9 sm:w-9" />
@@ -141,7 +139,6 @@ export function BottomNav() {
       <AnimatePresence>
         {sheetOpen && (
           <motion.div
-            role="presentation"
             className="fixed inset-0 z-[180] flex items-end justify-center bg-black/40 backdrop-blur-[2px] sm:items-center sm:p-4"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
@@ -149,56 +146,20 @@ export function BottomNav() {
             onClick={() => setSheetOpen(false)}
           >
             <motion.div
-              id="add-food-sheet"
-              role="dialog"
-              aria-modal
-              aria-labelledby={titleId}
-              aria-describedby={subtitleId}
-              className="glass-panel w-full max-w-md rounded-t-[1.35rem] border-2 border-[#FADADD] p-5 shadow-2xl sm:rounded-2xl"
+              className="w-full max-w-md rounded-t-[1.35rem] border-2 border-[#FADADD] bg-white p-5 shadow-2xl sm:rounded-2xl"
               initial={{ y: 48, opacity: 0 }}
               animate={{ y: 0, opacity: 1 }}
               exit={{ y: 32, opacity: 0 }}
-              transition={{ type: "spring", damping: 28, stiffness: 320 }}
               onClick={(e) => e.stopPropagation()}
             >
               <div className="mx-auto mb-3 h-1 w-10 rounded-full bg-[#333333]/20 sm:hidden" />
-              <h2
-                id={titleId}
-                className="text-center text-xl font-extrabold text-[#333333]"
-              >
-                הוספה ליומן
-              </h2>
-              <p
-                id={subtitleId}
-                className="mt-2 text-center text-sm leading-relaxed text-[#333333]/75"
-              >
-                חיפוש במאגרים שלך ובמאגר עולמי, עם מסך מלא שנוח לחיפוש.
-              </p>
-              <p className="mt-2 text-center text-xs font-medium text-[#333333]/55">
-                נרשם לתאריך:{" "}
-                <span className="font-bold text-[#333333]/80">
-                  {addFoodDateKey}
-                </span>
+              <h2 className="text-center text-xl font-extrabold text-[#333333]">הוספה ליומן</h2>
+              <p className="mt-2 text-center text-sm leading-relaxed text-[#333333]/75">
+                חיפוש במאגרים שלך ובמאגר עולמי.
               </p>
               <motion.button
-                type="button"
-                className="btn-gold mt-5 w-full rounded-xl py-3.5 text-base font-bold"
+                className="mt-5 w-full rounded-xl bg-[#FADADD] py-3.5 text-base font-bold text-[#333333] hover:bg-[#ffd0d8] transition-colors"
                 whileTap={{ scale: 0.98 }}
                 onClick={goAddFood}
               >
                 פתיחת מסך הוספת מזון
-              </motion.button>
-              <button
-                type="button"
-                className="mt-3 w-full rounded-xl border-2 border-[#FADADD] bg-white py-2.5 text-sm font-semibold text-[#333333] transition hover:bg-[#FADADD]/25"
-                onClick={() => setSheetOpen(false)}
-              >
-                סגירה
-              </button>
-            </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-    </>
-  );
-}
