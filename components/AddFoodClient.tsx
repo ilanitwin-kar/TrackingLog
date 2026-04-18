@@ -512,6 +512,14 @@ export function AddFoodClient() {
     setPickGramsText("100");
     setPickUnitWeightText("");
     setPickUnitsText("1");
+    setFood("");
+    setDebouncedFoodSearch("");
+    setHomeLocalRows([]);
+    setWorldRows([]);
+    setHomeSearchLoading(false);
+    setWorldSearchLoading(false);
+    setGeminiInsight({ kind: "idle" });
+    queueMicrotask(() => searchInputRef.current?.focus());
   }
 
   function showPickModalNotice(msg: string) {
