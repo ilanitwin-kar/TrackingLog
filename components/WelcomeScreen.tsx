@@ -5,8 +5,11 @@ import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import {
   activateDevAdminBypass,
-  isSessionActive,
+  activateStaffBypass,
+  hasWelcomeAutoResume,
+  isStaffUnlockConfigured,
   registerAccount,
+  seedBypassProfileIfNeeded,
   seedDevAdminProfileIfNeeded,
   startSession,
   verifyLogin,
@@ -52,6 +55,9 @@ type Copy = {
   submitLogin: string;
   cancel: string;
   devAdminOnly: string;
+  staffEntry: string;
+  staffPinPrompt: string;
+  staffPinWrong: string;
   errEmail: string;
   errPasswordShort: string;
   errPasswordMismatch: string;
@@ -93,6 +99,9 @@ const COPY: Record<Lang, Copy> = {
     submitLogin: "כניסה",
     cancel: "ביטול",
     devAdminOnly: "כניסת מנהלת (פיתוח בלבד)",
+    staffEntry: "כניסת מנהלת (קוד צוות)",
+    staffPinPrompt: "קוד צוות",
+    staffPinWrong: "קוד שגוי",
     errEmail: "נא להזין כתובת אימייל תקינה",
     errPasswordShort: "הסיסמה חייבת להכיל לפחות 6 תווים",
     errPasswordMismatch: "הסיסמאות אינן תואמות",
@@ -132,6 +141,9 @@ const COPY: Record<Lang, Copy> = {
     submitLogin: "Sign in",
     cancel: "Cancel",
     devAdminOnly: "Admin entry (development only)",
+    staffEntry: "Staff entry (passcode)",
+    staffPinPrompt: "Team passcode",
+    staffPinWrong: "Wrong passcode",
     errEmail: "Please enter a valid email address",
     errPasswordShort: "Password must be at least 6 characters",
     errPasswordMismatch: "Passwords do not match",
@@ -243,10 +255,10 @@ export function WelcomeScreen() {
     setLang(loadLang());
   }, []);
 
-  /** כבר מחוברים (למשל אחרי בחירת מסלול מחדש) — לא לעצור במסך הכניסה */
+  /** כבר מחוברים או דילוג מנהלת/צוות — לא לעצור במסך הכניסה */
   useEffect(() => {
     if (!mounted) return;
-    if (!isSessionActive()) return;
+    if (!hasWelcomeAutoResume()) return;
     const profile = loadProfile();
     if (isRegistrationComplete(profile)) router.replace("/");
     else router.replace("/tdee");
@@ -474,6 +486,28 @@ export function WelcomeScreen() {
             className="w-full rounded-xl border-2 border-dashed border-[var(--welcome-dev-border)] bg-[var(--welcome-dev-bg)] py-2.5 text-center text-xs font-semibold text-[var(--cherry)]"
           >
             {t.devAdminOnly}
+          </button>
+        )}
+        {isStaffUnlockConfigured() && (
+          <button
+            type="button"
+            onClick={() => {
+              const pin =
+                typeof window !== "undefined"
+                  ? window.prompt(t.staffPinPrompt, "")
+                  : null;
+              if (pin == null) return;
+              if (!activateStaffBypass(pin.trim())) {
+                showToast(t.staffPinWrong);
+                return;
+              }
+              seedBypassProfileIfNeeded();
+              markWelcomeLeft();
+              router.replace("/");
+            }}
+            className="w-full rounded-xl border-2 border-dashed border-[var(--welcome-dev-border)] bg-[var(--welcome-dev-bg)] py-2.5 text-center text-sm font-semibold text-[var(--cherry)] sm:text-base"
+          >
+            {t.staffEntry}
           </button>
         )}
         <p className="text-[10px] text-[var(--text)]/45">

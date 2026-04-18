@@ -11,6 +11,8 @@ const AUTH_KEY = "cj_local_auth_v1";
 const SESSION_KEY = "cj_session_v1";
 /** רק ב־development — דילוג על שער ההתחברות לפיתוח */
 export const DEV_ADMIN_BYPASS_KEY = "cj_dev_admin_session_v1";
+/** פרודקשן: אחרי הזנת קוד צוות (מ־NEXT_PUBLIC_STAFF_UNLOCK בבילד) */
+const STAFF_BYPASS_KEY = "cj_staff_bypass_v1";
 
 const PEPPER = "cj_local_pw_v1";
 
@@ -129,6 +131,47 @@ export function isDevAdminBypassActive(): boolean {
   return localStorage.getItem(DEV_ADMIN_BYPASS_KEY) === "1";
 }
 
+/** האם הוגדר קוד צוות בבילד (Netlify / .env) — מאפשר כניסת מנהלת בנייד בלי dev */
+export function isStaffUnlockConfigured(): boolean {
+  const s = process.env.NEXT_PUBLIC_STAFF_UNLOCK;
+  return typeof s === "string" && s.length >= 4;
+}
+
+/** דילוג צוות בפרודקשן — נשמר ב־localStorage עד «התחלה מחדש» */
+export function isStaffBypassActive(): boolean {
+  if (typeof window === "undefined") return false;
+  return localStorage.getItem(STAFF_BYPASS_KEY) === "1";
+}
+
+/** דילוג פנימי: פיתוח או צוות */
+export function isInternalAuthBypassActive(): boolean {
+  return isDevAdminBypassActive() || isStaffBypassActive();
+}
+
+/** חזרה אוטומטית ממסך הכניסה כשכבר נכנסת (סשן או דילוג פנימי) */
+export function hasWelcomeAutoResume(): boolean {
+  return isSessionActive() || isInternalAuthBypassActive();
+}
+
+/**
+ * הזנת קוד צוות — רק אם NEXT_PUBLIC_STAFF_UNLOCK הוגדר בבילד.
+ * @returns האם הוקם דילוג
+ */
+export function activateStaffBypass(pin: string): boolean {
+  if (typeof window === "undefined") return false;
+  if (!isStaffUnlockConfigured()) return false;
+  if (pin !== process.env.NEXT_PUBLIC_STAFF_UNLOCK) return false;
+  localStorage.setItem(STAFF_BYPASS_KEY, "1");
+  startSession();
+  return true;
+}
+
+export function clearStaffBypass(): void {
+  if (typeof window === "undefined") return;
+  localStorage.removeItem(STAFF_BYPASS_KEY);
+  dispatchAuthChanged();
+}
+
 /** כניסת מנהלת — רק בסביבת פיתוח */
 export function activateDevAdminBypass(): void {
   if (typeof window === "undefined") return;
@@ -143,10 +186,9 @@ export function clearDevAdminBypass(): void {
   dispatchAuthChanged();
 }
 
-/** מילוי פרופיל מלא לפיתוח — רק אם עדיין לא הושלם */
-export function seedDevAdminProfileIfNeeded(): void {
+/** מילוי פרופיל לדילוג פנימי — בלי דרישת dev (לצוות בפרודקשן) */
+export function seedBypassProfileIfNeeded(): void {
   if (typeof window === "undefined") return;
-  if (process.env.NODE_ENV !== "development") return;
   const p = loadProfile();
   if (isRegistrationComplete(p)) return;
   const next: UserProfile = {
@@ -165,4 +207,10 @@ export function seedDevAdminProfileIfNeeded(): void {
   };
   saveProfile(next);
   window.dispatchEvent(new Event("cj-profile-updated"));
+}
+
+/** מילוי פרופיל מלא לפיתוח — רק אם עדיין לא הושלם */
+export function seedDevAdminProfileIfNeeded(): void {
+  if (process.env.NODE_ENV !== "development") return;
+  seedBypassProfileIfNeeded();
 }
