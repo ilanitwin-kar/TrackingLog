@@ -334,10 +334,7 @@ export default function DictionaryPage() {
                   key={d.id}
                   layout
                   className="rounded-xl border-2 border-[var(--border-cherry-soft)] bg-white px-3 py-3"
-                  style={{
-                    boxShadow:
-                      "0 2px 12px rgba(155,27,48,0.1), 0 4px 16px rgba(74,124,35,0.06)",
-                  }}
+                  style={{ boxShadow: "var(--list-row-shadow)" }}
                 >
                   <div className="flex items-start justify-between gap-2">
                     <div className="min-w-0 flex-1">

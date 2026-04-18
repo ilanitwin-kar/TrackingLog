@@ -122,7 +122,7 @@ export function AddFoodClient() {
   const pickCubePressedGold =
     "translate-y-1 border-[#d4b24a] bg-[#fff3dd] shadow-[inset_0_3px_10px_rgba(0,0,0,0.11),inset_0_-1px_0_rgba(255,255,255,0.65)]";
   const pickCubeIdleWhite =
-    "border-[var(--border-cherry-soft)] bg-white shadow-[0_2px_8px_rgba(155,27,48,0.08)] hover:bg-[var(--cherry-muted)]";
+    "border-[var(--border-cherry-soft)] bg-white shadow-[0_2px_8px_var(--panel-shadow-soft)] hover:bg-[var(--cherry-muted)]";
   const pickCubeIdleGold =
     "border-[#e6c65c] bg-[#fff9e6] shadow-[0_2px_5px_rgba(0,0,0,0.06)] hover:bg-[#fff3cc]";
 

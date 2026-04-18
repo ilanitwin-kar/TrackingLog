@@ -12,6 +12,132 @@
   --stem-deep: #3d6b28;
   --stem-shadow: rgba(74, 124, 35, 0.38);
   --text: #333333;
+  --panel-shadow-soft: rgba(155, 27, 48, 0.08);
+  --cherry-glow-shadow: 0 4px 20px rgba(155, 27, 48, 0.35);
+  --focus-ring-outer: rgba(74, 124, 35, 0.18);
+  --focus-ring-inner: rgba(155, 27, 48, 0.08);
+  --glass-glow-outer: rgba(250, 218, 221, 0.42);
+  --glass-glow-inner: rgba(155, 27, 48, 0.06);
+  --btn-gold-shadow: 0 2px 12px rgba(250, 218, 221, 0.65);
+  --btn-gold-shadow-active: 0 1px 6px rgba(250, 218, 221, 0.5);
+  --welcome-gradient-from: #fff8fa;
+  --welcome-gradient-mid: #ffffff;
+  --welcome-gradient-to: #f6faf3;
+  --welcome-dev-bg: #fffafb;
+  --welcome-dev-border: rgba(155, 27, 48, 0.38);
+  --nav-shadow-top: 0 -6px 24px rgba(155, 27, 48, 0.08),
+    0 -2px 16px rgba(74, 124, 35, 0.06);
+  --page-hero-combined-shadow: 0 8px 28px var(--panel-shadow-soft),
+    0 4px 20px rgba(74, 124, 35, 0.08);
+  --list-row-shadow: 0 2px 12px var(--panel-shadow-soft),
+    0 4px 16px rgba(74, 124, 35, 0.06);
+  --explorer-bubble-shadow: inset 0 2px 6px rgba(255, 255, 255, 0.95),
+    0 4px 0 rgba(0, 0, 0, 0.05), 0 10px 28px var(--panel-shadow-soft);
+  --home-title-glow: rgba(250, 218, 221, 0.4);
+  --home-title-border: rgba(155, 27, 48, 0.22);
+  --home-title-bg-end: #fffafb;
+  /**
+   * טיפוגרפיה בולטת — מסלול נשים נשאר כמו לפני פיצול המותגים.
+   * במסלול גברים מוחלף ל־--display-heading (כחול עמוק).
+   */
+  --ui-page-heading: var(--cherry);
+  --ui-hero-metric: var(--stem);
+  --ui-hero-metric-unit: var(--cherry);
+  --ui-home-daily-line: var(--cherry);
+  --ui-home-progress-label: var(--cherry);
+  --ui-home-over-budget-h3: #8b2e2e;
+  --ui-welcome-tagline: var(--cherry);
+  --ui-brand-wordmark: var(--cherry);
+}
+
+/** מסלול גברים — כחול רויאל, אוכמניה, גרניט */
+html[data-app-theme="blueberry"] {
+  --accent: #dbeafe;
+  --accent-deep: #93c5fd;
+  --cherry: #1e3a5f;
+  --cherry-muted: rgba(30, 58, 95, 0.14);
+  --border-cherry-soft: color-mix(in srgb, var(--cherry) 24%, #cbd5e1 76%);
+  --stem: #64748b;
+  --stem-mid: #94a3b8;
+  --stem-deep: #475569;
+  --stem-shadow: rgba(71, 85, 105, 0.38);
+  --panel-shadow-soft: rgba(30, 58, 95, 0.12);
+  --cherry-glow-shadow: 0 4px 22px rgba(30, 58, 95, 0.42);
+  --focus-ring-outer: rgba(37, 99, 235, 0.22);
+  --focus-ring-inner: rgba(30, 58, 95, 0.1);
+  --glass-glow-outer: rgba(147, 197, 253, 0.38);
+  --glass-glow-inner: rgba(30, 58, 95, 0.1);
+  --btn-gold-shadow: 0 2px 12px rgba(147, 197, 253, 0.48);
+  --btn-gold-shadow-active: 0 1px 6px rgba(147, 197, 253, 0.38);
+  --welcome-gradient-from: #eef4ff;
+  --welcome-gradient-mid: #ffffff;
+  --welcome-gradient-to: #e8eef5;
+  --welcome-dev-bg: #f4f7fc;
+  --welcome-dev-border: rgba(30, 58, 95, 0.35);
+  --nav-shadow-top: 0 -6px 24px rgba(30, 58, 95, 0.1),
+    0 -2px 16px rgba(100, 116, 139, 0.08);
+  --page-hero-combined-shadow: 0 8px 32px var(--panel-shadow-soft),
+    0 4px 20px rgba(100, 116, 139, 0.1);
+  --list-row-shadow: 0 2px 12px var(--panel-shadow-soft),
+    0 4px 16px rgba(100, 116, 139, 0.08);
+  --explorer-bubble-shadow: inset 0 2px 6px rgba(255, 255, 255, 0.95),
+    0 4px 0 rgba(0, 0, 0, 0.05), 0 10px 28px var(--panel-shadow-soft);
+  --home-title-glow: rgba(219, 234, 254, 0.55);
+  --home-title-border: rgba(30, 58, 95, 0.24);
+  --home-title-bg-end: #f4f7fc;
+  /** כותרות גדולות — כחול עמוק (לא אותו גוון כמו כפתורי המותג) */
+  --display-heading: #071426;
+  --ui-page-heading: var(--display-heading);
+  --ui-hero-metric: var(--display-heading);
+  --ui-hero-metric-unit: var(--display-heading);
+  --ui-home-daily-line: var(--display-heading);
+  --ui-home-progress-label: var(--display-heading);
+  --ui-home-over-budget-h3: var(--display-heading);
+  --ui-welcome-tagline: var(--display-heading);
+  --ui-brand-wordmark: var(--display-heading);
+}
+
+html[data-app-theme="blueberry"] body {
+  background: linear-gradient(
+    165deg,
+    #eef4ff 0%,
+    #ffffff 40%,
+    #e2e8f0 76%,
+    #f8fafc 100%
+  );
+  background-attachment: fixed;
+}
+
+html[data-app-theme="blueberry"] input[type="radio"],
+html[data-app-theme="blueberry"] input[type="checkbox"] {
+  accent-color: var(--cherry);
+}
+
+.shadow-brand-cta {
+  box-shadow: var(--cherry-glow-shadow);
+}
+
+.welcome-screen-bg {
+  background: linear-gradient(
+    to bottom,
+    var(--welcome-gradient-from),
+    var(--welcome-gradient-mid),
+    var(--welcome-gradient-to)
+  );
+}
+
+.bottom-nav-shell {
+  box-shadow: var(--nav-shadow-top);
+}
+
+.page-hero-surface {
+  background: linear-gradient(
+    to bottom,
+    var(--welcome-gradient-from),
+    var(--welcome-gradient-mid),
+    var(--welcome-gradient-to)
+  );
+  box-shadow: var(--page-hero-combined-shadow);
 }
 
 html {
@@ -40,9 +166,9 @@ input[type="checkbox"] {
 }
 
 @layer utilities {
-  /** כותרות מסך ראשי — דובדבן */
+  /** כותרות מסך ראשי */
   .app-title {
-    color: var(--cherry);
+    color: var(--ui-page-heading);
     font-weight: 800;
     letter-spacing: -0.02em;
     line-height: 1.1;
@@ -50,7 +176,7 @@ input[type="checkbox"] {
 
   /** כותרות עמוד (h1) */
   .heading-page {
-    color: var(--cherry);
+    color: var(--ui-page-heading);
     font-weight: 800;
     letter-spacing: -0.02em;
     line-height: 1.15;
@@ -79,8 +205,8 @@ input[type="checkbox"] {
     background-color: #ffffff;
     border: 2px solid var(--border-cherry-soft);
     box-shadow:
-      0 4px 24px rgba(250, 218, 221, 0.42),
-      0 0 0 1px rgba(155, 27, 48, 0.06);
+      0 4px 24px var(--glass-glow-outer),
+      0 0 0 1px var(--glass-glow-inner);
   }
 
   /** כפתורי הדגשה רכים — ורוד עדין */
@@ -88,7 +214,11 @@ input[type="checkbox"] {
     background: linear-gradient(to bottom, #fff6f8, var(--accent));
     color: var(--text);
     border: 2px solid var(--accent-deep);
-    box-shadow: 0 2px 12px rgba(250, 218, 221, 0.65);
+    box-shadow: var(--btn-gold-shadow);
+  }
+
+  html[data-app-theme="blueberry"] .btn-gold {
+    background: linear-gradient(to bottom, #f8fafc, var(--accent));
   }
 
   .btn-gold:hover {
@@ -96,7 +226,7 @@ input[type="checkbox"] {
   }
 
   .btn-gold:active {
-    box-shadow: 0 1px 6px rgba(250, 218, 221, 0.5);
+    box-shadow: var(--btn-gold-shadow-active);
   }
 
   /** שמירה / אישור עיקרי — ירוק גיבעול (כמו בענף הדובדבן) */
@@ -141,8 +271,8 @@ input[type="checkbox"] {
   .input-luxury-search:focus {
     border-color: color-mix(in srgb, var(--stem) 35%, var(--accent-deep) 65%);
     box-shadow:
-      0 0 0 3px rgba(74, 124, 35, 0.18),
-      0 0 0 1px rgba(155, 27, 48, 0.08);
+      0 0 0 3px var(--focus-ring-outer),
+      0 0 0 1px var(--focus-ring-inner);
   }
 
   .input-luxury-dark {
@@ -157,8 +287,8 @@ input[type="checkbox"] {
 
   .input-luxury-dark:focus {
     box-shadow:
-      0 0 0 3px rgba(74, 124, 35, 0.15),
-      0 0 0 1px rgba(155, 27, 48, 0.06);
+      0 0 0 3px var(--focus-ring-outer),
+      0 0 0 1px var(--focus-ring-inner);
   }
 
   .select-luxury {
@@ -183,8 +313,8 @@ input[type="checkbox"] {
 
   .select-luxury:focus {
     box-shadow:
-      0 0 0 3px rgba(74, 124, 35, 0.15),
-      0 0 0 1px rgba(155, 27, 48, 0.06);
+      0 0 0 3px var(--focus-ring-outer),
+      0 0 0 1px var(--focus-ring-inner);
   }
 
   .select-luxury option {
@@ -204,7 +334,7 @@ input[type="checkbox"] {
     background-color: #ffffff;
     box-shadow:
       0 8px 32px rgba(0, 0, 0, 0.08),
-      0 0 0 1px rgba(155, 27, 48, 0.06);
+      0 0 0 1px var(--focus-ring-inner);
     max-height: 14rem;
     overflow-y: auto;
   }
@@ -271,14 +401,14 @@ input[type="checkbox"] {
   }
 
   .luxury-hero-title {
-    color: var(--cherry);
+    color: var(--ui-page-heading);
     font-weight: 800;
     text-shadow: none;
   }
 
-  /** כותרת משנה בדיאלוגים — דובדבן */
+  /** כותרות דיאלוגים / פאנלים */
   .panel-title-cherry {
-    color: var(--cherry);
+    color: var(--ui-page-heading);
     font-weight: 700;
   }
 
