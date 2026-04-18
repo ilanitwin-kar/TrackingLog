@@ -1,6 +1,6 @@
 "use client";
 
-import { usePathname, useRouter } from "next/navigation";
+import { usePathname } from "next/navigation";
 import { Suspense, useEffect, useState } from "react";
 import { AppBrandMark } from "@/components/AppBrandMark";
 import { BottomNav } from "@/components/BottomNav";
@@ -26,7 +26,6 @@ function isStandalonePublicPath(pathname: string): boolean {
 
 export function AppChrome({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
-  const router = useRouter();
   const [hideNav, setHideNav] = useState(false);
   const [regReady, setRegReady] = useState(false);
   const [regOk, setRegOk] = useState(false);
@@ -93,17 +92,13 @@ export function AppChrome({ children }: { children: React.ReactNode }) {
     const legacyUnlock = !authExists && isRegistrationComplete(profile);
 
     if (!devBypass && !session && !legacyUnlock) {
-      router.replace("/welcome");
-      setRegOk(false);
-      setRegReady(true);
+      window.location.replace("/welcome");
       return;
     }
 
     if (pathname === "/tdee") {
       if (!complete && !welcomeDone) {
-        router.replace("/welcome");
-        setRegOk(false);
-        setRegReady(true);
+        window.location.replace("/welcome");
         return;
       }
       setRegOk(true);
@@ -118,16 +113,13 @@ export function AppChrome({ children }: { children: React.ReactNode }) {
     }
 
     if (!welcomeDone) {
-      router.replace("/welcome");
-      setRegOk(false);
-      setRegReady(true);
+      window.location.replace("/welcome");
       return;
     }
 
-    router.replace("/tdee");
-    setRegOk(false);
-    setRegReady(true);
-  }, [pathname, router, authTick]);
+    window.location.replace("/tdee");
+    return;
+  }, [pathname, authTick]);
 
   if (!regReady || !regOk) {
     return (

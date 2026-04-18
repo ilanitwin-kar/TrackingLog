@@ -756,18 +756,16 @@ export function HomeClient() {
       </header>
 
       <motion.div
-        className="mb-8 flex justify-center px-3"
+        className="mb-8 flex flex-wrap items-center justify-center gap-x-2 gap-y-1.5 px-3 text-center"
         initial={{ opacity: 0, y: -8 }}
         animate={{ opacity: 1, y: 0 }}
       >
-        <div className="max-w-[min(100%,20rem)] text-center">
-          <p className="mb-2.5 text-base font-bold leading-snug tracking-wide text-[var(--stem)] md:text-lg">
-            יומן המעקב של
-          </p>
-          <h1 className="app-title relative rounded-2xl border border-[rgba(155,27,48,0.22)] bg-gradient-to-b from-white to-[#fffafb] px-4 py-3 text-[1.35rem] leading-snug shadow-[0_2px_14px_rgba(250,218,221,0.4),0_0_0_1px_rgba(155,27,48,0.06)] md:px-5 md:py-3.5 md:text-2xl lg:text-[1.65rem]">
-            אינטליגנציה קלורית
-          </h1>
-        </div>
+        <span className="text-base font-bold leading-snug tracking-wide text-[var(--stem)] md:text-lg">
+          יומן המעקב של
+        </span>
+        <h1 className="app-title relative inline-block rounded-2xl border border-[rgba(155,27,48,0.22)] bg-gradient-to-b from-white to-[#fffafb] px-3 py-2 text-[1.2rem] leading-snug shadow-[0_2px_14px_rgba(250,218,221,0.4),0_0_0_1px_rgba(155,27,48,0.06)] md:px-4 md:py-2.5 md:text-2xl lg:text-[1.55rem]">
+          אינטליגנציה קלורית
+        </h1>
       </motion.div>
 
       <motion.section

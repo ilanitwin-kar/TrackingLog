@@ -78,17 +78,17 @@ export function BottomNav() {
         className="fixed bottom-0 left-0 right-0 z-[100] border-t-2 border-[var(--border-cherry-soft)] bg-white/95 pb-[max(0.35rem,env(safe-area-inset-bottom))] pt-1 shadow-[0_-6px_24px_rgba(155,27,48,0.08),0_-2px_16px_rgba(74,124,35,0.06)] backdrop-blur-sm print:hidden"
         aria-label="ניווט ראשי"
       >
-        <ul className="mx-auto grid max-w-md grid-cols-4 items-end gap-0 px-1">
+        <ul className="mx-auto grid max-w-md grid-cols-4 items-center gap-0.5 px-0.5 sm:gap-1 sm:px-1">
           {navLinks.slice(0, 2).map(({ href, label, Icon }) => {
             const active = pathname === href;
             return (
               <li key={href} className="flex min-w-0 justify-center">
                 <Link
                   href={href}
-                  className={`relative flex min-w-[3.25rem] flex-col items-center justify-center gap-0.5 rounded-xl py-1.5 text-[10px] font-semibold transition-colors sm:min-w-[3.75rem] sm:py-2 sm:text-xs ${
+                  className={`relative flex min-h-[2.75rem] min-w-0 max-w-full flex-row items-center justify-center gap-1 rounded-xl py-1 pe-1 ps-1 text-[9px] font-bold leading-tight transition-colors sm:min-h-0 sm:gap-1.5 sm:py-1.5 sm:text-[10px] sm:font-semibold ${
                     active
                       ? "text-[var(--cherry)]"
-                      : "text-[var(--stem)]/80 hover:text-[var(--cherry)]"
+                      : "text-[var(--stem)]/85 hover:text-[var(--cherry)]"
                   }`}
                 >
                   {active && (
@@ -102,32 +102,32 @@ export function BottomNav() {
                       }}
                     />
                   )}
-                  <Icon
-                    className={`h-6 w-6 shrink-0 sm:h-7 sm:w-7 ${active ? "text-[var(--cherry)]" : "text-[var(--stem)]"}`}
-                  />
-                  <span className="truncate px-0.5 text-center leading-tight">
+                  <span className="max-w-[3.2rem] text-end leading-[1.15] sm:max-w-[4rem]">
                     {label}
                   </span>
+                  <Icon
+                    className={`h-5 w-5 shrink-0 sm:h-6 sm:w-6 ${active ? "text-[var(--cherry)]" : "text-[var(--stem)]"}`}
+                  />
                 </Link>
               </li>
             );
           })}
 
-          <li className="relative flex justify-center pb-1">
+          <li className="flex min-w-0 justify-center">
             <button
               type="button"
-              className="absolute -top-8 flex h-[3.25rem] w-[3.25rem] items-center justify-center rounded-full border-[3px] border-white bg-gradient-to-b from-[var(--stem-mid)] to-[var(--stem)] text-white shadow-[0_6px_22px_var(--stem-shadow)] transition hover:brightness-105 active:scale-[0.96] sm:h-14 sm:w-14"
+              className="flex min-h-[2.75rem] min-w-0 max-w-full flex-row items-center justify-center gap-1 rounded-full border-[2px] border-white bg-gradient-to-b from-[var(--stem-mid)] to-[var(--stem)] px-2 py-1.5 text-white shadow-[0_4px_16px_var(--stem-shadow)] transition hover:brightness-105 active:scale-[0.97] sm:min-h-0 sm:px-3 sm:py-2"
               aria-haspopup="dialog"
               aria-expanded={sheetOpen}
               aria-controls={sheetOpen ? "add-food-sheet" : undefined}
               aria-label="הוספת מזון ליומן"
               onClick={() => setSheetOpen(true)}
             >
-              <IconPlusCircle className="h-8 w-8 sm:h-9 sm:w-9" />
+              <span className="max-w-[3rem] text-end text-[9px] font-extrabold leading-[1.15] sm:max-w-none sm:text-[10px]">
+                הוספה
+              </span>
+              <IconPlusCircle className="h-6 w-6 shrink-0 sm:h-7 sm:w-7" />
             </button>
-            <span className="pointer-events-none pt-5 text-center text-[9px] font-bold text-[var(--stem)] sm:text-[10px]">
-              הוספה
-            </span>
           </li>
 
           {(() => {
@@ -137,10 +137,10 @@ export function BottomNav() {
               <li key={href} className="flex min-w-0 justify-center">
                 <Link
                   href={href}
-                  className={`relative flex min-w-[3.25rem] flex-col items-center justify-center gap-0.5 rounded-xl py-1.5 text-[10px] font-semibold transition-colors sm:min-w-[3.75rem] sm:py-2 sm:text-xs ${
+                  className={`relative flex min-h-[2.75rem] min-w-0 max-w-full flex-row items-center justify-center gap-1 rounded-xl py-1 pe-1 ps-1 text-[9px] font-bold leading-tight transition-colors sm:min-h-0 sm:gap-1.5 sm:py-1.5 sm:text-[10px] sm:font-semibold ${
                     active
                       ? "text-[var(--cherry)]"
-                      : "text-[var(--stem)]/80 hover:text-[var(--cherry)]"
+                      : "text-[var(--stem)]/85 hover:text-[var(--cherry)]"
                   }`}
                 >
                   {active && (
@@ -154,12 +154,12 @@ export function BottomNav() {
                       }}
                     />
                   )}
-                  <Icon
-                    className={`h-6 w-6 shrink-0 sm:h-7 sm:w-7 ${active ? "text-[var(--cherry)]" : "text-[var(--stem)]"}`}
-                  />
-                  <span className="truncate px-0.5 text-center leading-tight">
+                  <span className="max-w-[3.2rem] text-end leading-[1.15] sm:max-w-[4rem]">
                     {label}
                   </span>
+                  <Icon
+                    className={`h-5 w-5 shrink-0 sm:h-6 sm:w-6 ${active ? "text-[var(--cherry)]" : "text-[var(--stem)]"}`}
+                  />
                 </Link>
               </li>
             );
