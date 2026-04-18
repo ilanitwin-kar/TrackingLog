@@ -17,5 +17,15 @@
     "paths": { "@/*": ["./*"] }
   },
   "include": ["next-env.d.ts", "**/*.ts", "**/*.tsx", ".next/types/**/*.ts"],
-  "exclude": ["node_modules"]
+  "exclude": [
+    "node_modules",
+    "components/AddFoodClient(1).tsx",
+    "components/AddFoodClient(2).tsx",
+    "app/add-food/page(1).tsx",
+    "app/add-food/page(2).tsx",
+    "app/api/openfoodfacts-search/route(1).ts",
+    "app/api/openfoodfacts-search/route(2).ts",
+    "lib/foodSearchShared(1).ts",
+    "lib/foodSearchShared(2).ts"
+  ]
 }

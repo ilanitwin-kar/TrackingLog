@@ -194,7 +194,14 @@ export function saveProfile(p: UserProfile): void {
   }
 }
 
-export type FoodMemory = Record<string, { quantity: number; unit: FoodUnit }>;
+export type FoodMemoryEntry = {
+  quantity: number;
+  unit: FoodUnit;
+  /** משקל בגרם ליחידה כשהיחידה היא "יחידה" */
+  gramsPerUnit?: number;
+};
+
+export type FoodMemory = Record<string, FoodMemoryEntry>;
 
 export function normalizeFoodKey(name: string): string {
   return name.trim().toLowerCase().replace(/\s+/g, " ");
@@ -207,17 +214,25 @@ export function loadFoodMemory(): FoodMemory {
     if (!raw) return {};
     const parsed = JSON.parse(raw) as Record<
       string,
-      { quantity?: number; unit?: string }
+      { quantity?: number; unit?: string; gramsPerUnit?: number }
     >;
     const out: FoodMemory = {};
     for (const [k, v] of Object.entries(parsed)) {
       if (!v || typeof v !== "object") continue;
+      const gramsRaw = v.gramsPerUnit;
+      const gramsPerUnit =
+        typeof gramsRaw === "number" &&
+        Number.isFinite(gramsRaw) &&
+        gramsRaw > 0
+          ? gramsRaw
+          : undefined;
       out[k] = {
         quantity:
           typeof v.quantity === "number" && Number.isFinite(v.quantity)
             ? v.quantity
             : 100,
         unit: normalizeFoodUnit(String(v.unit ?? "גרם")),
+        ...(gramsPerUnit !== undefined ? { gramsPerUnit } : {}),
       };
     }
     return out;
@@ -229,14 +244,24 @@ export function loadFoodMemory(): FoodMemory {
 export function saveFoodMemoryKey(
   food: string,
   quantity: number,
-  unit: FoodUnit
+  unit: FoodUnit,
+  gramsPerUnit?: number
 ): void {
   const mem = loadFoodMemory();
-  mem[normalizeFoodKey(food)] = { quantity, unit };
+  const key = normalizeFoodKey(food);
+  const next: FoodMemoryEntry = { quantity, unit };
+  if (
+    typeof gramsPerUnit === "number" &&
+    Number.isFinite(gramsPerUnit) &&
+    gramsPerUnit > 0
+  ) {
+    next.gramsPerUnit = gramsPerUnit;
+  }
+  mem[key] = next;
   localStorage.setItem(KEYS.foodMemory, JSON.stringify(mem));
 }
 
-export function getFoodMemory(food: string): { quantity: number; unit: FoodUnit } | null {
+export function getFoodMemory(food: string): FoodMemoryEntry | null {
   const mem = loadFoodMemory();
   return mem[normalizeFoodKey(food)] ?? null;
 }
@@ -549,10 +574,13 @@ export function upsertDictionaryFromScan(item: {
   carbsPer100g: number;
   fatPer100g: number;
   barcode?: string;
+  /** משקל יחידה בגרם — נשמר כ־unitGrams בפריט המילון */
+  gramsPerUnit?: number;
 }): DictionaryItem[] {
   const items = loadDictionary();
   const n = normalizeFoodKey(item.food);
   const without = items.filter((d) => normalizeFoodKey(d.food) !== n);
+  const gPerU = item.gramsPerUnit;
   const row: DictionaryItem = {
     id: makeId(),
     food: item.food,
@@ -565,6 +593,9 @@ export function upsertDictionaryFromScan(item: {
     fatPer100g: item.fatPer100g,
     barcode: item.barcode,
     source: "manual",
+    ...(typeof gPerU === "number" && Number.isFinite(gPerU) && gPerU > 0
+      ? { unitGrams: gPerU }
+      : {}),
   };
   without.unshift(row);
   saveDictionary(without);

@@ -1,6 +1,7 @@
 "use client";
 
 import { motion } from "framer-motion";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import {
@@ -13,6 +14,8 @@ import { BackToMenuButton } from "@/components/BackToMenuButton";
 import { tdeeOnboardingFillAllFields } from "@/lib/hebrewGenderUi";
 import type { ActivityLevel, Gender } from "@/lib/tdee";
 import { dailyCalorieTarget, tdee } from "@/lib/tdee";
+
+const APP_VERSION = process.env.NEXT_PUBLIC_APP_VERSION ?? "1.0.0";
 
 const activities: { id: ActivityLevel; label: string }[] = [
   { id: "sedentary", label: "יושבנית (מעט תנועה)" },
@@ -303,8 +306,28 @@ export default function TdeePage() {
               יש למלא את כל השדות (כולל אימייל תקין) בטווחים המותרים.
             </p>
           )}
+          <p className="mt-4 text-center text-[11px] leading-snug text-[#333333]/75">
+            בהרשמתך את מאשרת את{" "}
+            <Link
+              href="/terms"
+              className="font-semibold text-[#9b1b30] underline decoration-[#9b1b30]/35 underline-offset-2"
+            >
+              תנאי השימוש
+            </Link>{" "}
+            ו
+            <Link
+              href="/privacy"
+              className="font-semibold text-[#9b1b30] underline decoration-[#9b1b30]/35 underline-offset-2"
+            >
+              מדיניות הפרטיות
+            </Link>
+            .
+          </p>
         </motion.div>
       )}
+      <p className="mt-8 text-center text-[10px] text-[#333333]/45">
+        Cherry v{APP_VERSION}
+      </p>
     </div>
   );
 }
