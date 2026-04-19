@@ -25,10 +25,12 @@ import {
   type LogEntry,
   getEntriesForDate,
   getFoodMemory,
+  loadProfile,
   saveDayLogEntries,
   saveFoodMemoryKey,
   upsertDictionaryFromScan,
 } from "@/lib/storage";
+import { gf } from "@/lib/hebrewGenderUi";
 
 function clampGrams(q: number): number {
   if (!Number.isFinite(q)) return 100;
@@ -69,6 +71,7 @@ function resolveDateKey(raw: string | null): string {
 }
 
 export function AddFoodClient() {
+  const gender = loadProfile().gender;
   const router = useRouter();
   const searchParams = useSearchParams();
   const dateKey = resolveDateKey(searchParams.get("date"));
@@ -452,7 +455,13 @@ export function AddFoodClient() {
   function applyPickModalRow(row: HomeSuggestRow): boolean {
     const c100 = row.calories;
     if (c100 == null || !Number.isFinite(c100) || c100 <= 0) {
-      setDictFeedback("אין נתוני קלוריות ל־100 ג׳ — בחרי פריט אחר");
+      setDictFeedback(
+        gf(
+          gender,
+          "אין נתוני קלוריות ל־100 ג׳ — בחרי פריט אחר",
+          "אין נתוני קלוריות ל־100 ג׳ — בחר פריט אחר"
+        )
+      );
       return false;
     }
     setPickPressedDiary(false);
@@ -610,7 +619,13 @@ export function AddFoodClient() {
     rememberFoodPick(row);
     setRecentPicks(loadRecentFoodPicks());
     setPickPressedDiary(true);
-    showPickModalNotice("נוסף ליומן. לשנות כמות — ערכי ולחצי שוב; לסיום — ×");
+    showPickModalNotice(
+      gf(
+        gender,
+        "נוסף ליומן. לשנות כמות — ערכי ולחצי שוב; לסיום — ×",
+        "נוסף ליומן. לשנות כמות — ערוך ולחץ שוב; לסיום — ×"
+      )
+    );
   }
 
   function submitPickDiaryAndDictionary() {
@@ -650,7 +665,13 @@ export function AddFoodClient() {
     setPickPressedDiary(true);
     setPickPressedDictionary(true);
     setPickPressedBothShortcut(true);
-    showPickModalNotice("נוסף ליומן ולמילון. סגירה ב־× כשסיימת");
+    showPickModalNotice(
+      gf(
+        gender,
+        "נוסף ליומן ולמילון. סגירה ב־× כשסיימת",
+        "נוסף ליומן ולמילון. סגירה ב־× כשסיימת"
+      )
+    );
   }
 
   function submitPickDictionaryOnly() {
@@ -674,7 +695,11 @@ export function AddFoodClient() {
     setRecentPicks(loadRecentFoodPicks());
     setPickPressedDictionary(true);
     showPickModalNotice(
-      `«${row.name.trim()}» במילון. אפשר גם ליומן או כמות אחרת; × לסגירה`
+      gf(
+        gender,
+        `«${row.name.trim()}» במילון. אפשר גם ליומן או כמות אחרת; × לסגירה`,
+        `«${row.name.trim()}» במילון. אפשר גם ליומן או כמות אחרת; × לסגירה`
+      )
     );
   }
 
@@ -718,11 +743,17 @@ export function AddFoodClient() {
       unit = "גרם";
     }
     if (!name) {
-      setManError("הקלידי שם מזון");
+      setManError(gf(gender, "הקלידי שם מזון", "הקלד שם מזון"));
       return;
     }
     if (!Number.isFinite(c100) || c100 <= 0) {
-      setManError("הקלידי קלוריות ל־100 ג׳ (מספר חיובי)");
+      setManError(
+        gf(
+          gender,
+          "הקלידי קלוריות ל־100 ג׳ (מספר חיובי)",
+          "הקלד קלוריות ל־100 ג׳ (מספר חיובי)"
+        )
+      );
       return;
     }
     const p100 = parseFloat(manProtein100.replace(",", "."));
@@ -855,7 +886,15 @@ export function AddFoodClient() {
             </button>
           </span>
           <p className="mb-2 text-[11px] font-medium text-[var(--cherry)]/65">
-            לחצי <span className="font-bold">+</span> ליד מוצר כדי להוסיף ליומן
+            {gender === "male" ? (
+              <>
+                לחץ <span className="font-bold">+</span> ליד מוצר כדי להוסיף ליומן{" "}
+              </>
+            ) : (
+              <>
+                לחצי <span className="font-bold">+</span> ליד מוצר כדי להוסיף ליומן{" "}
+              </>
+            )}
             (בחירת משקל בגרם).
           </p>
           <div className="relative">
@@ -873,7 +912,7 @@ export function AddFoodClient() {
               autoCorrect="off"
               autoCapitalize="none"
               spellCheck={false}
-              placeholder="חפשי מזון…"
+              placeholder={gf(gender, "חפשי מזון…", "חפש מזון…")}
               className="input-luxury-search w-full ps-4 pe-[5.25rem] sm:pe-24"
             />
             <button
@@ -917,7 +956,11 @@ export function AddFoodClient() {
         <div className="mt-3 min-h-0 flex-1 overflow-y-auto overscroll-y-contain pb-6 [-webkit-overflow-scrolling:touch]">
           {!showResultsPanel ? (
             <p className="py-8 text-center text-sm text-[var(--cherry)]/70">
-              הקלידי לפחות שתי אותיות כדי לראות תוצאות.
+              {gf(
+                gender,
+                "הקלידי לפחות שתי אותיות כדי לראות תוצאות.",
+                "הקלד לפחות שתי אותיות כדי לראות תוצאות."
+              )}
             </p>
           ) : (
             <div className="space-y-3 rounded-xl border border-[var(--border-cherry-soft)] bg-white/90 p-2 shadow-sm">

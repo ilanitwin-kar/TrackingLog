@@ -125,17 +125,53 @@ export async function verifyLogin(email: string, password: string): Promise<bool
   return h === auth.passwordHash;
 }
 
-/** כניסת מנהלת לפיתוח — גם בפרודקשן כש־NEXT_PUBLIC_ALLOW_DEV_ADMIN_BYPASS=1 (בדיקות בנייד) */
-export function isDevAdminBypassUiEnabled(): boolean {
+/** כניסה בלחיצה אחת — רק בפיתוח או כש־NEXT_PUBLIC_ALLOW_DEV_ADMIN_BYPASS=1 */
+export function isDevAdminOneClickAllowed(): boolean {
   if (process.env.NODE_ENV === "development") return true;
   return process.env.NEXT_PUBLIC_ALLOW_DEV_ADMIN_BYPASS === "1";
 }
 
+/** @deprecated השתמשו ב־isDevAdminOneClickAllowed — הכפתור תמיד גלוי */
+export function isDevAdminBypassUiEnabled(): boolean {
+  return true;
+}
+
+/** האם הוגדר קוד בבילד לכניסה עם PIN בפרודקשן */
+export function isDevAdminPinConfigured(): boolean {
+  const a = process.env.NEXT_PUBLIC_DEV_ADMIN_PIN;
+  const b = process.env.NEXT_PUBLIC_STAFF_UNLOCK;
+  return (
+    (typeof a === "string" && a.length >= 4) ||
+    (typeof b === "string" && b.length >= 4)
+  );
+}
+
+export function devAdminPinUnlocks(pin: string): boolean {
+  const p = pin.trim();
+  if (p.length < 4) return false;
+  const a = process.env.NEXT_PUBLIC_DEV_ADMIN_PIN;
+  const b = process.env.NEXT_PUBLIC_STAFF_UNLOCK;
+  if (typeof a === "string" && a.length >= 4 && p === a) return true;
+  if (typeof b === "string" && b.length >= 4 && p === b) return true;
+  return false;
+}
+
+/**
+ * כניסת מנהלת אחרי אימות קוד (פרודקשן).
+ * @returns האם הופעל דילוג
+ */
+export function activateDevAdminBypassWithPin(pin: string): boolean {
+  if (typeof window === "undefined") return false;
+  if (!devAdminPinUnlocks(pin)) return false;
+  localStorage.setItem(DEV_ADMIN_BYPASS_KEY, "1");
+  startSession();
+  return true;
+}
+
+/** דילוג מנהלת פעיל — כמו צוות, לפי דגל ב־localStorage בלבד */
 export function isDevAdminBypassActive(): boolean {
   if (typeof window === "undefined") return false;
-  if (localStorage.getItem(DEV_ADMIN_BYPASS_KEY) !== "1") return false;
-  if (process.env.NODE_ENV === "development") return true;
-  return process.env.NEXT_PUBLIC_ALLOW_DEV_ADMIN_BYPASS === "1";
+  return localStorage.getItem(DEV_ADMIN_BYPASS_KEY) === "1";
 }
 
 /** האם הוגדר קוד צוות בבילד (Netlify / .env) — מאפשר כניסת מנהלת בנייד בלי dev */
@@ -189,10 +225,10 @@ export function clearStaffBypass(): void {
   dispatchAuthChanged();
 }
 
-/** כניסת מנהלת לפיתוח — development או כשהוגדר NEXT_PUBLIC_ALLOW_DEV_ADMIN_BYPASS */
+/** כניסה בלחיצה אחת — רק בפיתוח או כש־ALLOW מופעל בבילד */
 export function activateDevAdminBypass(): void {
   if (typeof window === "undefined") return;
-  if (!isDevAdminBypassUiEnabled()) return;
+  if (!isDevAdminOneClickAllowed()) return;
   localStorage.setItem(DEV_ADMIN_BYPASS_KEY, "1");
   startSession();
 }
@@ -226,8 +262,7 @@ export function seedBypassProfileIfNeeded(): void {
   window.dispatchEvent(new Event("cj-profile-updated"));
 }
 
-/** מילוי פרופיל מלא לפיתוח — רק אם עדיין לא הושלם */
+/** מילוי פרופיל לדילוג מנהלת — גם בפרודקשן (אחרי PIN / ALLOW) */
 export function seedDevAdminProfileIfNeeded(): void {
-  if (process.env.NODE_ENV !== "development") return;
   seedBypassProfileIfNeeded();
 }

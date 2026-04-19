@@ -4,11 +4,8 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import {
-  activateDevAdminBypass,
   hasWelcomeAutoResume,
-  isDevAdminBypassUiEnabled,
   registerAccount,
-  seedDevAdminProfileIfNeeded,
   startSession,
   verifyLogin,
 } from "@/lib/localAuth";
@@ -25,6 +22,9 @@ import {
   getBrandName,
   type AppVariant,
 } from "@/lib/appVariant";
+import { DevAdminQuickEntry } from "@/components/DevAdminQuickEntry";
+import { gf } from "@/lib/hebrewGenderUi";
+
 const LANG_KEY = "cj_welcome_lang";
 
 type Lang = "he" | "en";
@@ -249,6 +249,15 @@ export function WelcomeScreen() {
 
   const t = COPY[lang];
   const dir = lang === "he" ? "rtl" : "ltr";
+  const trackGender = appVariant === "blueberry" ? "male" : "female";
+  const switchTrackConfirm =
+    lang === "he"
+      ? gf(
+          trackGender,
+          "לעבור למסך בחירת המסלול? תוכלי לבחור מחדש צ׳רי או בלו.",
+          "לעבור למסך בחירת המסלול? תוכל לבחור מחדש צ׳רי או בלו."
+        )
+      : t.switchTrackConfirm;
 
   useEffect(() => {
     setMounted(true);
@@ -480,7 +489,7 @@ export function WelcomeScreen() {
             onClick={() => {
               if (
                 typeof window !== "undefined" &&
-                !window.confirm(t.switchTrackConfirm)
+                !window.confirm(switchTrackConfirm)
               ) {
                 return;
               }
@@ -492,20 +501,7 @@ export function WelcomeScreen() {
             {t.switchTrack}
           </button>
         </div>
-        {isDevAdminBypassUiEnabled() && (
-          <button
-            type="button"
-            onClick={() => {
-              seedDevAdminProfileIfNeeded();
-              activateDevAdminBypass();
-              markWelcomeLeft();
-              router.replace("/");
-            }}
-            className="w-full rounded-xl border-2 border-dashed border-[var(--welcome-dev-border)] bg-[var(--welcome-dev-bg)] py-2.5 text-center text-xs font-semibold text-[var(--cherry)]"
-          >
-            {t.devAdminOnly}
-          </button>
-        )}
+        <DevAdminQuickEntry variant="welcome" buttonLabel={t.devAdminOnly} />
         <p className="text-[10px] text-[var(--text)]/45">
           {getBrandName(appVariant)} v{APP_VERSION}
         </p>

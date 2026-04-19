@@ -13,8 +13,10 @@ import {
 import { getTodayKey } from "@/lib/dateKey";
 import {
   loadDayJournalClosedMap,
+  loadProfile,
   saveDayJournalClosedMap,
 } from "@/lib/storage";
+import { gf } from "@/lib/hebrewGenderUi";
 
 const navLinks = [
   { href: "/", label: "בית", Icon: IconNavHome },
@@ -40,6 +42,7 @@ export function BottomNav() {
   const [sheetOpen, setSheetOpen] = useState(false);
   const titleId = useId();
   const subtitleId = useId();
+  const gender = loadProfile().gender;
 
   const addFoodDateKey = useMemo(
     () => resolveAddFoodDateKey(pathname, searchParams.get("date")),
@@ -214,8 +217,11 @@ export function BottomNav() {
                   className="mt-3 rounded-xl border border-[var(--border-cherry-soft)] bg-cherry-faint px-3 py-2.5 text-center text-xs font-semibold leading-relaxed text-[var(--cherry)]"
                   role="status"
                 >
-                  היום הזה סגור ביומן. לחצי למטה כדי לפתוח אותו שוב ואז להוסיף
-                  רשומות.
+                  {gf(
+                    gender,
+                    "היום הזה סגור ביומן. לחצי למטה כדי לפתוח אותו שוב ואז להוסיף רשומות.",
+                    "היום הזה סגור ביומן. לחץ למטה כדי לפתוח אותו שוב ואז להוסיף רשומות."
+                  )}
                 </p>
               )}
               <motion.button

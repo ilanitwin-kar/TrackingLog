@@ -23,8 +23,10 @@ import { clearAppVariant } from "@/lib/appVariant";
 import {
   clearWelcomeLeft,
   getDefaultUserProfile,
+  loadProfile,
   saveProfile,
 } from "@/lib/storage";
+import { gf } from "@/lib/hebrewGenderUi";
 
 export function ProfileMenu() {
   const router = useRouter();
@@ -86,11 +88,18 @@ export function ProfileMenu() {
   }, [open]);
 
   function onAvatarFile(e: React.ChangeEvent<HTMLInputElement>) {
+    const gender = loadProfile().gender;
     const f = e.target.files?.[0];
     e.target.value = "";
     if (!f || !f.type.startsWith("image/")) return;
     if (f.size > 900_000) {
-      window.alert("התמונה גדולה מדי — נסי קובץ קטן יותר (עד כ־700KB).");
+      window.alert(
+        gf(
+          gender,
+          "התמונה גדולה מדי — נסי קובץ קטן יותר (עד כ־700KB).",
+          "התמונה גדולה מדי — נסה קובץ קטן יותר (עד כ־700KB)."
+        )
+      );
       return;
     }
     const reader = new FileReader();

@@ -21,6 +21,20 @@ export function addDaysToDateKey(dateKey: string, deltaDays: number): string {
   return d.toLocaleDateString("en-CA");
 }
 
+/** שבוע קלנדרי א׳–ש׳ המכיל את התאריך (מזהים YYYY-MM-DD) */
+export function getCalendarWeekDateKeys(anchorDateKey: string): string[] {
+  const d = new Date(`${anchorDateKey}T12:00:00`);
+  const sun = new Date(d);
+  sun.setDate(d.getDate() - d.getDay());
+  const keys: string[] = [];
+  for (let i = 0; i < 7; i++) {
+    const x = new Date(sun);
+    x.setDate(sun.getDate() + i);
+    keys.push(x.toLocaleDateString("en-CA"));
+  }
+  return keys;
+}
+
 /**
  * מפת התקדמות: משבצת 0 = היום, הלאה = ימים קדימה בציר היעד.
  * מחזיר בדיוק `dayCount` תאריכים — ללא תקרה, ללא ברירת מחדל של 1/30.

@@ -13,6 +13,7 @@ import {
 } from "@/lib/storage";
 import { BackToMenuButton } from "@/components/BackToMenuButton";
 import { CelebrationConfetti } from "@/components/Fireworks";
+import { InfoCard } from "@/components/InfoCard";
 import { useCelebration } from "@/lib/useCelebration";
 import {
   buildWeightShareText,
@@ -22,18 +23,14 @@ import {
   formatTotalChangeFromBaseline,
   round1,
 } from "@/lib/weightDisplay";
+import {
+  gf,
+  infoWeightBody,
+  uiWeightHistoryEmpty,
+  weightAffirmations,
+} from "@/lib/hebrewGenderUi";
 
-const AFFIRMATIONS = [
-  "את מדהימה!",
-  "מנצחת!",
-  "התקדמות אמיתית — כל הכבוד!",
-  "גאים בך — המשיכי ככה!",
-  "זה בדיוק הכיוון!",
-];
-
-const HELP_TITLE = "המדד שלך לשליטה";
-const HELP_BODY =
-  "המשקל הוא רק נתון, לא הציון שלך. מעקב עקבי עוזר לנו לזהות מגמות ולדייק את התהליך בזמן אמת. בחרי את התדירות שמרגישה לך בנוח – יומיומית לדיוק מקסימלי או שבועית למבט על – וזכרי: מה שנמדד, מנוהל.";
+// help modal removed; standardized InfoCard used instead
 
 function uid(): string {
   return `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
@@ -43,7 +40,6 @@ export default function WeightPage() {
   const [list, setList] = useState<WeightEntry[]>([]);
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [kg, setKg] = useState("");
-  const [helpOpen, setHelpOpen] = useState(false);
   const { showCelebration, fadeOut, celebrationMessage, triggerCelebration } =
     useCelebration();
 
@@ -70,6 +66,7 @@ export default function WeightPage() {
   const baselineKg = profile?.weightKg ?? 0;
   const goalKg = profile?.goalWeightKg ?? 0;
   const regOk = profile ? isRegistrationComplete(profile) : false;
+  const gender = profile?.gender ?? "female";
 
   const latest = sorted[sorted.length - 1];
   const latestKg = latest ? latest.kg : baselineKg;
@@ -95,7 +92,8 @@ export default function WeightPage() {
     setKg("");
 
     if (prevLast && v < prevLast.kg - 0.05) {
-      const line = AFFIRMATIONS[Math.floor(Math.random() * AFFIRMATIONS.length)];
+      const lines = weightAffirmations(gender);
+      const line = lines[Math.floor(Math.random() * lines.length)];
       triggerCelebration({ customMessage: line });
     }
   }
@@ -143,16 +141,6 @@ export default function WeightPage() {
         </div>
       )}
 
-      <div className="mb-4 flex flex-wrap items-center justify-center gap-2 print:hidden">
-        <button
-          type="button"
-          onClick={() => setHelpOpen(true)}
-          className="rounded-full border-2 border-[var(--border-cherry-soft)] bg-white px-4 py-2 text-sm font-bold text-[var(--cherry)] shadow-sm"
-        >
-          מה עושים כאן? (הסבר)
-        </button>
-      </div>
-
       <motion.h1
         className="heading-page mb-2 text-center text-3xl md:text-4xl"
         initial={{ opacity: 0, y: -8 }}
@@ -160,6 +148,14 @@ export default function WeightPage() {
       >
         מעקב משקל
       </motion.h1>
+
+      <InfoCard
+        gender={gender}
+        icon="⚖️"
+        title="הזנת משקל ומעקב"
+        body={infoWeightBody(gender)}
+        className="mb-5"
+      />
 
       {regOk && baselineKg >= 30 && (
         <motion.div
@@ -191,7 +187,11 @@ export default function WeightPage() {
 
       {!regOk && (
         <p className="mb-4 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-center text-sm text-amber-950">
-          השלימי את פרטים אישיים (מסך TDEE) כדי לחשב מול משקל התחלה ויעד.
+          {gf(
+            gender,
+            "השלימי פרטים אישיים (מסך TDEE) כדי לחשב מול משקל התחלה ויעד.",
+            "השלם פרטים אישיים (מסך TDEE) כדי לחשב מול משקל התחלה ויעד."
+          )}
         </p>
       )}
 
@@ -246,8 +246,12 @@ export default function WeightPage() {
         {sorted.length === 0 ? (
           <p className="text-[var(--stem)]/85">
             {regOk
-              ? "אין עדיין רשומות — תתווסף שורה ראשונה אוטומטית מהמשקל בפרטים האישיים, או הוסיפי שקילה למעלה."
-              : "אין עדיין שקילות."}
+              ? gf(
+                  gender,
+                  "אין עדיין רשומות — תתווסף שורה ראשונה אוטומטית מהמשקל בפרטים האישיים, או הוסיפי שקילה למעלה.",
+                  "אין עדיין רשומות — תתווסף שורה ראשונה אוטומטית מהמשקל בפרטים האישיים, או הוסף שקילה למעלה."
+                )
+              : uiWeightHistoryEmpty(gender)}
           </p>
         ) : (
           <ul className="space-y-3">
@@ -306,35 +310,6 @@ export default function WeightPage() {
           </ul>
         )}
       </section>
-
-      {helpOpen && (
-        <div
-          className="fixed inset-0 z-[240] flex items-end justify-center bg-black/45 p-4 sm:items-center print:hidden"
-          role="dialog"
-          aria-modal="true"
-          aria-labelledby="weight-help-title"
-        >
-          <div
-            className="glass-panel max-h-[85dvh] w-full max-w-md overflow-y-auto rounded-2xl border-2 border-[var(--border-cherry-soft)] p-5 shadow-xl"
-            dir="rtl"
-          >
-            <h2
-              id="weight-help-title"
-              className="panel-title-cherry text-xl font-extrabold"
-            >
-              {HELP_TITLE}
-            </h2>
-            <p className="mt-4 leading-relaxed text-[var(--text)]">{HELP_BODY}</p>
-            <button
-              type="button"
-              onClick={() => setHelpOpen(false)}
-              className="btn-stem mt-6 w-full rounded-xl py-3 text-center text-sm font-bold"
-            >
-              הבנתי
-            </button>
-          </div>
-        </div>
-      )}
     </div>
   );
 }

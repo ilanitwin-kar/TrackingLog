@@ -25,6 +25,7 @@ import {
 } from "@/lib/storage";
 import { CelebrationFireworks } from "@/components/CelebrationFireworks";
 import { useAppVariant } from "@/components/useAppVariant";
+import { uiCloseJournalToUnlockCube } from "@/lib/hebrewGenderUi";
 
 const fontBoard =
   "font-[Calibri,'Segoe_UI','Helvetica_Neue',system-ui,sans-serif]";
@@ -38,8 +39,9 @@ const berry3d =
 const futureGrey3d =
   "border-[#9ca3af] bg-gradient-to-b from-[#eceef2] to-[#bfc2c9] shadow-[inset_0_3px_6px_rgba(255,255,255,0.85),inset_0_-3px_8px_rgba(0,0,0,0.14),0_5px_0_rgba(0,0,0,0.18),0_8px_16px_rgba(0,0,0,0.1)] cursor-not-allowed opacity-[0.93] saturate-[0.95]";
 
-const CLOSED_DAY_HINT =
-  "סגרי את היום ביומן כדי לראות גירעון והתקדמות בקובייה.";
+function closedDayHint(gender: Gender): string {
+  return uiCloseJournalToUnlockCube(gender);
+}
 
 const UNSAFE_DEFICIT_MSG =
   "אכלת פחות מדי מהדרוש להגעה בטוחה ליעד";
@@ -233,7 +235,7 @@ export function CalorieBoardGrid({ profileRev = 0 }: { profileRev?: number }) {
                     dir="rtl"
                     className="line-clamp-4 w-full text-center text-[11px] font-bold leading-snug text-[#1a3d0f] sm:text-xs"
                   >
-                    {CLOSED_DAY_HINT}
+                    {closedDayHint(gender)}
                   </span>
                 ) : showStoryReveal ? (
                   <span

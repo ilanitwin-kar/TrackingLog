@@ -2,7 +2,13 @@
 
 import { AnimatePresence, motion } from "framer-motion";
 import { useCallback, useEffect, useId, useRef, useState } from "react";
-import { loadDictionary } from "@/lib/storage";
+import { loadDictionary, loadProfile } from "@/lib/storage";
+import {
+  barcodeAimInstruction,
+  uiCameraPermissionHint,
+  uiNetworkErrorRetry,
+  uiRetryShort,
+} from "@/lib/hebrewGenderUi";
 
 export function BarcodeScanModal({
   open,
@@ -13,6 +19,7 @@ export function BarcodeScanModal({
   onClose: () => void;
   onApplyToHome: (name: string, note: string) => void;
 }) {
+  const gender = loadProfile().gender;
   const titleId = useId();
   const [phase, setPhase] = useState<"scan" | "loading" | "result" | "error">(
     "scan"
@@ -93,7 +100,7 @@ export function BarcodeScanModal({
               setResultName(data.result.name);
               setPhase("result");
             } catch {
-              setErrorMessage("בעיית רשת — נסי שוב");
+              setErrorMessage(uiNetworkErrorRetry(gender));
               setPhase("error");
             }
           },
@@ -103,7 +110,7 @@ export function BarcodeScanModal({
         );
       } catch {
         if (!cancelled) {
-          setErrorMessage("לא ניתן להפעיל מצלמה — בדקי הרשאות דפדפן");
+          setErrorMessage(uiCameraPermissionHint(gender));
           setPhase("error");
         }
       }
@@ -166,7 +173,7 @@ export function BarcodeScanModal({
             {phase === "scan" && (
               <div className="space-y-3">
                 <p className="text-sm text-[var(--cherry)]/85">
-                  כווני את הברקוד בתוך המסגרת — הסריקה מתבצעת אוטומטית.
+                  {barcodeAimInstruction(gender)}
                 </p>
                 <div
                   id="barcode-reader-region"
@@ -220,7 +227,7 @@ export function BarcodeScanModal({
                   className="btn-gold w-full rounded-xl py-3 text-base font-semibold"
                   onClick={() => reset()}
                 >
-                  נסי שוב
+                  {uiRetryShort(gender)}
                 </button>
               </div>
             )}

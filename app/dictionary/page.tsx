@@ -18,6 +18,7 @@ import {
   applyMealPresetToToday,
   loadDictionary,
   loadMealPresets,
+  loadProfile,
   patchDictionaryItemById,
   removeDictionaryItem,
 } from "@/lib/storage";
@@ -27,6 +28,15 @@ import {
 } from "@/lib/explorerStorage";
 import { IconCaption } from "@/components/IconCaption";
 import { IconCart, IconPencil, IconTrash } from "@/components/Icons";
+import { InfoCard } from "@/components/InfoCard";
+import {
+  dictionaryEditFoodError,
+  dictionaryHeading,
+  dictionaryIntroBody,
+  dictionaryIntroTitle,
+  dictionarySavedFilterLabel,
+  dictionarySavedFilterPlaceholder,
+} from "@/lib/hebrewGenderUi";
 
 const fontFood =
   "font-[Calibri,'Segoe_UI','Helvetica_Neue',system-ui,sans-serif]";
@@ -97,6 +107,7 @@ function sortSavedByQuery(items: DictionaryItem[], query: string): DictionaryIte
 }
 
 export default function DictionaryPage() {
+  const gender = loadProfile().gender;
   const [saved, setSaved] = useState<DictionaryItem[]>([]);
   const [presetMap, setPresetMap] = useState<Map<string, MealPreset>>(
     () => new Map()
@@ -164,6 +175,9 @@ export default function DictionaryPage() {
       name: d.food.trim(),
       category: "מילון אישי",
       calories: k100,
+      protein: d.proteinPer100g,
+      carbs: d.carbsPer100g,
+      fat: d.fatPer100g,
     });
     setShopTick((x) => x + 1);
     if (added) setShopToast(true);
@@ -217,7 +231,7 @@ export default function DictionaryPage() {
     if (!editTarget) return;
     const name = editFood.trim();
     if (!name) {
-      setEditError("הקלידי שם מזון");
+      setEditError(dictionaryEditFoodError(gender));
       return;
     }
     const qty = parseQtyForUnit(editQtyText, editUnit);
@@ -257,8 +271,18 @@ export default function DictionaryPage() {
         initial={{ opacity: 0, y: -8 }}
         animate={{ opacity: 1, y: 0 }}
       >
-        מילון מזונות
+        {dictionaryHeading(gender)}
       </motion.h1>
+
+      <motion.div initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }}>
+        <InfoCard
+          gender={gender}
+          icon="📖"
+          title={dictionaryIntroTitle()}
+          body={dictionaryIntroBody(gender)}
+          className="mb-5"
+        />
+      </motion.div>
 
       {appliedMealId && (
         <p className="mb-4 rounded-xl border border-[var(--border-cherry-soft)] bg-cherry-faint py-2 text-center text-sm font-semibold text-[var(--cherry)]">
@@ -276,7 +300,7 @@ export default function DictionaryPage() {
 
       <label className="mb-4 block">
         <span className="mb-1 block text-xs font-semibold text-[var(--cherry)]">
-          סינון הרשומות השמורות
+          {dictionarySavedFilterLabel(gender)}
         </span>
         <div className="relative">
           <input
@@ -286,7 +310,7 @@ export default function DictionaryPage() {
             enterKeyHint="search"
             value={rawQ}
             onChange={(e) => setRawQ(e.target.value)}
-            placeholder="הקלידי לסינון הרשימה…"
+            placeholder={dictionarySavedFilterPlaceholder(gender)}
             className="input-luxury-search w-full ps-11 pe-11"
             autoComplete="off"
             autoCorrect="off"

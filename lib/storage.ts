@@ -1,5 +1,6 @@
 import { getTodayKey } from "./dateKey";
 import type { ActivityLevel, Gender } from "./tdee";
+import { getAppVariant } from "./appVariant";
 
 export type FoodUnit =
   | "גרם"
@@ -170,13 +171,22 @@ export function getDefaultUserProfile(): UserProfile {
   return { ...defaultProfile };
 }
 
+function getTrackGenderDefault(): Gender {
+  const v = getAppVariant();
+  // BLUE (blueberry) = גברים, Cherry (cherry) = נשים
+  return v === "blueberry" ? "male" : "female";
+}
+
 function normalizeLoadedProfile(parsed: Partial<UserProfile>): UserProfile {
+  const trackGender = getTrackGenderDefault();
   return {
     ...defaultProfile,
     ...parsed,
     email: typeof parsed.email === "string" ? parsed.email : "",
     firstName:
       typeof parsed.firstName === "string" ? parsed.firstName.trim() : "",
+    // Gender is determined by track and must not drift.
+    gender: trackGender,
     onboardingComplete: parsed.onboardingComplete === true,
   };
 }
@@ -185,11 +195,11 @@ export function loadProfile(): UserProfile {
   if (typeof window === "undefined") return { ...defaultProfile };
   try {
     const raw = localStorage.getItem(KEYS.profile);
-    if (!raw) return { ...defaultProfile };
+    if (!raw) return normalizeLoadedProfile({});
     const parsed = JSON.parse(raw) as Partial<UserProfile>;
     return normalizeLoadedProfile(parsed);
   } catch {
-    return { ...defaultProfile };
+    return normalizeLoadedProfile({});
   }
 }
 
@@ -570,6 +580,106 @@ export function toggleExplorerFoodInDictionary(item: {
   };
   saveDictionary([row, ...items]);
   return true;
+}
+
+const SHOPPING_PERSONAL_PREFIX = "shopping-personal:";
+
+export function shoppingPersonalSourceKey(shoppingItemId: string): string {
+  return `${SHOPPING_PERSONAL_PREFIX}${shoppingItemId}`;
+}
+
+/** עדכון מילון לפריט אישי שמקושר לשורת רשימת קניות */
+export function upsertDictionaryFromShoppingPersonal(
+  shoppingItemId: string,
+  item: {
+    food: string;
+    brand?: string;
+    caloriesPer100g: number;
+    proteinPer100g: number;
+    carbsPer100g: number;
+    fatPer100g: number;
+  }
+): DictionaryItem[] {
+  const src = shoppingPersonalSourceKey(shoppingItemId);
+  const rest = loadDictionary().filter((d) => d.source !== src);
+  const foodLabel = item.brand?.trim()
+    ? `${item.food.trim()} (${item.brand.trim()})`
+    : item.food.trim();
+  const row: DictionaryItem = {
+    id: makeId(),
+    food: foodLabel,
+    quantity: 100,
+    unit: "גרם",
+    lastCalories: Math.max(0, Math.round(item.caloriesPer100g)),
+    caloriesPer100g: Math.max(0, item.caloriesPer100g),
+    proteinPer100g: Math.max(0, item.proteinPer100g),
+    carbsPer100g: Math.max(0, item.carbsPer100g),
+    fatPer100g: Math.max(0, item.fatPer100g),
+    source: src,
+  };
+  saveDictionary([row, ...rest]);
+  return loadDictionary();
+}
+
+/** עדכון מילון לפי פריט ממגלה המזונות (תמיד מחליף רשומה לפי מספר מזון במגלה) */
+export function upsertExplorerFoodInDictionary(item: {
+  id: string;
+  name: string;
+  calories: number;
+  protein: number;
+  fat: number;
+  carbs: number;
+}): DictionaryItem[] {
+  const src = explorerFoodSourceKey(item.id);
+  const rest = loadDictionary().filter((d) => d.source !== src);
+  const row: DictionaryItem = {
+    id: makeId(),
+    food: item.name.trim(),
+    quantity: 100,
+    unit: "גרם",
+    lastCalories: Math.max(0, Math.round(item.calories)),
+    caloriesPer100g: item.calories,
+    proteinPer100g: item.protein,
+    carbsPer100g: item.carbs,
+    fatPer100g: item.fat,
+    source: src,
+  };
+  saveDictionary([row, ...rest]);
+  return loadDictionary();
+}
+
+/** עדכון ערכי 100 ג׳ ושם בפריט מילון קיים (למשל מסנכרון מרשימת קניות) */
+export function patchDictionaryItemNutritionById(
+  dictionaryItemId: string,
+  item: {
+    food: string;
+    brand?: string;
+    caloriesPer100g: number;
+    proteinPer100g: number;
+    carbsPer100g: number;
+    fatPer100g: number;
+  }
+): DictionaryItem[] | null {
+  const items = loadDictionary();
+  const idx = items.findIndex((d) => d.id === dictionaryItemId);
+  if (idx < 0) return null;
+  const prev = items[idx];
+  const foodLabel = item.brand?.trim()
+    ? `${item.food.trim()} (${item.brand.trim()})`
+    : item.food.trim();
+  const k100 = Math.max(0, item.caloriesPer100g);
+  const next: DictionaryItem = {
+    ...prev,
+    food: foodLabel,
+    lastCalories: Math.max(0, Math.round(k100)),
+    caloriesPer100g: k100,
+    proteinPer100g: Math.max(0, item.proteinPer100g),
+    carbsPer100g: Math.max(0, item.carbsPer100g),
+    fatPer100g: Math.max(0, item.fatPer100g),
+  };
+  items[idx] = next;
+  saveDictionary(items);
+  return items;
 }
 
 /** הוספת מנה ידנית (לפי 100 ג׳ ואופציונלית משקל יחידה) ליומן תאריך + מילון */

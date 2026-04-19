@@ -2,7 +2,8 @@
 
 import { AnimatePresence, motion } from "framer-motion";
 import { useEffect, useMemo, useState } from "react";
-import { BackToMenuButton } from "@/components/BackToMenuButton";
+import { ExplorerTopNav } from "@/components/ExplorerTopNav";
+import { InfoCard } from "@/components/InfoCard";
 import { IconCaption } from "@/components/IconCaption";
 import { IconBookmark, IconCart, IconVerified } from "@/components/Icons";
 import {
@@ -11,17 +12,17 @@ import {
 } from "@/lib/explorerStorage";
 import {
   isExplorerFoodInDictionary,
+  loadProfile,
   toggleExplorerFoodInDictionary,
 } from "@/lib/storage";
+import {
+  explorerIntroBody,
+  explorerIntroTitle,
+  gf,
+} from "@/lib/hebrewGenderUi";
 
 const fontFood =
   "font-[Calibri,'Segoe_UI','Helvetica_Neue',system-ui,sans-serif]";
-
-const EXPLORER_INTRO =
-  "גלי מזונות שיקדמו אותך ליעד מתוך המאגר של אינטליגנציה קלורית.";
-
-const EXPLORER_HELP_BODY =
-  "בחרי את המזון בשורת החיפוש, בחרי קטגוריה, בחרי סינון לפי ערך קלורי, כמות חלבון, פחמימה ושומן. הוסיפי אותם לרשימת הקניות או למילון.";
 
 type SortKey = "caloriesAsc" | "proteinDesc" | "carbsDesc" | "fatAsc";
 
@@ -36,6 +37,7 @@ type FoodItem = {
 };
 
 export default function ExplorerPage() {
+  const gender = loadProfile().gender;
   const [q, setQ] = useState("");
   const [debouncedQ, setDebouncedQ] = useState("");
   const [sort, setSort] = useState<SortKey>("caloriesAsc");
@@ -145,6 +147,9 @@ export default function ExplorerPage() {
       name: row.name,
       category: row.category,
       calories: row.calories,
+      protein: row.protein,
+      carbs: row.carbs,
+      fat: row.fat,
     });
     setShopTick((x) => x + 1);
     if (added) setToast(true);
@@ -160,7 +165,7 @@ export default function ExplorerPage() {
       className={`mx-auto max-w-lg px-4 pb-28 pt-8 md:pt-12 ${fontFood}`}
       dir="rtl"
     >
-      <BackToMenuButton />
+      <ExplorerTopNav />
       <motion.h1
         className="heading-page mb-6 text-center text-3xl md:text-4xl"
         initial={{ opacity: 0, y: -8 }}
@@ -169,21 +174,14 @@ export default function ExplorerPage() {
         מגלה המזונות
       </motion.h1>
 
-      <motion.div
-        className="mb-4 rounded-2xl border-2 border-[var(--border-cherry-soft)] bg-white/90 px-4 py-4 text-center text-sm text-[var(--stem)]"
-        initial={{ opacity: 0, y: 6 }}
-        animate={{ opacity: 1, y: 0 }}
-      >
-        <p className="text-balance font-semibold leading-snug">{EXPLORER_INTRO}</p>
-        <div className="mt-3 flex justify-center">
-          <button
-            type="button"
-            onClick={() => setHelpOpen(true)}
-            className="rounded-full border-2 border-[var(--border-cherry-soft)] bg-white px-4 py-2 text-sm font-bold text-[var(--cherry)] shadow-sm"
-          >
-            הסבר
-          </button>
-        </div>
+      <motion.div initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }}>
+        <InfoCard
+          gender={gender}
+          icon="🔍"
+          title={explorerIntroTitle()}
+          body={explorerIntroBody(gender)}
+          className="mb-4"
+        />
       </motion.div>
 
       <motion.section
@@ -201,7 +199,7 @@ export default function ExplorerPage() {
             enterKeyHint="search"
             value={q}
             onChange={(e) => setQ(e.target.value)}
-            placeholder="חפשי מזון…"
+            placeholder={gf(gender, "חפשי מזון…", "חפש מזון…")}
             className="input-luxury-search w-full"
             autoComplete="off"
             autoCorrect="off"
@@ -209,7 +207,7 @@ export default function ExplorerPage() {
             spellCheck={false}
           />
           <p className="mt-1 text-[11px] text-[var(--cherry)]/60">
-            התחילי להקליד (לפחות 2 אותיות)
+            {gf(gender, "התחילי להקליד (לפחות 2 אותיות)", "התחל להקליד (לפחות 2 אותיות)")}
           </p>
         </label>
 
@@ -402,7 +400,9 @@ export default function ExplorerPage() {
             >
               הסבר
             </h2>
-            <p className="mt-4 leading-relaxed text-[var(--text)]">{EXPLORER_HELP_BODY}</p>
+            <p className="mt-4 leading-relaxed text-[var(--text)]">
+              {explorerIntroBody(gender)}
+            </p>
             <button
               type="button"
               onClick={() => setHelpOpen(false)}
