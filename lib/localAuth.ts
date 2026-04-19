@@ -125,10 +125,18 @@ export async function verifyLogin(email: string, password: string): Promise<bool
   return h === auth.passwordHash;
 }
 
+/** ערכים שמפעילים דילוג בלחיצה אחת (ב-Netlify / .env) */
+function isPublicEnvTruthy(name: string): boolean {
+  const v = process.env[name];
+  if (typeof v !== "string") return false;
+  const t = v.trim().toLowerCase();
+  return t === "1" || t === "true" || t === "yes" || t === "on";
+}
+
 /** כניסה בלחיצה אחת — רק בפיתוח או כש־NEXT_PUBLIC_ALLOW_DEV_ADMIN_BYPASS=1 */
 export function isDevAdminOneClickAllowed(): boolean {
   if (process.env.NODE_ENV === "development") return true;
-  return process.env.NEXT_PUBLIC_ALLOW_DEV_ADMIN_BYPASS === "1";
+  return isPublicEnvTruthy("NEXT_PUBLIC_ALLOW_DEV_ADMIN_BYPASS");
 }
 
 /** @deprecated השתמשו ב־isDevAdminOneClickAllowed — הכפתור תמיד גלוי */
@@ -138,21 +146,18 @@ export function isDevAdminBypassUiEnabled(): boolean {
 
 /** האם הוגדר קוד בבילד לכניסה עם PIN בפרודקשן */
 export function isDevAdminPinConfigured(): boolean {
-  const a = process.env.NEXT_PUBLIC_DEV_ADMIN_PIN;
-  const b = process.env.NEXT_PUBLIC_STAFF_UNLOCK;
-  return (
-    (typeof a === "string" && a.length >= 4) ||
-    (typeof b === "string" && b.length >= 4)
-  );
+  const a = process.env.NEXT_PUBLIC_DEV_ADMIN_PIN?.trim() ?? "";
+  const b = process.env.NEXT_PUBLIC_STAFF_UNLOCK?.trim() ?? "";
+  return a.length >= 4 || b.length >= 4;
 }
 
 export function devAdminPinUnlocks(pin: string): boolean {
   const p = pin.trim();
   if (p.length < 4) return false;
-  const a = process.env.NEXT_PUBLIC_DEV_ADMIN_PIN;
-  const b = process.env.NEXT_PUBLIC_STAFF_UNLOCK;
-  if (typeof a === "string" && a.length >= 4 && p === a) return true;
-  if (typeof b === "string" && b.length >= 4 && p === b) return true;
+  const a = process.env.NEXT_PUBLIC_DEV_ADMIN_PIN?.trim() ?? "";
+  const b = process.env.NEXT_PUBLIC_STAFF_UNLOCK?.trim() ?? "";
+  if (a.length >= 4 && p === a) return true;
+  if (b.length >= 4 && p === b) return true;
   return false;
 }
 
