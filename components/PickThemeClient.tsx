@@ -1,23 +1,17 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { CherryMark } from "@/components/CherryMark";
+import {
+  SelectPathManVector,
+  SelectPathWomanVector,
+} from "@/components/SelectPathVectors";
 import { BlueberryMark } from "@/components/BlueberryMark";
+import { CherryMark } from "@/components/CherryMark";
 import {
-  PickThemeFigureMan,
-  PickThemeFigureWoman,
-} from "@/components/PickThemeFigures";
-import {
-  hasChosenAppVariant,
   setAppVariant,
   type AppVariant,
 } from "@/lib/appVariant";
-import {
-  activateDevAdminBypass,
-  isDevAdminBypassUiEnabled,
-  seedDevAdminProfileIfNeeded,
-} from "@/lib/localAuth";
-import { markWelcomeLeft } from "@/lib/storage";
+import { DevAdminQuickEntry } from "@/components/DevAdminQuickEntry";
 
 /**
  * מסך בחירה ראשוני — אלכסון: שמאל BLUE (גברים), ימין צ'רי (נשים).
@@ -26,13 +20,6 @@ import { markWelcomeLeft } from "@/lib/storage";
 export function PickThemeClient() {
   const router = useRouter();
 
-  function devAdminSuccess() {
-    if (!hasChosenAppVariant()) setAppVariant("cherry");
-    seedDevAdminProfileIfNeeded();
-    markWelcomeLeft();
-    router.replace("/");
-  }
-
   function choose(v: AppVariant) {
     setAppVariant(v);
     router.replace("/welcome");
@@ -40,88 +27,77 @@ export function PickThemeClient() {
 
   return (
     <div
-      className="relative isolate min-h-dvh w-full overflow-hidden bg-[#0f172a]"
+      className="relative isolate min-h-dvh w-full overflow-hidden bg-[#000814]"
       dir="ltr"
     >
-      <div
-        dir="rtl"
-        className="pointer-events-none absolute start-0 end-0 top-[max(0.5rem,env(safe-area-inset-top))] z-30 flex justify-center px-3"
-      >
-        <p className="max-w-[min(92vw,24rem)] rounded-2xl bg-[#0c1222]/92 px-5 py-2.5 text-center text-[1.05rem] font-extrabold leading-snug text-amber-50 shadow-[0_6px_24px_rgba(0,0,0,0.45)] ring-2 ring-amber-200/35 backdrop-blur-[6px] sm:px-6 sm:py-3 sm:text-xl md:text-2xl">
+      <header className="pointer-events-none absolute inset-x-0 top-[max(0.75rem,env(safe-area-inset-top))] z-30 flex justify-center px-4">
+        <h1
+          dir="rtl"
+          className="text-center text-xl font-semibold tracking-tight text-white sm:text-2xl"
+        >
           בחרו מסלול
-        </p>
-      </div>
+        </h1>
+      </header>
 
-      {/* שמאל — BLUE (משולש עליון־שמאלי): רקע בהיר, כותרות כחול עמוק, אייקונים פלדה */}
-      <button
-        type="button"
-        dir="ltr"
-        className="absolute inset-0 z-[1] flex cursor-pointer items-start justify-start border-0 bg-gradient-to-br from-[#f4f7fd] via-[#e2ecfc] to-[#93c5fd] p-5 pt-[max(3.25rem,env(safe-area-inset-top))] transition hover:brightness-[1.03] active:brightness-[0.98] sm:p-7 sm:pt-[max(3.5rem,env(safe-area-inset-top))]"
-        style={{ clipPath: "polygon(0 0, 100% 0, 0 100%)" }}
-        aria-label="BLUE — מסלול לגברים, אינטליגנציה קלורית"
-        onClick={() => choose("blueberry")}
+      {/* שמאל — גברים (כחול אוכמנייה עמוק); z גבוה יותר כדי שלא ייחתך על ידי שכבת הדובדבן ליד האלכסון */}
+      <section
+        className="absolute inset-0 z-[2] overflow-hidden"
+        style={{ clipPath: "polygon(0 0, 100% 0, 0 100%)", background: "#001F3F" }}
+        aria-label="BLUE — מסלול לגברים"
       >
-        <div className="pointer-events-none flex max-w-[min(92vw,20rem)] flex-row items-center gap-3 self-start sm:gap-4">
-          <PickThemeFigureMan className="h-[4.5rem] w-[2.65rem] shrink-0 text-[#4a5568] opacity-95 drop-shadow-[0_2px_12px_rgba(71,85,105,0.2)] sm:h-[5.25rem] sm:w-[3rem]" />
-          <div
-            className="flex min-w-0 flex-col items-center gap-1.5 text-center"
-            dir="rtl"
-          >
-            <BlueberryMark
-              tone="steel"
-              className="h-[4.5rem] w-[5.25rem] drop-shadow-[0_4px_16px_rgba(71,85,105,0.22)] sm:h-24 sm:w-28"
-            />
-            <span className="font-[system-ui] text-3xl font-black tracking-tight text-[#071426] drop-shadow-[0_1px_0_rgba(255,255,255,0.65)] sm:text-4xl">
-              BLUE
-            </span>
-            <span className="text-xs font-bold text-[#1e3a5f] sm:text-sm">
-              בלו
-            </span>
-            <span className="max-w-[12rem] text-[11px] font-semibold leading-snug text-[#475569] sm:text-xs">
-              אינטליגנציה קלורית
-            </span>
-            <span className="mt-0.5 rounded-full bg-white/60 px-3 py-1 text-xs font-bold text-[#0f172a] shadow-[0_2px_8px_rgba(30,58,95,0.12)] ring-1 ring-[#94a3b8]/55 backdrop-blur-[2px] sm:text-sm">
+        {/* ממורכז עמוק במשולש השמאלי — שמאלה מהאלכסון כדי שלא ייחתך הכיתוב */}
+        <div className="absolute left-[26%] top-[28%] -translate-x-1/2 -translate-y-1/2 px-4 pt-[max(3.5rem,env(safe-area-inset-top))] sm:left-[28%] sm:px-6">
+          <div className="flex w-full max-w-[min(20rem,78vw)] flex-col items-center text-center sm:max-w-[22rem]">
+            <SelectPathManVector className="h-[15.5rem] w-[15.5rem] drop-shadow-[0_22px_70px_rgba(0,0,0,0.55)] sm:h-[18rem] sm:w-[18rem]" />
+            <div className="mt-4 flex items-center justify-center gap-3">
+              <BlueberryMark
+                tone="brand"
+                className="h-9 w-10 drop-shadow-[0_10px_20px_rgba(0,0,0,0.35)] sm:h-10 sm:w-11"
+              />
+              <div className="text-[2.35rem] font-semibold tracking-[-0.02em] text-white sm:text-[2.65rem]">
+                BLUE
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={() => choose("blueberry")}
+              className="mt-4 inline-flex items-center justify-center rounded-2xl bg-[#1b4f7a] px-8 py-3 text-base font-semibold text-white shadow-[0_12px_28px_rgba(0,0,0,0.35)] transition hover:brightness-110 active:scale-[0.99]"
+            >
               לגברים
-            </span>
+            </button>
           </div>
         </div>
-      </button>
+      </section>
 
-      {/* ימין — צ'רי (משולש תחתון־ימני) */}
-      <button
-        type="button"
-        dir="ltr"
-        className="absolute inset-0 z-[1] flex cursor-pointer items-end justify-end border-0 bg-gradient-to-tl from-[#881337] via-[#f43f5e] to-[#fecdd3] p-5 pb-[max(1.25rem,env(safe-area-inset-bottom))] transition hover:brightness-[1.05] active:brightness-[0.97] sm:p-7"
-        style={{ clipPath: "polygon(100% 0, 100% 100%, 0 100%)" }}
-        aria-label="צ'רי Cherry — מסלול לנשים, אינטליגנציה קלורית"
-        onClick={() => choose("cherry")}
+      {/* ימין — נשים (דובדבן עמוק) */}
+      <section
+        className="absolute inset-0 z-[1] overflow-hidden"
+        style={{ clipPath: "polygon(100% 0, 100% 100%, 0 100%)", background: "#C2185B" }}
+        aria-label="Cherry — מסלול לנשים"
       >
-        <div className="pointer-events-none flex max-w-[min(92vw,20rem)] flex-row items-center gap-3 self-end sm:gap-4">
-          <div
-            className="flex min-w-0 flex-col items-center gap-1.5 text-center"
-            dir="rtl"
-          >
-            <CherryMark className="h-[4.5rem] w-[5.25rem] drop-shadow-[0_4px_12px_rgba(127,29,29,0.35)] sm:h-24 sm:w-28" />
-            <span className="font-[system-ui] text-3xl font-black tracking-tight text-white drop-shadow-sm sm:text-4xl">
-              צ&apos;רי
-            </span>
-            <span className="text-xs font-semibold text-[#fff1f2] sm:text-sm">
-              Cherry
-            </span>
-            <span className="max-w-[12rem] text-[11px] font-semibold leading-snug text-[#ffe4e6] sm:text-xs">
-              אינטליגנציה קלורית
-            </span>
-            <span className="mt-0.5 rounded-full bg-[#881337]/45 px-3 py-1 text-xs font-bold text-white ring-1 ring-[#fda4af]/90 sm:text-sm">
+        <div className="absolute left-[67%] top-[67%] -translate-x-1/2 -translate-y-1/2 px-6 pb-[max(1.25rem,env(safe-area-inset-bottom))]">
+          <div className="flex w-full max-w-[22rem] flex-col items-center text-center">
+            <SelectPathWomanVector className="h-[15.5rem] w-[15.5rem] drop-shadow-[0_22px_70px_rgba(0,0,0,0.45)] sm:h-[18rem] sm:w-[18rem]" />
+            <div className="mt-4 flex items-center justify-center gap-3">
+              <CherryMark className="h-9 w-10 drop-shadow-[0_10px_20px_rgba(0,0,0,0.3)] sm:h-10 sm:w-11" />
+              <div className="text-[2.35rem] font-semibold tracking-[-0.02em] text-white sm:text-[2.65rem]">
+                CHERRY
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={() => choose("cherry")}
+              className="mt-4 inline-flex items-center justify-center rounded-2xl bg-[#ff5fa2] px-8 py-3 text-base font-semibold text-white shadow-[0_12px_28px_rgba(0,0,0,0.3)] transition hover:brightness-105 active:scale-[0.99]"
+            >
               לנשים
-            </span>
+            </button>
           </div>
-          <PickThemeFigureWoman className="h-[4.5rem] w-[2.65rem] shrink-0 text-[#fff5f5] opacity-95 drop-shadow-[0_2px_10px_rgba(127,29,29,0.4)] sm:h-[5.25rem] sm:w-[3rem]" />
         </div>
-      </button>
+      </section>
 
-      {/* קו אלכסון — תואם בדיוק ל־clip-path (מימין למעלה לשמאל למטה) */}
+      {/* אלכסון חד ונקי */}
       <svg
-        className="pointer-events-none absolute inset-0 z-[5] h-full w-full"
+        className="pointer-events-none absolute inset-0 z-[6] h-full w-full"
         aria-hidden
       >
         <line
@@ -129,29 +105,21 @@ export function PickThemeClient() {
           y1="0"
           x2="0"
           y2="100%"
-          stroke="#475569"
-          strokeWidth={3}
-          strokeLinecap="round"
+          stroke="#ffffff"
+          strokeOpacity="0.14"
+          strokeWidth={2}
+          shapeRendering="crispEdges"
         />
       </svg>
 
-      {isDevAdminBypassUiEnabled() && (
-        <div className="pointer-events-none absolute inset-x-0 bottom-0 z-[45] flex justify-center px-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
-          <div className="pointer-events-auto flex w-full max-w-md flex-col gap-2">
-            <button
-              type="button"
-              onClick={() => {
-                seedDevAdminProfileIfNeeded();
-                activateDevAdminBypass();
-                devAdminSuccess();
-              }}
-              className="w-full rounded-xl border-2 border-dashed border-cyan-300/60 bg-[#0c1222]/88 py-2 text-center text-[11px] font-bold text-cyan-100 shadow-lg backdrop-blur-sm sm:text-xs"
-            >
-              כניסת מנהלת (פיתוח בלבד)
-            </button>
-          </div>
+      <div className="pointer-events-none absolute inset-x-0 bottom-0 z-[45] flex justify-center px-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
+        <div className="pointer-events-auto w-full max-w-md">
+          <DevAdminQuickEntry
+            variant="pickDark"
+            buttonLabel="כניסת מנהלת — דילוג על פרטים (פיתוח)"
+          />
         </div>
-      )}
+      </div>
     </div>
   );
 }

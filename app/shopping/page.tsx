@@ -2,26 +2,33 @@
 
 import { motion } from "framer-motion";
 import { useCallback, useEffect, useState } from "react";
-import { BackToMenuButton } from "@/components/BackToMenuButton";
+import { InfoCard } from "@/components/InfoCard";
 import {
   IconEnvelope,
   IconPrinter,
   IconTrash,
   IconWhatsApp,
 } from "@/components/Icons";
+import { ShoppingItemModal } from "@/components/ShoppingItemModal";
+import { ShoppingTopNav } from "@/components/ShoppingTopNav";
 import {
   loadShopping,
   removeShopping,
   toggleShoppingChecked,
   type ShoppingItem,
 } from "@/lib/explorerStorage";
+import { shoppingIntroBody, shoppingIntroTitle } from "@/lib/hebrewGenderUi";
 import {
   buildShoppingListShareText,
   SHOPPING_LIST_SHARE_HEADER,
 } from "@/lib/shoppingExport";
+import { loadProfile } from "@/lib/storage";
 
 export default function ShoppingPage() {
+  const gender = loadProfile().gender;
   const [items, setItems] = useState<ShoppingItem[]>([]);
+  const [modalOpen, setModalOpen] = useState(false);
+  const [editTarget, setEditTarget] = useState<ShoppingItem | null>(null);
 
   const refresh = useCallback(() => {
     setItems(loadShopping());
@@ -44,6 +51,16 @@ export default function ShoppingPage() {
 
   function remove(id: string) {
     setItems(removeShopping(id));
+  }
+
+  function openAdd() {
+    setEditTarget(null);
+    setModalOpen(true);
+  }
+
+  function openEdit(it: ShoppingItem) {
+    setEditTarget(it);
+    setModalOpen(true);
   }
 
   const shareText = buildShoppingListShareText(items);
@@ -75,8 +92,30 @@ export default function ShoppingPage() {
         className="mx-auto max-w-lg px-4 pb-28 pt-8 md:pt-12 print:hidden"
         dir="rtl"
       >
+        <ShoppingTopNav onAddPersonal={openAdd} />
+
+        <motion.div
+          initial={{ opacity: 0, y: 6 }}
+          animate={{ opacity: 1, y: 0 }}
+        >
+          <InfoCard
+            gender={gender}
+            icon="🧺"
+            title={shoppingIntroTitle()}
+            body={shoppingIntroBody(gender)}
+            className="mb-5"
+          />
+        </motion.div>
+
+        <motion.h1
+          className="heading-page mb-6 text-center text-3xl md:text-4xl"
+          initial={{ opacity: 0, y: -8 }}
+          animate={{ opacity: 1, y: 0 }}
+        >
+          רשימת קניות
+        </motion.h1>
+
         <div className="mb-6 flex flex-col items-center gap-4 sm:flex-row sm:flex-wrap sm:justify-center sm:gap-x-3 sm:gap-y-2">
-          <BackToMenuButton wrapperClassName="mb-0" />
           <nav
             className="flex flex-wrap items-center justify-center gap-2"
             aria-label="ייצוא רשימת קניות"
@@ -123,14 +162,6 @@ export default function ShoppingPage() {
           </nav>
         </div>
 
-        <motion.h1
-          className="heading-page mb-6 text-center text-3xl md:text-4xl"
-          initial={{ opacity: 0, y: -8 }}
-          animate={{ opacity: 1, y: 0 }}
-        >
-          רשימת קניות
-        </motion.h1>
-
         <motion.section
           className="glass-panel p-4"
           initial={{ opacity: 0, y: 8 }}
@@ -140,57 +171,109 @@ export default function ShoppingPage() {
             <p className="text-center text-[var(--cherry)]/85">הרשימה ריקה.</p>
           ) : (
             <ul className="space-y-2">
-              {items.map((it) => (
-                <motion.li
-                  key={it.id}
-                  layout
-                  className={`flex flex-wrap items-center gap-3 rounded-xl border-2 border-[var(--border-cherry-soft)] bg-white px-3 py-3 ${
-                    it.checked ? "opacity-70" : ""
-                  }`}
-                  style={{ boxShadow: "var(--list-row-shadow)" }}
-                >
-                  <label className="flex min-w-0 flex-1 cursor-pointer items-start gap-3">
-                    <input
-                      type="checkbox"
-                      checked={it.checked}
-                      onChange={() => toggle(it.id)}
-                      className="mt-1 h-5 w-5 shrink-0 rounded border-[var(--border-cherry-soft)]"
-                      aria-label={`סימון ${it.name}`}
-                    />
-                    <span className="min-w-0">
-                      <span
-                        className={`block font-semibold text-[var(--stem)] ${
-                          it.checked ? "line-through" : ""
-                        }`}
-                      >
-                        {it.name}
-                      </span>
-                      <span className="text-xs text-[var(--cherry)]/75">
-                        {it.category}
-                      </span>
-                      <span className="mt-0.5 block text-sm text-[var(--stem)]/85">
-                        ~{Math.round(it.calories)} קק״ל ל־100 גרם
-                      </span>
-                    </span>
-                  </label>
-                  <button
-                    type="button"
-                    className="btn-icon-luxury btn-icon-luxury-danger flex min-w-[3rem] shrink-0 flex-col items-center gap-0.5 py-1"
-                    title="הסרה מרשימת הקניות"
-                    aria-label={`מחיקה — הסרת ${it.name} מהרשימה`}
-                    onClick={() => remove(it.id)}
+              {items.map((it) => {
+                const qty = it.qty ?? 1;
+                const macroParts = [
+                  it.protein != null && it.protein > 0
+                    ? `חלבון ${it.protein}`
+                    : null,
+                  it.carbs != null && it.carbs > 0 ? `פחמימות ${it.carbs}` : null,
+                  it.fat != null && it.fat > 0 ? `שומן ${it.fat}` : null,
+                ].filter(Boolean) as string[];
+                const hasMacros = macroParts.length > 0;
+                return (
+                  <motion.li
+                    key={it.id}
+                    layout
+                    className={`flex flex-wrap items-center gap-2 rounded-xl border-2 border-[var(--border-cherry-soft)] bg-white px-3 py-3 ${
+                      it.checked ? "opacity-70" : ""
+                    }`}
+                    style={{ boxShadow: "var(--list-row-shadow)" }}
                   >
-                    <IconTrash className="h-5 w-5" />
-                    <span className="text-[9px] font-bold text-[var(--cherry)]">
-                      מחק
-                    </span>
-                  </button>
-                </motion.li>
-              ))}
+                    <label className="flex min-w-0 flex-1 cursor-pointer items-start gap-3">
+                      <input
+                        type="checkbox"
+                        checked={it.checked}
+                        onChange={() => toggle(it.id)}
+                        className="mt-1 h-5 w-5 shrink-0 rounded border-[var(--border-cherry-soft)]"
+                        aria-label={`סימון ${it.name}`}
+                      />
+                      <span className="min-w-0">
+                        <span
+                          className={`block font-semibold text-[var(--stem)] ${
+                            it.checked ? "line-through" : ""
+                          }`}
+                        >
+                          {it.name}
+                          {qty !== 1 ? (
+                            <span className="ms-1 text-sm font-bold text-[var(--cherry)]">
+                              ×{qty}
+                            </span>
+                          ) : null}
+                        </span>
+                        {it.brand ? (
+                          <span className="mt-0.5 block text-xs text-[var(--stem)]/80">
+                            {it.brand}
+                          </span>
+                        ) : null}
+                        <span className="text-xs text-[var(--cherry)]/75">
+                          {it.category}
+                        </span>
+                        <span className="mt-0.5 block text-sm text-[var(--stem)]/85">
+                          ~{Math.round(it.calories)} קק״ל ל־100 גרם
+                        </span>
+                        {hasMacros ? (
+                          <span className="mt-0.5 block text-xs text-[var(--stem)]/80">
+                            {macroParts.join(" · ")}
+                          </span>
+                        ) : null}
+                      </span>
+                    </label>
+                    <div className="flex shrink-0 gap-1.5">
+                      <button
+                        type="button"
+                        className="btn-icon-luxury flex min-w-[2.75rem] flex-col items-center gap-0.5 py-1"
+                        title="עריכה"
+                        aria-label={`עריכת ${it.name}`}
+                        onClick={() => openEdit(it)}
+                      >
+                        <span className="text-lg" aria-hidden>
+                          ✏️
+                        </span>
+                        <span className="text-[9px] font-bold text-[var(--cherry)]">
+                          עריכה
+                        </span>
+                      </button>
+                      <button
+                        type="button"
+                        className="btn-icon-luxury btn-icon-luxury-danger flex min-w-[2.75rem] flex-col items-center gap-0.5 py-1"
+                        title="הסרה מרשימת הקניות"
+                        aria-label={`מחיקה — הסרת ${it.name} מהרשימה`}
+                        onClick={() => remove(it.id)}
+                      >
+                        <IconTrash className="h-5 w-5" />
+                        <span className="text-[9px] font-bold text-[var(--cherry)]">
+                          מחק
+                        </span>
+                      </button>
+                    </div>
+                  </motion.li>
+                );
+              })}
             </ul>
           )}
         </motion.section>
       </div>
+
+      <ShoppingItemModal
+        open={modalOpen}
+        onClose={() => {
+          setModalOpen(false);
+          setEditTarget(null);
+        }}
+        editingItem={editTarget}
+        onSaved={refresh}
+      />
 
       {/* תצוגת הדפסה בלבד */}
       <div
@@ -200,9 +283,15 @@ export default function ShoppingPage() {
         <h1 className="mb-4 text-xl font-bold">{SHOPPING_LIST_SHARE_HEADER}</h1>
         {items.length > 0 ? (
           <ul className="list-inside list-disc space-y-1 text-base leading-relaxed">
-            {items.map((it) => (
-              <li key={`print-${it.id}`}>{it.name}</li>
-            ))}
+            {items.map((it) => {
+              const q = it.qty != null && it.qty !== 1 ? ` ×${it.qty}` : "";
+              return (
+                <li key={`print-${it.id}`}>
+                  {it.name}
+                  {q}
+                </li>
+              );
+            })}
           </ul>
         ) : (
           <p className="text-[var(--text)]/80">אין פריטים ברשימה.</p>

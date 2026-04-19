@@ -13,13 +13,11 @@ import {
   saveProfile,
 } from "@/lib/storage";
 import { BackToMenuButton } from "@/components/BackToMenuButton";
-import {
-  activateDevAdminBypass,
-  isDevAdminBypassUiEnabled,
-  seedDevAdminProfileIfNeeded,
-} from "@/lib/localAuth";
-import type { ActivityLevel, Gender } from "@/lib/tdee";
+import { DevAdminQuickEntry } from "@/components/DevAdminQuickEntry";
+import { InfoCard } from "@/components/InfoCard";
+import type { ActivityLevel } from "@/lib/tdee";
 import { dailyCalorieTarget, tdee } from "@/lib/tdee";
+import { gf, infoProfileBody, infoTdeeResultsBody } from "@/lib/hebrewGenderUi";
 
 const activities: { id: ActivityLevel; label: string }[] = [
   { id: "sedentary", label: "יושבנית (מעט תנועה)" },
@@ -27,12 +25,6 @@ const activities: { id: ActivityLevel; label: string }[] = [
   { id: "moderate", label: "בינונית" },
   { id: "active", label: "גבוהה" },
 ];
-
-const TDEE_HELP_TITLE = "פרטים אישיים ויעד אנרגיה";
-const TDEE_HELP_BODY = [
-  "כדי לחשב את צריכת האנרגיה המדויקת של הגוף שלך, אנחנו צריכות להבין את הנתונים הטבעיים שלך. מלאי את הפרטים כדי שנוכל להתאים לך את הנוסחה המנצחת.",
-  "בסיום, תראי בדיוק כמה הגוף שלך שורף ביום, מהו התקציב הקלורי היומי שלך לירידה בטוחה, ומהי חלוקת אבות המזון (חלבון, פחמימה ושומן) שתשמור עלייך שבעה ואנרגטית לאורך כל היום.",
-].join("\n\n");
 
 function stripLeadingZeros(raw: string): string {
   // Keep "0." and "0," patterns (even though we normalize to ".")
@@ -73,7 +65,6 @@ export default function TdeePage() {
   const [weightText, setWeightText] = useState("");
   const [goalWeightText, setGoalWeightText] = useState("");
   const [deficitText, setDeficitText] = useState("");
-  const [helpOpen, setHelpOpen] = useState(false);
 
   const t = useMemo(() => {
     if (!p) return 0;
@@ -134,6 +125,7 @@ export default function TdeePage() {
   const registered = p.onboardingComplete === true;
   const formValid = isProfileFormValid(p);
   const canFinishRegistration = formValid && !registered;
+  const gender = p.gender;
 
   function update<K extends keyof UserProfile>(key: K, value: UserProfile[K]) {
     setP((prev) => {
@@ -168,32 +160,10 @@ export default function TdeePage() {
     <div className="mx-auto max-w-lg px-4 py-8 md:py-12" dir="rtl">
       <BackToMenuButton />
 
-      {isDevAdminBypassUiEnabled() && (
-        <div className="mb-6">
-          <button
-            type="button"
-            onClick={() => {
-              seedDevAdminProfileIfNeeded();
-              activateDevAdminBypass();
-              markWelcomeLeft();
-              router.replace("/");
-            }}
-            className="w-full rounded-xl border-2 border-dashed border-[var(--welcome-dev-border)] bg-[var(--welcome-dev-bg)] py-2 text-center text-xs font-semibold text-[var(--cherry)]"
-          >
-            כניסת מנהלת (פיתוח בלבד)
-          </button>
-        </div>
-      )}
-
-      <div className="mb-3 flex flex-wrap items-center justify-center gap-2">
-        <button
-          type="button"
-          onClick={() => setHelpOpen(true)}
-          className="rounded-full border-2 border-[var(--border-cherry-soft)] bg-white px-4 py-2 text-sm font-bold text-[var(--cherry)] shadow-sm"
-        >
-          הסבר
-        </button>
+      <div className="mb-6">
+        <DevAdminQuickEntry variant="tdee" />
       </div>
+
       <motion.h1
         className="heading-page mb-2 text-center text-3xl md:text-4xl"
         initial={{ opacity: 0, y: -8 }}
@@ -201,10 +171,22 @@ export default function TdeePage() {
       >
         {registered ? "עריכת פרטים ויעד אישי" : "הרשמה — מחשבון TDEE"}
       </motion.h1>
+
+      <InfoCard
+        gender={gender}
+        icon="👤"
+        title="מילוי פרטים אישיים"
+        body={infoProfileBody(gender)}
+        className="mb-5"
+      />
       <p className="mb-6 text-center text-sm font-medium text-[var(--cherry)]/85">
         {registered
           ? "השינויים נשמרים אוטומטית. יעד הקלוריות בדשבורד מתעדכן מיד כשמשנים גירעון או פעילות."
-          : "מלאי את כל השדות כדי להגדיר את היעד היומי ולהמשיך לדשבורד."}
+          : gf(
+              gender,
+              "מלאי את כל השדות כדי להגדיר את היעד היומי ולהמשיך לדשבורד.",
+              "מלא את כל השדות כדי להגדיר את היעד היומי ולהמשיך לדשבורד."
+            )}
       </p>
 
       <motion.section
@@ -236,30 +218,6 @@ export default function TdeePage() {
           />
         </label>
 
-        <fieldset className="flex gap-4">
-          <legend className="mb-2 text-sm font-semibold text-[var(--cherry)]">
-            מין
-          </legend>
-          <label className="flex items-center gap-2 font-medium text-[var(--stem)]">
-            <input
-              type="radio"
-              name="gender"
-              checked={p.gender === "female"}
-              onChange={() => update("gender", "female" as Gender)}
-            />
-            אישה
-          </label>
-          <label className="flex items-center gap-2 font-medium text-[var(--stem)]">
-            <input
-              type="radio"
-              name="gender"
-              checked={p.gender === "male"}
-              onChange={() => update("gender", "male" as Gender)}
-            />
-            גבר
-          </label>
-        </fieldset>
-
         <label className="block">
           <span className="text-sm font-semibold text-[var(--cherry)]">גיל</span>
           <input
@@ -281,7 +239,7 @@ export default function TdeePage() {
               setAgeText(String(clamped));
             }}
             className="input-luxury-dark mt-1 w-full"
-            placeholder="הזיני גיל…"
+            placeholder={gf(gender, "הזיני גיל…", "הזן גיל…")}
           />
         </label>
 
@@ -311,7 +269,7 @@ export default function TdeePage() {
               setHeightText(String(clamped));
             }}
             className="input-luxury-dark mt-1 w-full"
-            placeholder="הזיני גובה…"
+            placeholder={gf(gender, "הזיני גובה…", "הזן גובה…")}
           />
         </label>
 
@@ -338,7 +296,7 @@ export default function TdeePage() {
               setWeightText(String(clamped));
             }}
             className="input-luxury-dark mt-1 w-full"
-            placeholder="הזיני משקל…"
+            placeholder={gf(gender, "הזיני משקל…", "הזן משקל…")}
           />
         </label>
 
@@ -365,7 +323,7 @@ export default function TdeePage() {
               setGoalWeightText(String(clamped));
             }}
             className="input-luxury-dark mt-1 w-full"
-            placeholder="הזיני יעד…"
+            placeholder={gf(gender, "הזיני יעד…", "הזן יעד…")}
           />
         </label>
 
@@ -411,7 +369,7 @@ export default function TdeePage() {
               setDeficitText(String(clamped));
             }}
             className="input-luxury-dark mt-1 w-full"
-            placeholder="הזיני יעד…"
+            placeholder={gf(gender, "הזיני יעד…", "הזן יעד…")}
           />
         </label>
       </motion.section>
@@ -422,6 +380,14 @@ export default function TdeePage() {
         animate={{ opacity: 1 }}
         transition={{ delay: 0.1 }}
       >
+        <div className="mb-4 text-start">
+          <InfoCard
+            gender={gender}
+            icon="🔥"
+            title="תוצאות ויעד יומי"
+            body={infoTdeeResultsBody(gender)}
+          />
+        </div>
         <p className="text-sm font-semibold text-[var(--cherry)]/85">TDEE משוער</p>
         <p className="heading-page text-3xl">
           {Math.round(t)} קק״ל
@@ -465,36 +431,6 @@ export default function TdeePage() {
         </motion.div>
       )}
 
-      {helpOpen && (
-        <div
-          className="fixed inset-0 z-[240] flex items-end justify-center bg-black/45 p-4 sm:items-center"
-          role="dialog"
-          aria-modal="true"
-          aria-labelledby="tdee-help-title"
-        >
-          <div
-            className="glass-panel max-h-[85dvh] w-full max-w-md overflow-y-auto rounded-2xl border-2 border-[var(--border-cherry-soft)] p-5 shadow-xl"
-            dir="rtl"
-          >
-            <h2
-              id="tdee-help-title"
-              className="panel-title-cherry text-xl font-extrabold"
-            >
-              {TDEE_HELP_TITLE}
-            </h2>
-            <p className="mt-4 whitespace-pre-line leading-relaxed text-[var(--text)]">
-              {TDEE_HELP_BODY}
-            </p>
-            <button
-              type="button"
-              onClick={() => setHelpOpen(false)}
-              className="btn-stem mt-6 w-full rounded-xl py-3 text-center text-sm font-bold"
-            >
-              הבנתי
-            </button>
-          </div>
-        </div>
-      )}
     </div>
   );
 }

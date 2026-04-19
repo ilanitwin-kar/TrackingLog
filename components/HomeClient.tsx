@@ -1,6 +1,7 @@
 "use client";
 
 import { AnimatePresence, motion } from "framer-motion";
+import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
   useCallback,
@@ -27,8 +28,18 @@ import {
   saveFoodMemoryKey,
   toggleDictionaryFromEntry,
 } from "@/lib/storage";
+import { buildDashboardGreetingLine } from "@/lib/dashboardGreeting";
+import { dailyMacroTargetsGrams } from "@/lib/macroTargets";
+import {
+  dailyCalorieMotivationLine,
+  gf,
+  homeJournalIntroBody,
+  homeJournalIntroTitle,
+} from "@/lib/hebrewGenderUi";
 import { optionalMacroGram, sumMacroGrams } from "@/lib/macroGrams";
 import { dailyCalorieTarget } from "@/lib/tdee";
+import { weeklyCalorieSavingsClosedDays } from "@/lib/weeklyCalorieSavings";
+import { InfoCard } from "./InfoCard";
 import { CelebrationConfetti } from "./Fireworks";
 import {
   IconBookmark,
@@ -147,7 +158,103 @@ function formatDateKeyHe(dateKey: string): string {
   });
 }
 
+function CalorieHeroRing({
+  target,
+  total,
+}: {
+  target: number;
+  total: number;
+}) {
+  const remaining = target > 0 ? Math.max(0, target - total) : 0;
+  const over = target > 0 && total > target ? total - target : 0;
+  const pct = target > 0 ? Math.min(100, (total / target) * 100) : 0;
+  const size = 200;
+  const stroke = 12;
+  const r = (size - stroke) / 2;
+  const c = 2 * Math.PI * r;
+  const offset = c - (pct / 100) * c;
+  return (
+    <div className="flex flex-col items-center py-2">
+      <div className="relative mx-auto" style={{ width: size, height: size }}>
+        <svg
+          width={size}
+          height={size}
+          className="-rotate-90"
+          aria-hidden
+        >
+          <circle
+            cx={size / 2}
+            cy={size / 2}
+            r={r}
+            fill="none"
+            stroke="var(--border-cherry-soft)"
+            strokeWidth={stroke}
+          />
+          <circle
+            cx={size / 2}
+            cy={size / 2}
+            r={r}
+            fill="none"
+            className="text-[var(--cherry)]"
+            stroke="currentColor"
+            strokeWidth={stroke}
+            strokeDasharray={c}
+            strokeDashoffset={offset}
+            strokeLinecap="round"
+            style={{ transition: "stroke-dashoffset 0.6s ease" }}
+          />
+        </svg>
+        <div
+          className="absolute inset-0 flex flex-col items-center justify-center px-3 text-center"
+          dir="rtl"
+        >
+          {over <= 0 ? (
+            <>
+              <p className="text-[11px] font-bold uppercase tracking-wide text-[var(--stem)]/75">
+                נותרו בתקציב
+              </p>
+              <p className="text-4xl font-black tabular-nums leading-tight text-[var(--cherry)] md:text-[2.75rem]">
+                {remaining}
+              </p>
+              <p className="text-sm font-semibold text-[var(--stem)]">קק״ל</p>
+            </>
+          ) : (
+            <>
+              <p className="text-[11px] font-bold text-[var(--stem)]/75">
+                מעל היעד
+              </p>
+              <p className="text-3xl font-black tabular-nums leading-tight text-[#b91c1c] md:text-4xl">
+                +{Math.round(over)}
+              </p>
+              <p className="text-sm font-semibold text-[var(--stem)]">קק״ל</p>
+            </>
+          )}
+          <p className="mt-2 text-xs font-medium tabular-nums text-[var(--stem)]/80">
+            {total} / {target} קק״ל
+            {target > 0 ? (
+              <span className="mr-1 font-bold text-[var(--cherry)]">
+                {" "}
+                ({Math.round((total / target) * 100)}%)
+              </span>
+            ) : null}
+          </p>
+        </div>
+      </div>
+      <p className="mt-2 text-center text-sm font-semibold text-[var(--ui-home-daily-line)]">
+        יעד יומי: {target} קק״ל
+      </p>
+    </div>
+  );
+}
+
+const quickNavBtnClass =
+  "flex min-h-[2.75rem] flex-1 min-w-0 items-center justify-center gap-2 rounded-2xl border-2 border-[var(--border-cherry-soft)] bg-white/75 px-2 py-2.5 text-xs font-semibold text-[var(--cherry)] shadow-[0_4px_14px_rgba(0,0,0,0.06)] backdrop-blur-sm transition hover:bg-[var(--cherry-muted)] active:scale-[0.99] sm:text-sm";
+
+const foodToolbarBtnClass =
+  "inline-flex min-w-[2.65rem] flex-col items-center justify-center gap-0.5 rounded-xl border border-[var(--border-cherry-soft)] bg-white/95 px-1.5 py-1.5 text-[var(--stem)] shadow-sm transition hover:bg-[var(--cherry-muted)] disabled:cursor-not-allowed disabled:opacity-40";
+
 export function HomeClient() {
+  const gender = loadProfile().gender;
   const router = useRouter();
   const searchParams = useSearchParams();
   const [entries, setEntries] = useState<LogEntry[]>([]);
@@ -188,6 +295,17 @@ export function HomeClient() {
 
   useEffect(() => {
     setJournalClosedMap(loadDayJournalClosedMap());
+  }, []);
+
+  const [greetingHour, setGreetingHour] = useState(() =>
+    new Date().getHours()
+  );
+  useEffect(() => {
+    const id = window.setInterval(
+      () => setGreetingHour(new Date().getHours()),
+      60_000
+    );
+    return () => clearInterval(id);
   }, []);
 
   const isDayClosed = journalClosedMap[viewDateKey] === true;
@@ -260,13 +378,36 @@ export function HomeClient() {
     [entries]
   );
 
+  const macroGoals = useMemo(() => dailyMacroTargetsGrams(target), [target]);
+
+  const greetingLine = useMemo(
+    () =>
+      buildDashboardGreetingLine(
+        gender,
+        profile?.firstName ?? "",
+        greetingHour
+      ),
+    [gender, profile?.firstName, greetingHour]
+  );
+
+  const weeklySavings = useMemo(
+    () =>
+      profile
+        ? weeklyCalorieSavingsClosedDays(profile, journalClosedMap)
+        : 0,
+    [profile, journalClosedMap]
+  );
+
+  const dailyMotivationLine = useMemo(
+    () => dailyCalorieMotivationLine(gender, target, total),
+    [gender, target, total]
+  );
+
   /** מעל 100% מהיעד (לטקסט חריגה / צעדים) — רק כשמוצגת אזהרת מעל 110% */
   const overGoalKcal =
     target > 0 && total > target ? total - target : 0;
   /** אזהרת מעל היעד רק מעל 110% מהיעד; בין 100% ל־110% — ללא חריגה, עדיין חגיגת 100% */
   const showHarriga = target > 0 && total > target * 1.1;
-  const displayPercentage =
-    target > 0 ? Math.round((total / target) * 100) : 0;
   const isViewingToday = viewDateKey === getTodayKey();
 
   const triggerCelebration = useCallback((type: "half" | "full") => {
@@ -703,61 +844,93 @@ export function HomeClient() {
         )}
       </AnimatePresence>
 
-      <header className="mb-8 text-center">
-        <LiveClock />
-        <div className="mt-6 flex flex-wrap items-center justify-center gap-4 border-y border-[var(--border-cherry-soft)] py-4">
-          <p className="text-center text-xl font-extrabold text-[var(--ui-home-daily-line)] md:text-2xl">
-            יעד יומי: {target} קק״ל
+      <header className="mb-6 space-y-5">
+        <div className="flex flex-col items-stretch gap-3 md:flex-row md:items-center md:justify-between">
+          <p className="text-center text-xl font-extrabold leading-snug text-[var(--stem)] md:text-right md:text-2xl">
+            {greetingLine}
           </p>
-          <span className="hidden text-[var(--stem)]/35 sm:inline" aria-hidden>
-            |
-          </span>
-          <p className="text-center text-xl font-extrabold text-[var(--ui-home-daily-line)] md:text-2xl">
-            {isViewingToday ? "נצרכו היום" : "נצרכו ביום הנבחר"}: {total} קק״ל
-            <span className="mr-2 text-base font-semibold text-[var(--stem)]">
-              {" "}
-              ({displayPercentage}%)
+          <div className="shrink-0 md:max-w-[12rem]">
+            <LiveClock />
+          </div>
+        </div>
+
+        <CalorieHeroRing target={target} total={total} />
+
+        {dailyMotivationLine ? (
+          <p
+            className="mx-auto max-w-md text-center text-sm font-medium leading-relaxed text-[var(--stem)]/90"
+            role="status"
+          >
+            {dailyMotivationLine}
+          </p>
+        ) : null}
+
+        <div className="mx-auto grid max-w-xl grid-cols-1 gap-3 sm:grid-cols-3">
+          {(
+            [
+              ["חלבון", totalProteinG, macroGoals.proteinG] as const,
+              ["פחמימות", totalCarbsG, macroGoals.carbsG] as const,
+              ["שומן", totalFatG, macroGoals.fatG] as const,
+            ] as const
+          ).map(([label, consumed, goal]) => {
+            const g = goal > 0 ? goal : 1;
+            const pct = Math.min(100, (consumed / g) * 100);
+            return (
+              <div
+                key={label}
+                className="flex flex-col rounded-2xl border-2 border-[var(--border-cherry-soft)] bg-white/90 px-3 py-3 shadow-sm"
+              >
+                <p className="text-center text-sm font-semibold text-[var(--cherry)]">
+                  {label}
+                </p>
+                <p className="mt-1 text-center text-base font-bold tabular-nums text-[var(--stem)]">
+                  {Math.round(consumed)}ג / {Math.round(goal)}ג
+                </p>
+                <div className="mt-4 h-2.5 overflow-hidden rounded-full bg-[#f0f0f0]">
+                  <div
+                    className="h-full rounded-full bg-[var(--cherry)] transition-[width] duration-500 ease-out"
+                    style={{ width: `${pct}%` }}
+                  />
+                </div>
+              </div>
+            );
+          })}
+        </div>
+
+        <InfoCard
+          gender={gender}
+          icon="🏦"
+          title="הון קלורי שנצבר השבוע"
+          body={`${weeklySavings.toLocaleString("he-IL")} קק״ל — סכום מהימים הסגורים השבוע שבהם נצרכו פחות מהיעד.`}
+          className="shadow-[0_8px_24px_var(--panel-shadow-soft)]"
+        />
+
+        <nav
+          className="flex w-full gap-2 sm:gap-3"
+          aria-label="פעולות מהירות"
+        >
+          <Link
+            href={`/add-food?date=${encodeURIComponent(viewDateKey)}`}
+            className={quickNavBtnClass}
+          >
+            <span className="text-lg" aria-hidden>
+              ➕
             </span>
-          </p>
-        </div>
-        <div className="mx-auto mt-5 flex max-w-xl flex-wrap items-stretch justify-center gap-3 md:mt-6 md:gap-4">
-          <div className="min-w-[8.25rem] flex-1 rounded-xl border-2 border-stem-soft bg-white/90 px-4 py-3 text-center shadow-sm sm:flex-initial">
-            <p className="font-[system-ui,Segoe_UI,sans-serif] text-sm font-semibold text-[var(--cherry)]">
-              חלבון:{" "}
-              <span className="text-lg font-bold tabular-nums text-[var(--stem)]">
-                {totalProteinG}
-              </span>
-              <span className="text-sm font-semibold text-[var(--text)]/85">
-                {" "}
-                ג&apos;
-              </span>
-            </p>
-          </div>
-          <div className="min-w-[8.25rem] flex-1 rounded-xl border-2 border-stem-soft bg-white/90 px-4 py-3 text-center shadow-sm sm:flex-initial">
-            <p className="font-[system-ui,Segoe_UI,sans-serif] text-sm font-semibold text-[var(--cherry)]">
-              פחמימות:{" "}
-              <span className="text-lg font-bold tabular-nums text-[var(--stem)]">
-                {totalCarbsG}
-              </span>
-              <span className="text-sm font-semibold text-[var(--text)]/85">
-                {" "}
-                ג&apos;
-              </span>
-            </p>
-          </div>
-          <div className="min-w-[8.25rem] flex-1 rounded-xl border-2 border-stem-soft bg-white/90 px-4 py-3 text-center shadow-sm sm:flex-initial">
-            <p className="font-[system-ui,Segoe_UI,sans-serif] text-sm font-semibold text-[var(--cherry)]">
-              שומן:{" "}
-              <span className="text-lg font-bold tabular-nums text-[var(--stem)]">
-                {totalFatG}
-              </span>
-              <span className="text-sm font-semibold text-[var(--text)]/85">
-                {" "}
-                ג&apos;
-              </span>
-            </p>
-          </div>
-        </div>
+            <span className="truncate">הוספת מזון</span>
+          </Link>
+          <Link href="/explorer" className={quickNavBtnClass}>
+            <span className="text-lg" aria-hidden>
+              💎
+            </span>
+            <span className="truncate">מגלה האוצרות</span>
+          </Link>
+          <Link href="/shopping" className={quickNavBtnClass}>
+            <span className="text-lg" aria-hidden>
+              🧺
+            </span>
+            <span className="truncate">סל האוצרות</span>
+          </Link>
+        </nav>
       </header>
 
       <motion.div
@@ -773,28 +946,15 @@ export function HomeClient() {
         </h1>
       </motion.div>
 
-      <motion.section
-        className="glass-panel mb-6 p-4"
-        initial={{ opacity: 0, y: 8 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 0.05 }}
-      >
-        <p className="mb-3 text-center text-sm font-bold text-[var(--ui-home-progress-label)]">
-          התקדמות יומית
-        </p>
-        <div className="h-3 overflow-hidden rounded-full border-2 border-[var(--border-cherry-soft)] bg-[#f8f8f8]">
+      {showHarriga && (
+        <motion.section
+          className="glass-panel mb-6 p-4"
+          initial={{ opacity: 0, y: 8 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.05 }}
+        >
           <motion.div
-            className="progress-bar-cherry-stem h-full rounded-full"
-            initial={{ width: 0 }}
-            animate={{
-              width: `${target > 0 ? Math.min(100, (total / target) * 100) : 0}%`,
-            }}
-            transition={{ type: "spring", stiffness: 120, damping: 18 }}
-          />
-        </div>
-        {showHarriga && (
-          <motion.div
-            className="mt-4 rounded-xl border-[3px] border-[#d4848c] bg-[#fff0f1] p-4 shadow-sm md:p-5"
+            className="rounded-xl border-[3px] border-[#d4848c] bg-[#fff0f1] p-4 shadow-sm md:p-5"
             initial={{ opacity: 0, height: 0 }}
             animate={{ opacity: 1, height: "auto" }}
           >
@@ -816,8 +976,8 @@ export function HomeClient() {
               בקצב בינוני).
             </p>
           </motion.div>
-        )}
-      </motion.section>
+        </motion.section>
+      )}
 
       {starredForMealCount >= 2 && !isDayClosed && (
         <motion.div
@@ -836,6 +996,14 @@ export function HomeClient() {
       )}
 
       <section className="glass-panel p-4">
+        <InfoCard
+          gender={gender}
+          icon="📔"
+          title={homeJournalIntroTitle()}
+          body={homeJournalIntroBody(gender)}
+          className="mb-5"
+        />
+
         <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
           <div className="flex flex-wrap items-center justify-center gap-2 sm:justify-start">
             <button
@@ -871,12 +1039,15 @@ export function HomeClient() {
               </button>
             )}
           </div>
+        </div>
+
+        <div className="mb-5">
           <button
             type="button"
             className={
               isDayClosed
-                ? "w-full rounded-xl border-2 border-[var(--border-cherry-soft)] bg-white px-4 py-3 text-sm font-bold text-[var(--cherry)] shadow-sm sm:w-auto"
-                : "btn-stem w-full rounded-xl px-4 py-3 text-sm font-bold sm:w-auto sm:min-w-[11rem]"
+                ? "w-full rounded-2xl border-2 border-[var(--border-cherry-soft)] bg-white px-4 py-4 text-base font-bold text-[var(--cherry)] shadow-md"
+                : "btn-stem w-full rounded-2xl px-4 py-4 text-base font-extrabold shadow-[0_8px_28px_rgba(74,124,35,0.35)] ring-2 ring-white/40 md:text-lg"
             }
             onClick={toggleJournalClosedForViewDay}
           >
@@ -910,7 +1081,11 @@ export function HomeClient() {
         </p>
         {entries.length === 0 ? (
           <p className="text-[var(--text)]/85">
-            עדיין אין רשומות — לחצי על הכפתור המרכזי ״הוספה״ בתפריט התחתון,
+            {gf(
+              gender,
+              "עדיין אין רשומות — לחצי על הכפתור המרכזי ״הוספה״ בתפריט התחתון,",
+              "עדיין אין רשומות — לחץ על הכפתור המרכזי ״הוספה״ בתפריט התחתון,"
+            )}{" "}
             ואז על ״פתיחת מסך הוספת מזון״ (המקלדת לא מסתירה את תוצאות החיפוש).
           </p>
         ) : (
@@ -962,10 +1137,10 @@ export function HomeClient() {
                       {formatMacroCell(item.fatG)}
                     </p>
                   </div>
-                  <div className="flex max-w-full shrink-0 flex-wrap items-start justify-end gap-x-1 gap-y-2">
+                  <div className="flex max-w-full shrink-0 flex-wrap items-start justify-end gap-1.5">
                     <button
                       type="button"
-                      className="btn-icon-luxury min-w-[3.1rem] flex-col justify-center gap-0 py-1.5"
+                      className={foodToolbarBtnClass}
                       title="סימון כארוחה קבועה במילון הארוחות"
                       aria-label="ארוחה קבועה — סימון לשמירה כארוחה במילון"
                       aria-pressed={mealOn}
@@ -973,12 +1148,12 @@ export function HomeClient() {
                       onClick={() => toggleMealStar(item.id)}
                     >
                       <IconCaption label="ארוחה">
-                        <IconStar filled={mealOn} className="h-5 w-5" />
+                        <IconStar filled={mealOn} className="h-[1.15rem] w-[1.15rem]" />
                       </IconCaption>
                     </button>
                     <button
                       type="button"
-                      className="btn-icon-luxury min-w-[3.1rem] flex-col justify-center gap-0 py-1.5"
+                      className={foodToolbarBtnClass}
                       title="שמירה במילון האישי שלי"
                       aria-label="מילון — שמירת הפריט במילון"
                       aria-pressed={inDictionary}
@@ -989,43 +1164,46 @@ export function HomeClient() {
                       }}
                     >
                       <IconCaption label="מילון">
-                        <IconBookmark filled={inDictionary} className="h-5 w-5" />
+                        <IconBookmark
+                          filled={inDictionary}
+                          className="h-[1.15rem] w-[1.15rem]"
+                        />
                       </IconCaption>
                     </button>
                     <button
                       type="button"
-                      className="btn-icon-luxury min-w-[3.1rem] flex-col justify-center gap-0 py-1.5"
+                      className={foodToolbarBtnClass}
                       title="עריכת כמות והגדרות מנה"
                       aria-label="כמות — עריכת כמות"
                       disabled={isDayClosed}
                       onClick={() => openEdit(item)}
                     >
                       <IconCaption label="כמות">
-                        <IconPencil className="h-5 w-5" />
+                        <IconPencil className="h-[1.15rem] w-[1.15rem]" />
                       </IconCaption>
                     </button>
                     <button
                       type="button"
-                      className="btn-icon-luxury min-w-[3.1rem] flex-col justify-center gap-0 py-1.5"
+                      className={foodToolbarBtnClass}
                       title="שכפול לרשומה נוספת"
                       aria-label="שכפול — הוספת אותה מנה שוב"
                       disabled={isDayClosed}
                       onClick={() => duplicateEntry(item)}
                     >
                       <IconCaption label="שכפול">
-                        <IconDuplicate className="h-5 w-5" />
+                        <IconDuplicate className="h-[1.15rem] w-[1.15rem]" />
                       </IconCaption>
                     </button>
                     <button
                       type="button"
-                      className="btn-icon-luxury btn-icon-luxury-danger min-w-[3.1rem] flex-col justify-center gap-0 py-1.5"
+                      className={`${foodToolbarBtnClass} border-red-300/70 text-red-800 hover:bg-red-50`}
                       title="מחיקה מהיומן"
                       aria-label="מחיקה — הסרת הרשומה מהיום"
                       disabled={isDayClosed}
                       onClick={() => removeEntry(item.id)}
                     >
                       <IconCaption label="מחק">
-                        <IconTrash className="h-5 w-5" />
+                        <IconTrash className="h-[1.15rem] w-[1.15rem]" />
                       </IconCaption>
                     </button>
                   </div>
