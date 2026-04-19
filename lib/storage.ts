@@ -326,6 +326,25 @@ export function saveWeights(entries: WeightEntry[]): void {
   }
 }
 
+/**
+ * שורת משקל ראשונה בהיסטוריה — משקל ההתחלה כפי שמופיע בפרטים האישיים (אחרי השלמת הרשמה).
+ * רק אם אין עדיין רשומות.
+ */
+export function ensureBaselineWeightRowFromProfile(): void {
+  if (typeof window === "undefined") return;
+  const p = loadProfile();
+  if (!isRegistrationComplete(p)) return;
+  if (p.weightKg < 30 || p.weightKg > 250) return;
+  const entries = loadWeights();
+  if (entries.length > 0) return;
+  const entry: WeightEntry = {
+    id: `baseline-${Date.now()}`,
+    kg: Math.round(p.weightKg * 10) / 10,
+    date: getTodayKey(),
+  };
+  saveWeights([entry]);
+}
+
 export function getHalfGoalCelebratedDate(): string | null {
   if (typeof window === "undefined") return null;
   return localStorage.getItem(KEYS.halfGoalDate);

@@ -18,6 +18,7 @@ import {
 } from "@/lib/appVariant";
 import {
   activateDevAdminBypass,
+  isStaffBypassUiEnabled,
   seedBypassProfileIfNeeded,
   seedDevAdminProfileIfNeeded,
 } from "@/lib/localAuth";
@@ -139,29 +140,34 @@ export function PickThemeClient() {
         />
       </svg>
 
-      <div className="pointer-events-none absolute inset-x-0 bottom-0 z-[45] flex justify-center px-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
-        <div className="pointer-events-auto flex w-full max-w-md flex-col gap-2">
-          <StaffBypassEntry
-            theme="pickDark"
-            dir="rtl"
-            labels={STAFF_BYPASS_HE}
-            onStaffSuccess={staffOrDevSuccess}
-          />
-          {process.env.NODE_ENV === "development" && (
-            <button
-              type="button"
-              onClick={() => {
-                seedDevAdminProfileIfNeeded();
-                activateDevAdminBypass();
-                staffOrDevSuccess();
-              }}
-              className="w-full rounded-xl border-2 border-dashed border-cyan-300/60 bg-[#0c1222]/88 py-2 text-center text-[11px] font-bold text-cyan-100 shadow-lg backdrop-blur-sm sm:text-xs"
-            >
-              כניסת מנהלת (פיתוח בלבד)
-            </button>
-          )}
+      {(isStaffBypassUiEnabled() ||
+        process.env.NODE_ENV === "development") && (
+        <div className="pointer-events-none absolute inset-x-0 bottom-0 z-[45] flex justify-center px-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
+          <div className="pointer-events-auto flex w-full max-w-md flex-col gap-2">
+            {isStaffBypassUiEnabled() && (
+              <StaffBypassEntry
+                theme="pickDark"
+                dir="rtl"
+                labels={STAFF_BYPASS_HE}
+                onStaffSuccess={staffOrDevSuccess}
+              />
+            )}
+            {process.env.NODE_ENV === "development" && (
+              <button
+                type="button"
+                onClick={() => {
+                  seedDevAdminProfileIfNeeded();
+                  activateDevAdminBypass();
+                  staffOrDevSuccess();
+                }}
+                className="w-full rounded-xl border-2 border-dashed border-cyan-300/60 bg-[#0c1222]/88 py-2 text-center text-[11px] font-bold text-cyan-100 shadow-lg backdrop-blur-sm sm:text-xs"
+              >
+                כניסת מנהלת (פיתוח בלבד)
+              </button>
+            )}
+          </div>
         </div>
-      </div>
+      )}
     </div>
   );
 }

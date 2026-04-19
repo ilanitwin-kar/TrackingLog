@@ -137,6 +137,16 @@ export function isStaffUnlockConfigured(): boolean {
   return typeof s === "string" && s.length >= 4;
 }
 
+/**
+ * האם להציג בממשק כפתור «כניסת צוות» (מסכי onboarding).
+ * בפרודקשן מוסתר כברירת מחדל — משתמשי קצה נכנסים בהרשמה/התחברות רגילה בלי קוד.
+ * להפעלה ב-Netlify: NEXT_PUBLIC_SHOW_STAFF_BYPASS_UI=1 (בנוסף ל-NEXT_PUBLIC_STAFF_UNLOCK).
+ */
+export function isStaffBypassUiEnabled(): boolean {
+  if (process.env.NODE_ENV === "development") return true;
+  return process.env.NEXT_PUBLIC_SHOW_STAFF_BYPASS_UI === "1";
+}
+
 /** דילוג צוות בפרודקשן — נשמר ב־localStorage עד «התחלה מחדש» */
 export function isStaffBypassActive(): boolean {
   if (typeof window === "undefined") return false;

@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import {
   type UserProfile,
+  ensureBaselineWeightRowFromProfile,
   isProfileFormValid,
   loadProfile,
   markWelcomeLeft,
@@ -17,6 +18,7 @@ import {
 } from "@/components/StaffBypassEntry";
 import {
   activateDevAdminBypass,
+  isStaffBypassUiEnabled,
   seedBypassProfileIfNeeded,
   seedDevAdminProfileIfNeeded,
 } from "@/lib/localAuth";
@@ -150,14 +152,12 @@ export default function TdeePage() {
   }
 
   function finishRegistration() {
-    if (!canFinishRegistration) return;
+    if (!canFinishRegistration || !p) return;
     markWelcomeLeft();
-    setP((prev) => {
-      if (!prev) return prev;
-      const next: UserProfile = { ...prev, onboardingComplete: true };
-      saveProfile(next);
-      return next;
-    });
+    const next: UserProfile = { ...p, onboardingComplete: true };
+    saveProfile(next);
+    ensureBaselineWeightRowFromProfile();
+    setP(next);
     router.replace("/");
   }
 
@@ -166,16 +166,18 @@ export default function TdeePage() {
       <BackToMenuButton />
 
       <div className="mb-6 space-y-2">
-        <StaffBypassEntry
-          theme="welcome"
-          dir="rtl"
-          labels={STAFF_BYPASS_HE}
-          onStaffSuccess={() => {
-            seedBypassProfileIfNeeded();
-            markWelcomeLeft();
-            router.replace("/");
-          }}
-        />
+        {isStaffBypassUiEnabled() && (
+          <StaffBypassEntry
+            theme="welcome"
+            dir="rtl"
+            labels={STAFF_BYPASS_HE}
+            onStaffSuccess={() => {
+              seedBypassProfileIfNeeded();
+              markWelcomeLeft();
+              router.replace("/");
+            }}
+          />
+        )}
         {process.env.NODE_ENV === "development" && (
           <button
             type="button"

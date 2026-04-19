@@ -6,6 +6,7 @@ import { useCallback, useEffect, useState } from "react";
 import {
   activateDevAdminBypass,
   hasWelcomeAutoResume,
+  isStaffBypassUiEnabled,
   registerAccount,
   seedBypassProfileIfNeeded,
   seedDevAdminProfileIfNeeded,
@@ -459,24 +460,26 @@ export function WelcomeScreen() {
             {t.forgotPassword}
           </Link>
         </div>
-        <StaffBypassEntry
-          theme="welcome"
-          dir={dir}
-          onNotify={showToast}
-          labels={{
-            staffEntry: t.staffEntry,
-            staffPinPrompt: t.staffPinPrompt,
-            staffPinWrong: t.staffPinWrong,
-            staffNotConfigured: t.staffNotConfigured,
-            submitLabel: t.submitLogin,
-            cancel: t.cancel,
-          }}
-          onStaffSuccess={() => {
-            seedBypassProfileIfNeeded();
-            markWelcomeLeft();
-            router.replace("/");
-          }}
-        />
+        {isStaffBypassUiEnabled() && (
+          <StaffBypassEntry
+            theme="welcome"
+            dir={dir}
+            onNotify={showToast}
+            labels={{
+              staffEntry: t.staffEntry,
+              staffPinPrompt: t.staffPinPrompt,
+              staffPinWrong: t.staffPinWrong,
+              staffNotConfigured: t.staffNotConfigured,
+              submitLabel: t.submitLogin,
+              cancel: t.cancel,
+            }}
+            onStaffSuccess={() => {
+              seedBypassProfileIfNeeded();
+              markWelcomeLeft();
+              router.replace("/");
+            }}
+          />
+        )}
         <p className="text-center text-xs font-semibold text-[var(--text)]/60">
           {t.quickConnect}
         </p>
