@@ -25,6 +25,7 @@ import {
   addToShopping,
   loadShoppingFoodIds,
 } from "@/lib/explorerStorage";
+import { IconCaption } from "@/components/IconCaption";
 import { IconCart, IconPencil, IconTrash } from "@/components/Icons";
 
 const fontFood =
@@ -381,66 +382,75 @@ export default function DictionaryPage() {
                         </p>
                       )}
                     </div>
-                    <div className="flex shrink-0 gap-1">
+                    <div className="flex shrink-0 flex-wrap items-start justify-end gap-1">
                       {!isMeal && (
                         <button
                           type="button"
-                          className="btn-icon-luxury p-2"
-                          title="עריכה"
-                          aria-label={`עריכת «${d.food}»`}
+                          className="btn-icon-luxury flex min-w-[3.1rem] flex-col justify-center gap-0 py-1.5"
+                          title="עריכת שם וכמויות"
+                          aria-label={`עריכה — עריכת «${d.food}» במילון`}
                           onClick={() => openEdit(d)}
                         >
-                          <IconPencil className="h-6 w-6" />
+                          <IconCaption label="עריכה">
+                            <IconPencil className="h-5 w-5 sm:h-6 sm:w-6" />
+                          </IconCaption>
                         </button>
                       )}
                       {preset && isMeal ? (
                         <button
                           type="button"
-                          className={`btn-icon-luxury p-2 transition-colors ${
+                          className={`btn-icon-luxury flex min-w-[3.1rem] flex-col justify-center gap-0 py-1.5 transition-colors ${
                             inCart
                               ? "bg-[var(--cherry-muted)] ring-2 ring-[var(--border-cherry-soft)]"
                               : ""
                           }`}
-                          title="רשימת קניות"
-                          aria-label="הוספת מרכיבי הארוחה לרשימת קניות"
+                          title="הוספת מרכיבי הארוחה לרשימת הקניות"
+                          aria-label="קניות — הוספת מרכיבי הארוחה לרשימת הקניות"
                           aria-pressed={inCart}
                           onClick={() => onCartMealPreset(preset)}
                         >
-                          <IconCart
-                            filled={inCart}
-                            className={`h-6 w-6 ${
-                              inCart ? "text-[var(--cherry)]" : "text-[var(--stem)]"
-                            }`}
-                          />
+                          <IconCaption label="קניות">
+                            <IconCart
+                              filled={inCart}
+                              className={`h-5 w-5 sm:h-6 sm:w-6 ${
+                                inCart ? "text-[var(--cherry)]" : "text-[var(--stem)]"
+                              }`}
+                            />
+                          </IconCaption>
                         </button>
                       ) : !isMeal ? (
                         <button
                           type="button"
-                          className={`btn-icon-luxury p-2 transition-colors ${
+                          className={`btn-icon-luxury flex min-w-[3.1rem] flex-col justify-center gap-0 py-1.5 transition-colors ${
                             inCart
                               ? "bg-[var(--cherry-muted)] ring-2 ring-[var(--border-cherry-soft)]"
                               : ""
                           }`}
-                          title="רשימת קניות"
-                          aria-label="הוספה לרשימת קניות"
+                          title="הוספה לרשימת הקניות במסך הקניות"
+                          aria-label="קניות — הוספה לרשימת קניות"
                           aria-pressed={inCart}
                           onClick={() => onCartDictionaryItem(d)}
                         >
-                          <IconCart
-                            filled={inCart}
-                            className={`h-6 w-6 ${
-                              inCart ? "text-[var(--cherry)]" : "text-[var(--stem)]"
-                            }`}
-                          />
+                          <IconCaption label="קניות">
+                            <IconCart
+                              filled={inCart}
+                              className={`h-5 w-5 sm:h-6 sm:w-6 ${
+                                inCart ? "text-[var(--cherry)]" : "text-[var(--stem)]"
+                              }`}
+                            />
+                          </IconCaption>
                         </button>
                       ) : null}
                       <button
                         type="button"
                         onClick={() => setSaved(removeDictionaryItem(d.id))}
-                        className="btn-icon-luxury btn-icon-luxury-danger shrink-0 p-2"
-                        aria-label="הסרה מהמילון"
+                        className="btn-icon-luxury btn-icon-luxury-danger flex min-w-[3.1rem] shrink-0 flex-col justify-center gap-0 py-1.5"
+                        aria-label="מחיקה — הסרה מהמילון"
+                        title="הסרה מהמילון האישי"
                       >
-                        <IconTrash className="h-6 w-6" />
+                        <IconCaption label="מחק">
+                          <IconTrash className="h-5 w-5 sm:h-6 sm:w-6" />
+                        </IconCaption>
                       </button>
                     </div>
                   </div>

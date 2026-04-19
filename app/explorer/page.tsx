@@ -3,6 +3,7 @@
 import { AnimatePresence, motion } from "framer-motion";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { BackToMenuButton } from "@/components/BackToMenuButton";
+import { IconCaption } from "@/components/IconCaption";
 import { IconCart, IconHeart, IconVerified } from "@/components/Icons";
 import {
   addToShopping,
@@ -165,6 +166,10 @@ export default function ExplorerPage() {
         animate={{ opacity: 1, y: 0 }}
       >
         חיפוש במאגר המקומי — ישירות ממגלה המזונות.
+        <span className="mt-2 block text-[11px] font-medium leading-snug text-[var(--stem)]/85">
+          ליד כל שורה: לב — שמירה במועדפים · עגלה — הוספה לרשימת הקניות ·
+          «מאומת במאגר» — נתון מהמאגר המקומי. מתאים לנשים ולגברים.
+        </span>
       </motion.div>
 
       <motion.section
@@ -264,8 +269,14 @@ export default function ExplorerPage() {
                 >
                   <div className="min-w-0 flex-1">
                     <p className="flex flex-wrap items-center gap-1.5 font-semibold text-[var(--stem)]">
-                      <span className="inline-flex shrink-0" aria-label="מאומת">
+                      <span
+                        className="inline-flex shrink-0 items-center gap-1"
+                        title="מאומת מהמאגר המקומי"
+                      >
                         <IconVerified className="h-4 w-4 text-[#d4a017]" />
+                        <span className="text-[10px] font-bold text-[var(--stem)]/90">
+                          מאומת במאגר
+                        </span>
                       </span>
                       <span>{row.name}</span>
                     </p>
@@ -280,44 +291,48 @@ export default function ExplorerPage() {
                       <span className="font-semibold">שומן</span> {row.fat}
                     </p>
                   </div>
-                  <div className="flex shrink-0 gap-1">
+                  <div className="flex shrink-0 gap-2">
                     <button
                       type="button"
-                      className={`btn-icon-luxury transition-colors ${
+                      className={`btn-icon-luxury min-w-[3.25rem] flex-col justify-center gap-0.5 py-2 transition-colors ${
                         fav
                           ? "bg-[var(--cherry-muted)] ring-2 ring-[var(--border-cherry-soft)]"
                           : ""
                       }`}
-                      title="מועדפים"
-                      aria-label="מועדפים"
+                      title="שמירה במועדפים במגלה המזונות"
+                      aria-label="מועדפים — שמירה ברשימת המועדפים"
                       aria-pressed={fav}
                       onClick={() => onHeart(row)}
                     >
-                      <IconHeart
-                        filled={fav}
-                        className={`h-5 w-5 ${
-                          fav ? "text-[var(--cherry)]" : "text-[var(--stem)]"
-                        }`}
-                      />
+                      <IconCaption label="מועדפים">
+                        <IconHeart
+                          filled={fav}
+                          className={`h-5 w-5 ${
+                            fav ? "text-[var(--cherry)]" : "text-[var(--stem)]"
+                          }`}
+                        />
+                      </IconCaption>
                     </button>
                     <button
                       type="button"
-                      className={`btn-icon-luxury transition-colors ${
+                      className={`btn-icon-luxury min-w-[3.25rem] flex-col justify-center gap-0.5 py-2 transition-colors ${
                         inCart
                           ? "bg-[var(--cherry-muted)] ring-2 ring-[var(--border-cherry-soft)]"
                           : ""
                       }`}
-                      title="רשימת קניות"
-                      aria-label="הוספה לרשימת קניות"
+                      title="הוספה לרשימת הקניות"
+                      aria-label="רשימת קניות — מעבר לרשימת הקניות במסך הקניות"
                       aria-pressed={inCart}
                       onClick={() => onCart(row)}
                     >
-                      <IconCart
-                        filled={inCart}
-                        className={`h-5 w-5 ${
-                          inCart ? "text-[var(--cherry)]" : "text-[var(--stem)]"
-                        }`}
-                      />
+                      <IconCaption label="קניות">
+                        <IconCart
+                          filled={inCart}
+                          className={`h-5 w-5 ${
+                            inCart ? "text-[var(--cherry)]" : "text-[var(--stem)]"
+                          }`}
+                        />
+                      </IconCaption>
                     </button>
                   </div>
                 </li>

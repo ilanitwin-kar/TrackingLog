@@ -38,6 +38,7 @@ import {
   IconTrash,
   IconVerified,
 } from "./Icons";
+import { IconCaption } from "./IconCaption";
 import { LiveClock } from "./LiveClock";
 import { ProfileMenu } from "./ProfileMenu";
 
@@ -928,11 +929,13 @@ export function HomeClient() {
                     <p className="flex flex-wrap items-center gap-1 font-semibold text-[var(--text)]">
                       {item.verified && (
                         <span
-                          className="inline-flex shrink-0"
-                          title="מאומת"
-                          aria-label="מאומת"
+                          className="inline-flex shrink-0 items-center gap-1"
+                          title="מאומת מהמאגר"
                         >
                           <IconVerified className="h-4 w-4 text-[var(--stem)]" />
+                          <span className="text-[10px] font-bold text-[var(--text)]/80">
+                            מאומת
+                          </span>
                         </span>
                       )}
                       <span>{item.food}</span>
@@ -955,23 +958,25 @@ export function HomeClient() {
                       {formatMacroCell(item.fatG)}
                     </p>
                   </div>
-                  <div className="flex shrink-0 flex-wrap items-center gap-2">
+                  <div className="flex max-w-full shrink-0 flex-wrap items-start justify-end gap-x-1 gap-y-2">
                     <button
                       type="button"
-                      className="btn-icon-luxury"
-                      title="סימון לשמירה כארוחה במילון"
-                      aria-label="סימון לשמירה כארוחה במילון"
+                      className="btn-icon-luxury min-w-[3.1rem] flex-col justify-center gap-0 py-1.5"
+                      title="סימון כארוחה קבועה במילון הארוחות"
+                      aria-label="ארוחה קבועה — סימון לשמירה כארוחה במילון"
                       aria-pressed={mealOn}
                       disabled={isDayClosed}
                       onClick={() => toggleMealStar(item.id)}
                     >
-                      <IconStar filled={mealOn} className="h-5 w-5" />
+                      <IconCaption label="ארוחה">
+                        <IconStar filled={mealOn} className="h-5 w-5" />
+                      </IconCaption>
                     </button>
                     <button
                       type="button"
-                      className="btn-icon-luxury"
-                      title="שמירה למילון"
-                      aria-label="שמירה למילון"
+                      className="btn-icon-luxury min-w-[3.1rem] flex-col justify-center gap-0 py-1.5"
+                      title="שמירה במילון האישי שלי"
+                      aria-label="מילון — שמירת הפריט במילון"
                       aria-pressed={inDictionary}
                       disabled={isDayClosed}
                       onClick={() => {
@@ -979,37 +984,45 @@ export function HomeClient() {
                         setDictTick((t) => t + 1);
                       }}
                     >
-                      <IconBookmark filled={inDictionary} className="h-5 w-5" />
+                      <IconCaption label="מילון">
+                        <IconBookmark filled={inDictionary} className="h-5 w-5" />
+                      </IconCaption>
                     </button>
                     <button
                       type="button"
-                      className="btn-icon-luxury"
-                      title="עריכת כמות"
-                      aria-label="עריכת כמות"
+                      className="btn-icon-luxury min-w-[3.1rem] flex-col justify-center gap-0 py-1.5"
+                      title="עריכת כמות והגדרות מנה"
+                      aria-label="כמות — עריכת כמות"
                       disabled={isDayClosed}
                       onClick={() => openEdit(item)}
                     >
-                      <IconPencil className="h-5 w-5" />
+                      <IconCaption label="כמות">
+                        <IconPencil className="h-5 w-5" />
+                      </IconCaption>
                     </button>
                     <button
                       type="button"
-                      className="btn-icon-luxury"
-                      title="שכפול"
-                      aria-label="שכפול"
+                      className="btn-icon-luxury min-w-[3.1rem] flex-col justify-center gap-0 py-1.5"
+                      title="שכפול לרשומה נוספת"
+                      aria-label="שכפול — הוספת אותה מנה שוב"
                       disabled={isDayClosed}
                       onClick={() => duplicateEntry(item)}
                     >
-                      <IconDuplicate className="h-5 w-5" />
+                      <IconCaption label="שכפול">
+                        <IconDuplicate className="h-5 w-5" />
+                      </IconCaption>
                     </button>
                     <button
                       type="button"
-                      className="btn-icon-luxury btn-icon-luxury-danger"
-                      title="מחיקה"
-                      aria-label="מחיקה"
+                      className="btn-icon-luxury btn-icon-luxury-danger min-w-[3.1rem] flex-col justify-center gap-0 py-1.5"
+                      title="מחיקה מהיומן"
+                      aria-label="מחיקה — הסרת הרשומה מהיום"
                       disabled={isDayClosed}
                       onClick={() => removeEntry(item.id)}
                     >
-                      <IconTrash className="h-5 w-5" />
+                      <IconCaption label="מחק">
+                        <IconTrash className="h-5 w-5" />
+                      </IconCaption>
                     </button>
                   </div>
                 </motion.li>

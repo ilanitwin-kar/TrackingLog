@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { motion } from "framer-motion";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
@@ -31,6 +32,13 @@ const activities: { id: ActivityLevel; label: string }[] = [
   { id: "moderate", label: "בינונית" },
   { id: "active", label: "גבוהה" },
 ];
+
+const TDEE_HELP_TITLE = "פרטים אישיים ויעד אנרגיה";
+const TDEE_HELP_BODY = [
+  "כדי לחשב את צריכת האנרגיה המדויקת של הגוף שלך, אנחנו צריכות להבין את הנתונים הטבעיים שלך. מלאי את הפרטים כדי שנוכל להתאים לך את הנוסחה המנצחת.",
+  "בסיום, תראי בדיוק כמה הגוף שלך שורף ביום, מהו התקציב הקלורי היומי שלך לירידה בטוחה, ומהי חלוקת אבות המזון (חלבון, פחמימה ושומן) שתשמור עלייך שבעה ואנרגטית לאורך כל היום.",
+  "החישובים והמסכים מותאמים לכל המינים — אותה נוסחה, אותו יעד בריאות, לנשים ולגברים כאחד.",
+].join("\n\n");
 
 function stripLeadingZeros(raw: string): string {
   // Keep "0." and "0," patterns (even though we normalize to ".")
@@ -71,6 +79,7 @@ export default function TdeePage() {
   const [weightText, setWeightText] = useState("");
   const [goalWeightText, setGoalWeightText] = useState("");
   const [deficitText, setDeficitText] = useState("");
+  const [helpOpen, setHelpOpen] = useState(false);
 
   const t = useMemo(() => {
     if (!p) return 0;
@@ -194,12 +203,21 @@ export default function TdeePage() {
         )}
       </div>
 
+      <div className="mb-3 flex flex-wrap items-center justify-center gap-2">
+        <button
+          type="button"
+          onClick={() => setHelpOpen(true)}
+          className="rounded-full border-2 border-[var(--border-cherry-soft)] bg-white px-4 py-2 text-sm font-bold text-[var(--cherry)] shadow-sm"
+        >
+          הסבר
+        </button>
+      </div>
       <motion.h1
         className="heading-page mb-2 text-center text-3xl md:text-4xl"
         initial={{ opacity: 0, y: -8 }}
         animate={{ opacity: 1, y: 0 }}
       >
-        {registered ? "עריכת פרטים ויעד TDEE" : "הרשמה — מחשבון TDEE"}
+        {registered ? "עריכת פרטים ויעד אישי" : "הרשמה — מחשבון TDEE"}
       </motion.h1>
       <p className="mb-6 text-center text-sm font-medium text-[var(--cherry)]/85">
         {registered
@@ -434,6 +452,18 @@ export default function TdeePage() {
         </p>
       </motion.div>
 
+      <div className="mt-6 space-y-2">
+        <Link
+          href="/report"
+          className="btn-gold flex w-full items-center justify-center rounded-xl py-3.5 text-center text-base font-bold shadow-sm transition hover:brightness-[1.02] active:scale-[0.99]"
+        >
+          לדוח האסטרטגי — לגלות את התוצאות
+        </Link>
+        <p className="text-center text-xs font-medium text-[var(--stem)]/80">
+          בדוח תראי סיכום מגמות והתקדמות — רלוונטי לנשים ולגברים.
+        </p>
+      </div>
+
       {!registered && (
         <motion.div
           className="mt-6"
@@ -454,6 +484,37 @@ export default function TdeePage() {
             </p>
           )}
         </motion.div>
+      )}
+
+      {helpOpen && (
+        <div
+          className="fixed inset-0 z-[240] flex items-end justify-center bg-black/45 p-4 sm:items-center"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="tdee-help-title"
+        >
+          <div
+            className="glass-panel max-h-[85dvh] w-full max-w-md overflow-y-auto rounded-2xl border-2 border-[var(--border-cherry-soft)] p-5 shadow-xl"
+            dir="rtl"
+          >
+            <h2
+              id="tdee-help-title"
+              className="panel-title-cherry text-xl font-extrabold"
+            >
+              {TDEE_HELP_TITLE}
+            </h2>
+            <p className="mt-4 whitespace-pre-line leading-relaxed text-[var(--text)]">
+              {TDEE_HELP_BODY}
+            </p>
+            <button
+              type="button"
+              onClick={() => setHelpOpen(false)}
+              className="btn-stem mt-6 w-full rounded-xl py-3 text-center text-sm font-bold"
+            >
+              הבנתי
+            </button>
+          </div>
+        </div>
       )}
     </div>
   );

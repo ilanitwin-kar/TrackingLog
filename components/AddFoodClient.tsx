@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { BarcodeScanModal } from "@/components/BarcodeScanModal";
+import { IconCaption } from "@/components/IconCaption";
 import { IconPlusCircle, IconScanBarcode, IconVerified } from "@/components/Icons";
 import { addDaysToDateKey, getTodayKey } from "@/lib/dateKey";
 import {
@@ -873,19 +874,21 @@ export function AddFoodClient() {
               autoCapitalize="none"
               spellCheck={false}
               placeholder="חפשי מזון…"
-              className="input-luxury-search w-full ps-4 pe-14"
+              className="input-luxury-search w-full ps-4 pe-[5.25rem] sm:pe-24"
             />
             <button
               type="button"
-              className="absolute end-2 top-1/2 z-[11] flex h-10 w-10 -translate-y-1/2 items-center justify-center rounded-xl border-2 border-[var(--border-cherry-soft)] bg-white text-[var(--stem)] shadow-sm transition hover:bg-[var(--cherry-muted)]"
-              aria-label="סריקת ברקוד"
-              title="סריקת ברקוד"
+              className="absolute end-1.5 top-1/2 z-[11] flex min-h-[2.65rem] min-w-[4.25rem] -translate-y-1/2 flex-col items-center justify-center gap-0 rounded-xl border-2 border-[var(--border-cherry-soft)] bg-white px-1 py-0.5 text-[var(--stem)] shadow-sm transition hover:bg-[var(--cherry-muted)]"
+              aria-label="סריקת ברקוד — פתיחת מצלמה לסריקת מוצר"
+              title="סריקת ברקוד — מעבר למסך סריקה"
               onClick={() => {
                 searchInputRef.current?.blur();
                 setScanModalOpen(true);
               }}
             >
-              <IconScanBarcode className="h-6 w-6" />
+              <IconCaption label="ברקוד">
+                <IconScanBarcode className="h-5 w-5 sm:h-6 sm:w-6" />
+              </IconCaption>
             </button>
           </div>
         </label>
@@ -1003,12 +1006,14 @@ export function AddFoodClient() {
                             </button>
                             <button
                               type="button"
-                              className="flex w-11 shrink-0 flex-col items-center justify-center rounded-lg border-2 border-[var(--border-cherry-soft)] bg-white py-1 text-[var(--stem)] shadow-sm transition hover:bg-[var(--cherry-muted)] active:scale-[0.98]"
-                              aria-label={`הוספת «${s.name}» — בחירת כמות ויעד`}
-                              title="הוספת מזון"
+                              className="flex min-w-[3.35rem] shrink-0 flex-col items-center justify-center rounded-lg border-2 border-[var(--border-cherry-soft)] bg-white px-0.5 py-1 text-[var(--stem)] shadow-sm transition hover:bg-[var(--cherry-muted)] active:scale-[0.98]"
+                              aria-label={`הוספת «${s.name}» — בחירת כמות ויעד ליומן`}
+                              title="הוספה ליומן — בחירת כמות"
                               onClick={(e) => openPickModal(s, e)}
                             >
-                              <IconPlusCircle className="h-7 w-7" />
+                              <IconCaption label="הוספה">
+                                <IconPlusCircle className="h-6 w-6 sm:h-7 sm:w-7" />
+                              </IconCaption>
                             </button>
                           </li>
                         ))}
@@ -1063,12 +1068,14 @@ export function AddFoodClient() {
                               </button>
                               <button
                                 type="button"
-                                className="flex w-11 shrink-0 flex-col items-center justify-center rounded-lg border-2 border-[var(--border-cherry-soft)] bg-white py-1 text-[var(--stem)] shadow-sm transition hover:bg-[var(--cherry-muted)] active:scale-[0.98]"
-                                aria-label={`הוספת «${s.name}» — בחירת כמות ויעד`}
-                                title="הוספת מזון"
+                                className="flex min-w-[3.35rem] shrink-0 flex-col items-center justify-center rounded-lg border-2 border-[var(--border-cherry-soft)] bg-white px-0.5 py-1 text-[var(--stem)] shadow-sm transition hover:bg-[var(--cherry-muted)] active:scale-[0.98]"
+                                aria-label={`הוספת «${s.name}» — בחירת כמות ויעד ליומן`}
+                                title="הוספה ליומן — בחירת כמות"
                                 onClick={(e) => openPickModal(s, e)}
                               >
-                                <IconPlusCircle className="h-7 w-7" />
+                                <IconCaption label="הוספה">
+                                  <IconPlusCircle className="h-6 w-6 sm:h-7 sm:w-7" />
+                                </IconCaption>
                               </button>
                             </li>
                           ))}
@@ -1129,9 +1136,9 @@ export function AddFoodClient() {
                             </button>
                             <button
                               type="button"
-                              className="flex w-11 shrink-0 flex-col items-center justify-center rounded-lg border-2 border-[var(--border-cherry-soft)] bg-white py-1 text-[var(--stem)] shadow-sm transition hover:bg-[var(--cherry-muted)] active:scale-[0.98]"
-                              aria-label={`הוספת «${geminiInsight.name}» — בחירת כמות ויעד`}
-                              title="הוספת מזון"
+                              className="flex min-w-[3.35rem] shrink-0 flex-col items-center justify-center rounded-lg border-2 border-[var(--border-cherry-soft)] bg-white px-0.5 py-1 text-[var(--stem)] shadow-sm transition hover:bg-[var(--cherry-muted)] active:scale-[0.98]"
+                              aria-label={`הוספת «${geminiInsight.name}» — בחירת כמות ויעד ליומן`}
+                              title="הוספה ליומן — בחירת כמות"
                               onClick={(e) =>
                                 openPickModal(
                                   {
@@ -1147,7 +1154,9 @@ export function AddFoodClient() {
                                 )
                               }
                             >
-                              <IconPlusCircle className="h-7 w-7" />
+                              <IconCaption label="הוספה">
+                                <IconPlusCircle className="h-6 w-6 sm:h-7 sm:w-7" />
+                              </IconCaption>
                             </button>
                           </div>
                         )}

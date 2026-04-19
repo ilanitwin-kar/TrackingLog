@@ -67,7 +67,7 @@ export default function ShoppingPage() {
   }
 
   const exportBtnClass =
-    "inline-flex h-11 min-w-[2.75rem] shrink-0 items-center justify-center gap-2 rounded-xl border-2 border-[var(--border-cherry-soft)] bg-white px-3 text-sm font-semibold text-[var(--cherry)] shadow-sm transition hover:bg-[var(--cherry-muted)] active:scale-[0.98] disabled:pointer-events-none disabled:opacity-40 sm:h-10 sm:min-w-0 sm:px-2.5";
+    "inline-flex min-h-[3.25rem] min-w-[4.5rem] shrink-0 flex-col items-center justify-center gap-1 rounded-xl border-2 border-[var(--border-cherry-soft)] bg-white px-2 py-2 text-[var(--cherry)] shadow-sm transition hover:bg-[var(--cherry-muted)] active:scale-[0.98] disabled:pointer-events-none disabled:opacity-40 sm:min-h-[2.75rem] sm:flex-row sm:gap-2 sm:px-3";
 
   return (
     <>
@@ -85,34 +85,40 @@ export default function ShoppingPage() {
               type="button"
               disabled={!canExport}
               className={exportBtnClass}
-              title="שתף ב-WhatsApp"
-              aria-label="שתף ב-WhatsApp"
+              title="שיתוף הרשימה בוואטסאפ"
+              aria-label="וואטסאפ — שיתוף הרשימה בוואטסאפ"
               onClick={shareWhatsApp}
             >
               <IconWhatsApp className="h-5 w-5 shrink-0 text-[#25D366]" />
-              <span className="hidden sm:inline">שתף ב-WhatsApp</span>
+              <span className="max-w-[4.5rem] text-center text-[10px] font-bold leading-tight sm:max-w-none sm:text-sm">
+                וואטסאפ
+              </span>
             </button>
             <button
               type="button"
               disabled={!canExport}
               className={exportBtnClass}
-              title="שלח במייל"
-              aria-label="שלח במייל"
+              title="שליחת הרשימה במייל"
+              aria-label="מייל — שליחת הרשימה במייל"
               onClick={shareEmail}
             >
               <IconEnvelope className="h-5 w-5 shrink-0 text-[var(--cherry)]" />
-              <span className="hidden sm:inline">שלח במייל</span>
+              <span className="max-w-[4.5rem] text-center text-[10px] font-bold leading-tight sm:max-w-none sm:text-sm">
+                מייל
+              </span>
             </button>
             <button
               type="button"
               disabled={!canExport}
               className={exportBtnClass}
-              title="הדפסה"
-              aria-label="הדפסה"
+              title="הדפסת רשימת הקניות"
+              aria-label="הדפסה — הדפסת הרשימה"
               onClick={printList}
             >
               <IconPrinter className="h-5 w-5 shrink-0 text-[var(--stem)]" />
-              <span className="hidden sm:inline">הדפסה</span>
+              <span className="max-w-[4.5rem] text-center text-[10px] font-bold leading-tight sm:max-w-none sm:text-sm">
+                הדפסה
+              </span>
             </button>
           </nav>
         </div>
@@ -169,12 +175,15 @@ export default function ShoppingPage() {
                   </label>
                   <button
                     type="button"
-                    className="btn-icon-luxury btn-icon-luxury-danger shrink-0"
-                    title="מחיקה"
-                    aria-label={`מחיקת ${it.name}`}
+                    className="btn-icon-luxury btn-icon-luxury-danger flex min-w-[3rem] shrink-0 flex-col items-center gap-0.5 py-1"
+                    title="הסרה מרשימת הקניות"
+                    aria-label={`מחיקה — הסרת ${it.name} מהרשימה`}
                     onClick={() => remove(it.id)}
                   >
                     <IconTrash className="h-5 w-5" />
+                    <span className="text-[9px] font-bold text-[var(--cherry)]">
+                      מחק
+                    </span>
                   </button>
                 </motion.li>
               ))}
