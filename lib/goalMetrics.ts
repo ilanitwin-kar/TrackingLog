@@ -51,9 +51,9 @@ export function getDailyCaloricDeficitKcal(): number | null {
 }
 
 /**
- * ימים משוערים עד יעד: (חוב קלורי ליעד) / (גירעון יומי).
- * חוב קלורי = ק״ג נותר × 7700. גירעון יומי = TDEE − צריכה (ראו למעלה).
- * מקור יחיד לדוח האסטרטגי, לוח המפה, וכל מסך אחר.
+ * ימים משוערים עד יעד: (סך קלוריות לשריפה) / (גירעון יומי מהפרופיל).
+ * סך קלוריות לשריפה = ק״ג נותר עד היעד × 7700.
+ * הגירעון היומי הוא הערך שהמשתמשת בחרה בהזנת הפרטים (deficit), לא ממוצע מהיומן.
  */
 export function getDaysRemainingToGoal(): number | null {
   const profile = loadProfile();
@@ -63,9 +63,13 @@ export function getDaysRemainingToGoal(): number | null {
     sorted.length > 0 ? sorted[sorted.length - 1].kg : profile.weightKg;
   const remaining = Math.max(0, current - profile.goalWeightKg);
   const kcalToBurn = remaining * KCAL_PER_KG;
-  const dailyDeficit = getDailyCaloricDeficitKcal();
-  if (dailyDeficit != null && dailyDeficit > 0 && kcalToBurn > 0) {
-    return Math.max(1, Math.ceil(kcalToBurn / dailyDeficit));
+  const plannedDeficit = profile.deficit;
+  if (
+    plannedDeficit > 0 &&
+    Number.isFinite(plannedDeficit) &&
+    kcalToBurn > 0
+  ) {
+    return Math.max(1, Math.ceil(kcalToBurn / plannedDeficit));
   }
   return null;
 }

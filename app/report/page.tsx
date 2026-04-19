@@ -29,10 +29,12 @@ export default function ReportPage() {
     const bump = () => setRev((r) => r + 1);
     window.addEventListener("focus", bump);
     window.addEventListener("cj-profile-updated", bump);
+    window.addEventListener("cj-journal-closed-changed", bump);
     window.addEventListener("storage", bump);
     return () => {
       window.removeEventListener("focus", bump);
       window.removeEventListener("cj-profile-updated", bump);
+      window.removeEventListener("cj-journal-closed-changed", bump);
       window.removeEventListener("storage", bump);
     };
   }, []);
@@ -63,6 +65,7 @@ export default function ReportPage() {
   }, [rev]);
 
   const totalFat = accumulation.totalAccumulatedKcal / FAT_KCAL_PER_G;
+  const showAccumulation = accumulation.hasAnyClosedDay;
 
   return (
     <div className="mx-auto max-w-lg px-4 py-8 md:py-12" dir="rtl">
@@ -85,27 +88,35 @@ export default function ReportPage() {
             הון מצטבר (קלוריות חסכון מצטברות)
           </p>
           <p className="mt-2 font-[system-ui,Segoe_UI,sans-serif] text-4xl font-extrabold tracking-tight text-[var(--ui-hero-metric)] sm:text-5xl">
-            {accumulation.totalAccumulatedKcal.toLocaleString("he-IL")}{" "}
+            {showAccumulation
+              ? accumulation.totalAccumulatedKcal.toLocaleString("he-IL")
+              : "0"}{" "}
             <span className="text-2xl font-bold text-[var(--ui-hero-metric-unit)]/90 sm:text-3xl">
               קק״ל
             </span>
           </p>
-          <p className="mt-2 text-sm font-medium text-[var(--stem)]/90">
-            שקול שומן מצטבר:{" "}
-            <span className="font-semibold text-[var(--cherry)]">
-              {totalFat.toLocaleString("he-IL", {
-                maximumFractionDigits: 1,
-                minimumFractionDigits: 0,
-              })}{" "}
-              ג׳
-            </span>
-          </p>
+          {showAccumulation ? (
+            <p className="mt-2 text-sm font-medium text-[var(--stem)]/90">
+              שקול שומן מצטבר:{" "}
+              <span className="font-semibold text-[var(--cherry)]">
+                {totalFat.toLocaleString("he-IL", {
+                  maximumFractionDigits: 1,
+                  minimumFractionDigits: 0,
+                })}{" "}
+                ג׳
+              </span>
+            </p>
+          ) : (
+            <p className="mt-2 text-sm font-medium text-[var(--stem)]/75">
+              ההון יוצג אחרי סגירת היום הראשון ביומן.
+            </p>
+          )}
         </div>
 
         <div className="p-3 sm:p-4">
           {accumulation.rows.length === 0 ? (
             <p className="py-8 text-center text-sm text-[var(--cherry)]/75">
-              אין עדיין ימים עם רישום ביומן.
+              אין עדיין ימים סגורים ביומן — הצבירה מתעדכנת רק אחרי סגירת יום.
             </p>
           ) : (
             <div className="overflow-x-auto rounded-xl border border-[var(--border-cherry-soft)] bg-white">

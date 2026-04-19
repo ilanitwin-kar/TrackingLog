@@ -1,19 +1,27 @@
 "use client";
 
 import { AnimatePresence, motion } from "framer-motion";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { BackToMenuButton } from "@/components/BackToMenuButton";
 import { IconCaption } from "@/components/IconCaption";
-import { IconCart, IconHeart, IconVerified } from "@/components/Icons";
+import { IconBookmark, IconCart, IconVerified } from "@/components/Icons";
 import {
   addToShopping,
-  loadFavoriteIds,
   loadShoppingFoodIds,
-  toggleFavorite,
 } from "@/lib/explorerStorage";
+import {
+  isExplorerFoodInDictionary,
+  toggleExplorerFoodInDictionary,
+} from "@/lib/storage";
 
 const fontFood =
   "font-[Calibri,'Segoe_UI','Helvetica_Neue',system-ui,sans-serif]";
+
+const EXPLORER_INTRO =
+  "גלי מזונות שיקדמו אותך ליעד מתוך המאגר של אינטליגנציה קלורית.";
+
+const EXPLORER_HELP_BODY =
+  "בחרי את המזון בשורת החיפוש, בחרי קטגוריה, בחרי סינון לפי ערך קלורי, כמות חלבון, פחמימה ושומן. הוסיפי אותם לרשימת הקניות או למילון.";
 
 type SortKey = "caloriesAsc" | "proteinDesc" | "carbsDesc" | "fatAsc";
 
@@ -38,11 +46,10 @@ export default function ExplorerPage() {
   const [page, setPage] = useState(1);
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
-  const [favTick, setFavTick] = useState(0);
+  const [dictTick, setDictTick] = useState(0);
   const [shopTick, setShopTick] = useState(0);
   const [toast, setToast] = useState(false);
-
-  const refreshFavs = useCallback(() => setFavTick((x) => x + 1), []);
+  const [helpOpen, setHelpOpen] = useState(false);
 
   useEffect(() => {
     if (!toast) return;
@@ -120,9 +127,16 @@ export default function ExplorerPage() {
 
   const hasMore = items.length < total;
 
-  function onHeart(row: FoodItem) {
-    toggleFavorite(row.id);
-    refreshFavs();
+  function onDictionary(row: FoodItem) {
+    toggleExplorerFoodInDictionary({
+      id: row.id,
+      name: row.name,
+      calories: row.calories,
+      protein: row.protein,
+      fat: row.fat,
+      carbs: row.carbs,
+    });
+    setDictTick((x) => x + 1);
   }
 
   function onCart(row: FoodItem) {
@@ -135,11 +149,6 @@ export default function ExplorerPage() {
     setShopTick((x) => x + 1);
     if (added) setToast(true);
   }
-
-  const favLookup = useMemo(() => {
-    void favTick;
-    return new Set(loadFavoriteIds());
-  }, [favTick]);
 
   const cartLookup = useMemo(() => {
     void shopTick;
@@ -161,15 +170,20 @@ export default function ExplorerPage() {
       </motion.h1>
 
       <motion.div
-        className="mb-4 rounded-2xl border-2 border-[var(--border-cherry-soft)] bg-white/90 px-4 py-3 text-center text-sm text-[var(--stem)]"
+        className="mb-4 rounded-2xl border-2 border-[var(--border-cherry-soft)] bg-white/90 px-4 py-4 text-center text-sm text-[var(--stem)]"
         initial={{ opacity: 0, y: 6 }}
         animate={{ opacity: 1, y: 0 }}
       >
-        חיפוש במאגר המקומי — ישירות ממגלה המזונות.
-        <span className="mt-2 block text-[11px] font-medium leading-snug text-[var(--stem)]/85">
-          ליד כל שורה: לב — שמירה במועדפים · עגלה — הוספה לרשימת הקניות ·
-          «מאומת במאגר» — נתון מהמאגר המקומי. מתאים לנשים ולגברים.
-        </span>
+        <p className="text-balance font-semibold leading-snug">{EXPLORER_INTRO}</p>
+        <div className="mt-3 flex justify-center">
+          <button
+            type="button"
+            onClick={() => setHelpOpen(true)}
+            className="rounded-full border-2 border-[var(--border-cherry-soft)] bg-white px-4 py-2 text-sm font-bold text-[var(--cherry)] shadow-sm"
+          >
+            הסבר
+          </button>
+        </div>
       </motion.div>
 
       <motion.section
@@ -259,7 +273,8 @@ export default function ExplorerPage() {
         ) : (
           <ul className="space-y-2">
             {items.map((row) => {
-              const fav = favLookup.has(row.id);
+              void dictTick;
+              const inDict = isExplorerFoodInDictionary(row.id);
               const inCart = cartLookup.has(row.id);
               return (
                 <li
@@ -295,20 +310,20 @@ export default function ExplorerPage() {
                     <button
                       type="button"
                       className={`btn-icon-luxury min-w-[3.25rem] flex-col justify-center gap-0.5 py-2 transition-colors ${
-                        fav
+                        inDict
                           ? "bg-[var(--cherry-muted)] ring-2 ring-[var(--border-cherry-soft)]"
                           : ""
                       }`}
-                      title="שמירה במועדפים במגלה המזונות"
-                      aria-label="מועדפים — שמירה ברשימת המועדפים"
-                      aria-pressed={fav}
-                      onClick={() => onHeart(row)}
+                      title="הוספה או הסרה מהמילון האישי"
+                      aria-label="מילון — הוספה או הסרה מהמילון האישי"
+                      aria-pressed={inDict}
+                      onClick={() => onDictionary(row)}
                     >
-                      <IconCaption label="מועדפים">
-                        <IconHeart
-                          filled={fav}
+                      <IconCaption label="מילון">
+                        <IconBookmark
+                          filled={inDict}
                           className={`h-5 w-5 ${
-                            fav ? "text-[var(--cherry)]" : "text-[var(--stem)]"
+                            inDict ? "text-[var(--cherry)]" : "text-[var(--stem)]"
                           }`}
                         />
                       </IconCaption>
@@ -369,6 +384,35 @@ export default function ExplorerPage() {
           </motion.div>
         )}
       </AnimatePresence>
+
+      {helpOpen && (
+        <div
+          className="fixed inset-0 z-[240] flex items-end justify-center bg-black/45 p-4 sm:items-center"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="explorer-help-title"
+        >
+          <div
+            className="glass-panel max-h-[85dvh] w-full max-w-md overflow-y-auto rounded-2xl border-2 border-[var(--border-cherry-soft)] p-5 shadow-xl"
+            dir="rtl"
+          >
+            <h2
+              id="explorer-help-title"
+              className="panel-title-cherry text-xl font-extrabold"
+            >
+              הסבר
+            </h2>
+            <p className="mt-4 leading-relaxed text-[var(--text)]">{EXPLORER_HELP_BODY}</p>
+            <button
+              type="button"
+              onClick={() => setHelpOpen(false)}
+              className="btn-stem mt-6 w-full rounded-xl py-3 text-center text-sm font-bold"
+            >
+              הבנתי
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

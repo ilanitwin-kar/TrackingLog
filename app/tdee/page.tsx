@@ -14,13 +14,8 @@ import {
 } from "@/lib/storage";
 import { BackToMenuButton } from "@/components/BackToMenuButton";
 import {
-  STAFF_BYPASS_HE,
-  StaffBypassEntry,
-} from "@/components/StaffBypassEntry";
-import {
   activateDevAdminBypass,
-  isStaffBypassUiEnabled,
-  seedBypassProfileIfNeeded,
+  isDevAdminBypassUiEnabled,
   seedDevAdminProfileIfNeeded,
 } from "@/lib/localAuth";
 import type { ActivityLevel, Gender } from "@/lib/tdee";
@@ -37,7 +32,6 @@ const TDEE_HELP_TITLE = "פרטים אישיים ויעד אנרגיה";
 const TDEE_HELP_BODY = [
   "כדי לחשב את צריכת האנרגיה המדויקת של הגוף שלך, אנחנו צריכות להבין את הנתונים הטבעיים שלך. מלאי את הפרטים כדי שנוכל להתאים לך את הנוסחה המנצחת.",
   "בסיום, תראי בדיוק כמה הגוף שלך שורף ביום, מהו התקציב הקלורי היומי שלך לירידה בטוחה, ומהי חלוקת אבות המזון (חלבון, פחמימה ושומן) שתשמור עלייך שבעה ואנרגטית לאורך כל היום.",
-  "החישובים והמסכים מותאמים לכל המינים — אותה נוסחה, אותו יעד בריאות, לנשים ולגברים כאחד.",
 ].join("\n\n");
 
 function stripLeadingZeros(raw: string): string {
@@ -174,20 +168,8 @@ export default function TdeePage() {
     <div className="mx-auto max-w-lg px-4 py-8 md:py-12" dir="rtl">
       <BackToMenuButton />
 
-      <div className="mb-6 space-y-2">
-        {isStaffBypassUiEnabled() && (
-          <StaffBypassEntry
-            theme="welcome"
-            dir="rtl"
-            labels={STAFF_BYPASS_HE}
-            onStaffSuccess={() => {
-              seedBypassProfileIfNeeded();
-              markWelcomeLeft();
-              router.replace("/");
-            }}
-          />
-        )}
-        {process.env.NODE_ENV === "development" && (
+      {isDevAdminBypassUiEnabled() && (
+        <div className="mb-6">
           <button
             type="button"
             onClick={() => {
@@ -200,8 +182,8 @@ export default function TdeePage() {
           >
             כניסת מנהלת (פיתוח בלבד)
           </button>
-        )}
-      </div>
+        </div>
+      )}
 
       <div className="mb-3 flex flex-wrap items-center justify-center gap-2">
         <button
@@ -459,9 +441,6 @@ export default function TdeePage() {
         >
           לדוח האסטרטגי — לגלות את התוצאות
         </Link>
-        <p className="text-center text-xs font-medium text-[var(--stem)]/80">
-          בדוח תראי סיכום מגמות והתקדמות — רלוונטי לנשים ולגברים.
-        </p>
       </div>
 
       {!registered && (

@@ -206,6 +206,7 @@ export function HomeClient() {
   function toggleJournalClosedForViewDay() {
     const m = { ...loadDayJournalClosedMap() };
     const k = viewDateKey;
+    const wasClosed = m[k] === true;
     if (m[k]) {
       delete m[k];
     } else {
@@ -214,6 +215,9 @@ export function HomeClient() {
     saveDayJournalClosedMap(m);
     setJournalClosedMap(m);
     window.dispatchEvent(new Event("cj-journal-closed-changed"));
+    if (!wasClosed && m[k] === true) {
+      router.push("/calorie-board");
+    }
   }
 
   useEffect(() => {

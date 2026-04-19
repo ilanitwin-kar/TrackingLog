@@ -6,9 +6,8 @@ import { useCallback, useEffect, useState } from "react";
 import {
   activateDevAdminBypass,
   hasWelcomeAutoResume,
-  isStaffBypassUiEnabled,
+  isDevAdminBypassUiEnabled,
   registerAccount,
-  seedBypassProfileIfNeeded,
   seedDevAdminProfileIfNeeded,
   startSession,
   verifyLogin,
@@ -26,8 +25,6 @@ import {
   getBrandName,
   type AppVariant,
 } from "@/lib/appVariant";
-import { StaffBypassEntry } from "@/components/StaffBypassEntry";
-
 const LANG_KEY = "cj_welcome_lang";
 
 type Lang = "he" | "en";
@@ -59,12 +56,8 @@ type Copy = {
   submitLogin: string;
   cancel: string;
   devAdminOnly: string;
-  staffEntry: string;
-  staffPinPrompt: string;
-  staffPinWrong: string;
   switchTrack: string;
   switchTrackConfirm: string;
-  staffNotConfigured: string;
   errEmail: string;
   errPasswordShort: string;
   errPasswordMismatch: string;
@@ -106,14 +99,9 @@ const COPY: Record<Lang, Copy> = {
     submitLogin: "כניסה",
     cancel: "ביטול",
     devAdminOnly: "כניסת מנהלת (פיתוח בלבד)",
-    staffEntry: "כניסת מנהלת (קוד צוות)",
-    staffPinPrompt: "קוד צוות",
-    staffPinWrong: "קוד שגוי",
     switchTrack: "החלפת מסלול (גברים / נשים)",
     switchTrackConfirm:
       "לעבור למסך בחירת המסלול? תוכלי לבחור מחדש צ׳רי או בלו.",
-    staffNotConfigured:
-      "קוד צוות עדיין לא הוגדר בפריסה. ב-Netlify → Environment variables הוסיפי NEXT_PUBLIC_STAFF_UNLOCK (לפחות 4 תווים), שמרי ופרסמו מחדש. עד אז: התחברות רגילה נשמרת במכשיר עד «התנתקות».",
     errEmail: "נא להזין כתובת אימייל תקינה",
     errPasswordShort: "הסיסמה חייבת להכיל לפחות 6 תווים",
     errPasswordMismatch: "הסיסמאות אינן תואמות",
@@ -153,14 +141,9 @@ const COPY: Record<Lang, Copy> = {
     submitLogin: "Sign in",
     cancel: "Cancel",
     devAdminOnly: "Admin entry (development only)",
-    staffEntry: "Staff entry (passcode)",
-    staffPinPrompt: "Team passcode",
-    staffPinWrong: "Wrong passcode",
     switchTrack: "Switch track (men / women)",
     switchTrackConfirm:
       "Open track selection again? You can pick Cherry or BLUE anew.",
-    staffNotConfigured:
-      "Staff code is not set on the server. In Netlify → Environment variables add NEXT_PUBLIC_STAFF_UNLOCK (4+ characters), save, and redeploy. Until then: normal login stays on this device until you log out.",
     errEmail: "Please enter a valid email address",
     errPasswordShort: "Password must be at least 6 characters",
     errPasswordMismatch: "Passwords do not match",
@@ -460,26 +443,6 @@ export function WelcomeScreen() {
             {t.forgotPassword}
           </Link>
         </div>
-        {isStaffBypassUiEnabled() && (
-          <StaffBypassEntry
-            theme="welcome"
-            dir={dir}
-            onNotify={showToast}
-            labels={{
-              staffEntry: t.staffEntry,
-              staffPinPrompt: t.staffPinPrompt,
-              staffPinWrong: t.staffPinWrong,
-              staffNotConfigured: t.staffNotConfigured,
-              submitLabel: t.submitLogin,
-              cancel: t.cancel,
-            }}
-            onStaffSuccess={() => {
-              seedBypassProfileIfNeeded();
-              markWelcomeLeft();
-              router.replace("/");
-            }}
-          />
-        )}
         <p className="text-center text-xs font-semibold text-[var(--text)]/60">
           {t.quickConnect}
         </p>
@@ -529,7 +492,7 @@ export function WelcomeScreen() {
             {t.switchTrack}
           </button>
         </div>
-        {process.env.NODE_ENV === "development" && (
+        {isDevAdminBypassUiEnabled() && (
           <button
             type="button"
             onClick={() => {

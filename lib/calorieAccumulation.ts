@@ -1,31 +1,40 @@
-import { loadDayLogs, loadProfile } from "@/lib/storage";
+import {
+  loadDayJournalClosedMap,
+  loadDayLogs,
+  loadProfile,
+} from "@/lib/storage";
 import { tdee } from "@/lib/tdee";
 
 const FAT_KCAL_PER_G = 7.7;
 
+/** גירעון יומי בטוח לצבירה — מעל זה לא נספר (סיכון תזונתי) */
+export const SAFE_DEFICIT_CAP_KCAL = 800;
+
 export type CalorieAccumulationRow = {
   dateKey: string;
-  /** TDEE − צריכה (כמו במסך TDEE/פרופיל; חיובי = מתחת ל־TDEE) */
+  /** TDEE − צריכה */
   dailyBalanceKcal: number;
-  /** נספר בצבירה רק אם חיובי */
+  /** נספר בצבירה רק מימים סגורים, ובטווח בטיחות */
   contributionKcal: number;
   /** הון מצטבר בקק״ל */
   accumulatedKcal: number;
   /** שקול שומן לצבירה הנוכחית */
   fatEquivalentG: number;
+  /** גירעון מעל תקרת בטיחות — לא נספר בצבירה */
+  unsafeDeficit: boolean;
 };
 
 export type CalorieAccumulationResult = {
-  /** TDEE מעוגל — אותו חישוב כמו במסך הרשמה / עריכת פרטים */
   tdeeKcal: number;
   rows: CalorieAccumulationRow[];
   totalAccumulatedKcal: number;
+  /** האם נסגר לפחות יום אחד ביומן (אי פעם) */
+  hasAnyClosedDay: boolean;
 };
 
 /**
- * בונה שורות לפי ימים עם רישום ביומן, כרונולוגית.
- * גירעון יומי = TDEE − צריכה (לא יעד אחרי גירעון מתוכנן).
- * צבירה: סכום יומי של max(0, TDEE − צריכה).
+ * צבירה רק מימים שסומנו כסגורים ביומן.
+ * תרומה יומית: רק אם 0 < גירעון ≤ 800; מעל 800 — לא נספר (unsafe).
  */
 export function buildCalorieAccumulationTable(): CalorieAccumulationResult {
   const profile = loadProfile();
@@ -35,13 +44,17 @@ export function buildCalorieAccumulationTable(): CalorieAccumulationResult {
       profile.weightKg,
       profile.heightCm,
       profile.age,
-      profile.activity
-    )
+      profile.activity,
+    ),
   );
 
+  const closedMap = loadDayJournalClosedMap();
+  const hasAnyClosedDay = Object.values(closedMap).some((v) => v === true);
+
   const dayLogs = loadDayLogs();
-  const dateKeys = Object.keys(dayLogs)
-    .filter((k) => Array.isArray(dayLogs[k]) && dayLogs[k]!.length > 0)
+  const dateKeys = Object.keys(closedMap)
+    .filter((k) => closedMap[k] === true)
+    .filter((k) => Array.isArray(dayLogs[k]))
     .sort();
 
   let accumulated = 0;
@@ -51,7 +64,18 @@ export function buildCalorieAccumulationTable(): CalorieAccumulationResult {
     const entries = dayLogs[dateKey] ?? [];
     const consumed = entries.reduce((s, e) => s + e.calories, 0);
     const dailyBalanceKcal = tdeeKcal - consumed;
-    const contributionKcal = Math.max(0, dailyBalanceKcal);
+
+    let contributionKcal = 0;
+    let unsafeDeficit = false;
+    if (dailyBalanceKcal > 0) {
+      if (dailyBalanceKcal <= SAFE_DEFICIT_CAP_KCAL) {
+        contributionKcal = dailyBalanceKcal;
+      } else {
+        unsafeDeficit = true;
+        contributionKcal = 0;
+      }
+    }
+
     accumulated += contributionKcal;
     rows.push({
       dateKey,
@@ -59,6 +83,7 @@ export function buildCalorieAccumulationTable(): CalorieAccumulationResult {
       contributionKcal,
       accumulatedKcal: accumulated,
       fatEquivalentG: accumulated / FAT_KCAL_PER_G,
+      unsafeDeficit,
     });
   }
 
@@ -66,6 +91,7 @@ export function buildCalorieAccumulationTable(): CalorieAccumulationResult {
     tdeeKcal,
     rows,
     totalAccumulatedKcal: accumulated,
+    hasAnyClosedDay,
   };
 }
 

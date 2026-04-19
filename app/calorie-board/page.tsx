@@ -16,6 +16,7 @@ export default function CalorieBoardPage() {
     const bump = () => setRev((r) => r + 1);
     window.addEventListener("focus", bump);
     window.addEventListener("cj-profile-updated", bump);
+    window.addEventListener("cj-journal-closed-changed", bump);
     window.addEventListener("storage", bump);
     const onVis = () => {
       if (document.visibilityState === "visible") bump();
@@ -24,6 +25,7 @@ export default function CalorieBoardPage() {
     return () => {
       window.removeEventListener("focus", bump);
       window.removeEventListener("cj-profile-updated", bump);
+      window.removeEventListener("cj-journal-closed-changed", bump);
       window.removeEventListener("storage", bump);
       document.removeEventListener("visibilitychange", onVis);
     };
@@ -36,6 +38,7 @@ export default function CalorieBoardPage() {
 
   const totalFat =
     accumulation.totalAccumulatedKcal / FAT_KCAL_PER_G;
+  const showAccumulation = accumulation.hasAnyClosedDay;
 
   return (
     <div
@@ -60,19 +63,27 @@ export default function CalorieBoardPage() {
         <p className="text-base font-semibold text-[var(--cherry)] sm:text-lg">
           סה״כ הון קלורי שנצבר:{" "}
           <span className="font-[system-ui] text-2xl font-extrabold tabular-nums text-[var(--ui-hero-metric)] sm:text-3xl">
-            {accumulation.totalAccumulatedKcal.toLocaleString("he-IL")}
+            {showAccumulation
+              ? accumulation.totalAccumulatedKcal.toLocaleString("he-IL")
+              : "0"}
           </span>{" "}
           <span className="text-xl font-bold text-[var(--ui-hero-metric-unit)]/90">
             קק״ל
           </span>
         </p>
-        <p className="mt-3 text-sm font-medium text-[var(--stem)]/90">
-          {totalFat.toLocaleString("he-IL", {
-            maximumFractionDigits: 1,
-            minimumFractionDigits: 0,
-          })}{" "}
-          גרם שומן שהתפוגגו
-        </p>
+        {showAccumulation ? (
+          <p className="mt-3 text-sm font-medium text-[var(--stem)]/90">
+            {totalFat.toLocaleString("he-IL", {
+              maximumFractionDigits: 1,
+              minimumFractionDigits: 0,
+            })}{" "}
+            גרם שומן שהתפוגגו
+          </p>
+        ) : (
+          <p className="mt-3 text-sm font-medium text-[var(--stem)]/75">
+            ההון יוצג אחרי סגירת היום הראשון ביומן.
+          </p>
+        )}
       </motion.section>
 
       <motion.div

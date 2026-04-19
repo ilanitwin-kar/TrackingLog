@@ -525,6 +525,53 @@ function makeId(): string {
   return `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
 }
 
+const EXPLORER_FOOD_SOURCE_PREFIX = "explorer-food:";
+
+export function explorerFoodSourceKey(explorerFoodId: string): string {
+  return `${EXPLORER_FOOD_SOURCE_PREFIX}${explorerFoodId}`;
+}
+
+/** האם פריט ממגלה המזונות נשמר במילון האישי */
+export function isExplorerFoodInDictionary(explorerFoodId: string): boolean {
+  const src = explorerFoodSourceKey(explorerFoodId);
+  return loadDictionary().some((d) => d.source === src);
+}
+
+/**
+ * הוספה / הסרה של פריט ממגלה המזונות במילון (לפי ערכי 100 ג׳).
+ * @returns true אם נוסף, false אם הוסר
+ */
+export function toggleExplorerFoodInDictionary(item: {
+  id: string;
+  name: string;
+  calories: number;
+  protein: number;
+  fat: number;
+  carbs: number;
+}): boolean {
+  const src = explorerFoodSourceKey(item.id);
+  const items = loadDictionary();
+  const idx = items.findIndex((d) => d.source === src);
+  if (idx >= 0) {
+    saveDictionary(items.filter((_, i) => i !== idx));
+    return false;
+  }
+  const row: DictionaryItem = {
+    id: makeId(),
+    food: item.name.trim(),
+    quantity: 100,
+    unit: "גרם",
+    lastCalories: Math.max(0, Math.round(item.calories)),
+    caloriesPer100g: item.calories,
+    proteinPer100g: item.protein,
+    carbsPer100g: item.carbs,
+    fatPer100g: item.fat,
+    source: src,
+  };
+  saveDictionary([row, ...items]);
+  return true;
+}
+
 /** הוספת מנה ידנית (לפי 100 ג׳ ואופציונלית משקל יחידה) ליומן תאריך + מילון */
 export function addManualNutritionToToday(
   item: {

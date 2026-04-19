@@ -37,7 +37,7 @@ export type ReportMetrics = {
  * משקל נוכחי: השקילה האחרונה; אם אין — משקל מהפרופיל.
  * ק״ג נותר: מרחק מוחלט ליעד (ירידה או עליה).
  * קלוריות לשריפה: רק כשהיעד הוא ירידה במשקל (7700 לק״ג שומן).
- * ימים: אותו חישוב גלובלי כמו ב־goalMetrics (TDEE − צריכה / גירעון מתוכנן).
+ * ימים: אותו חישוב גלובלי כמו ב־goalMetrics — (ק״ג נותר × 7700) / גירעון יומי מהפרופיל.
  */
 export function computeReportMetrics(
   profile: UserProfile,
@@ -67,7 +67,7 @@ export function computeReportMetrics(
     daysToGoal = getDaysRemainingToGoal();
     if (deficit <= 0 && kgToGoal > 0 && daysToGoal == null) {
       footnote =
-        "הגדירי גירעון יומי חיובי או רשמו אכילה כדי לחשב גירעון (TDEE − צריכה).";
+        "הגדירי גירעון יומי חיובי בפרטים האישיים (מסך TDEE) כדי לחשב את מספר הימים ליעד.";
     }
   } else if (currentKg < goalKg - eps) {
     mode = "gain";

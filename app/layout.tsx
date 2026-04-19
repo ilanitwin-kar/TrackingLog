@@ -6,6 +6,15 @@ import "./globals.css";
 export const metadata: Metadata = {
   title: "יומן המעקב של אינטליגנציה קלורית",
   description: "יומן קלוריות חכם עם יעדים, משקל ודוח אסטרטגי",
+  applicationName: "אינטליגנציה קלורית",
+  appleWebApp: {
+    capable: true,
+    title: "יומן קלוריות",
+    statusBarStyle: "default",
+  },
+  formatDetection: {
+    telephone: false,
+  },
 };
 
 export const viewport: Viewport = {
