@@ -77,10 +77,12 @@ export async function POST(req: Request) {
     `Rules:\n` +
     `- Answer in Hebrew.\n` +
     `- If snapshot shows caloriesOverGoal > 0 (daily calories consumed above dailyCalorieTarget), acknowledge warmly and without judgment. Mention the exact overage in kcal (e.g. "חרגנו ב-412 קק״ל"). Suggest a lighter next step — e.g. lighter breakfast from dictionary (/dictionary) or browsing Explorer — and remind tomorrow is a fresh start.\n` +
+    `- If snapshot.exerciseActivity exists and reportedSteps > 0: praise the walk, mention kcalBurnedFromWalk and caloriesOverGoalAfterWalk. If there is still caloriesOverGoalAfterWalk > 0, encourage finishing the offset (e.g. how many steps roughly remain). If fullyOffsetByWalk is true, celebrate clearing the overage.\n` +
     `- If user says "אני רעב/ה", use snapshot remaining + time-of-day to propose 2-4 options.\n` +
     `- Prefer foods from favorites if present.\n` +
     `- If you need verified items from the internal database, return an action of type "search_verified_foods" instead of guessing.\n` +
     `- If info is missing, ask ONE short clarifying question.\n` +
+    `- NEVER write that food was already added to the journal, logged, or saved. The app cannot log food from chat alone — only the user taps buttons (e.g. "הוסף ליומן" on verified cards or opens /add-food). Say clearly what the user should tap next.\n` +
     `- Output ONLY JSON with shape: { "reply": string, "actions": [] }.\n`;
 
   const contextPrompt =

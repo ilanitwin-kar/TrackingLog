@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 import {
   activateDevAdminBypass,
+  activateDevAdminBypassNoPinWhenUiEnabled,
   activateDevAdminBypassWithPin,
   isDevAdminBypassUiEnabled,
   isDevAdminOneClickAllowed,
@@ -63,6 +64,12 @@ export function DevAdminQuickEntry({
     if (isDevAdminPinConfigured()) {
       setPin("");
       setPinOpen(true);
+      return;
+    }
+    if (isDevAdminBypassUiEnabled()) {
+      seedDevAdminProfileIfNeeded();
+      activateDevAdminBypassNoPinWhenUiEnabled();
+      finishEntry();
       return;
     }
     setErr(

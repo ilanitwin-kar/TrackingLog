@@ -299,17 +299,31 @@ export default function DictionaryPage() {
         </p>
       )}
 
-      <p className="mb-4 rounded-2xl border-2 border-[var(--border-cherry-soft)] bg-white/90 px-4 py-3 text-center text-sm text-[var(--stem)]">
-        חיפוש במאגר המזונות (מקומי) ב־
-        <Link href="/" className="font-bold text-[var(--cherry)] underline decoration-[var(--cherry)]/40">
-          מסך הבית
-        </Link>
-        .
-      </p>
+      <div className="mb-5 rounded-2xl border-2 border-[var(--border-cherry-soft)] bg-white/90 p-4 shadow-sm">
+        <h2 className="panel-title-cherry text-base">חיפוש והוספה — כמו ביומן</h2>
+        <p className="mt-1 text-sm leading-relaxed text-[var(--stem)]/90">
+          חיפוש מהיר והוספת ארוחה ליום מתבצעים ממסך הבית או ממסך הוספת מזון. למטה מופיע רק{" "}
+          <span className="font-semibold text-[var(--cherry)]">סינון הרשומות השמורות במילון</span>.
+        </p>
+        <div className="mt-3 flex flex-col gap-2 sm:flex-row">
+          <Link
+            href="/"
+            className="btn-stem flex-1 rounded-xl py-3 text-center text-sm font-bold"
+          >
+            חיפוש — מסך הבית
+          </Link>
+          <Link
+            href="/add-food"
+            className="flex-1 rounded-xl border-2 border-[var(--border-cherry-soft)] bg-white py-3 text-center text-sm font-extrabold text-[var(--stem)] shadow-sm transition hover:bg-[var(--cherry-muted)]"
+          >
+            הוספת מזון
+          </Link>
+        </div>
+      </div>
 
       <label className="mb-4 block">
         <span className="mb-1 block text-xs font-semibold text-[var(--cherry)]">
-          {dictionarySavedFilterLabel(gender)}
+          סינון במילון · {dictionarySavedFilterLabel(gender)}
         </span>
         <div className="relative">
           <input

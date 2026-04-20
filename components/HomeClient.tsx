@@ -1177,7 +1177,7 @@ export function HomeClient() {
                 key={label}
                 className="flex min-w-0 flex-col rounded-xl border-2 border-[var(--border-cherry-soft)] bg-white/90 px-1.5 py-2 shadow-sm sm:rounded-2xl sm:px-3 sm:py-3"
               >
-                <p className="text-center text-[11px] font-semibold leading-tight text-[var(--cherry)] sm:text-sm">
+                <p className="text-center text-[13px] font-semibold leading-tight text-[var(--cherry)] sm:text-sm">
                   {label}
                 </p>
                 <p className="mt-0.5 text-center text-[13px] font-bold tabular-nums leading-tight text-[var(--stem)] sm:mt-1 sm:text-base">
@@ -1392,23 +1392,15 @@ export function HomeClient() {
                   transition={{
                     layout: { type: "spring", damping: 28, stiffness: 400 },
                   }}
-                  className={`flex flex-wrap items-center gap-2 rounded-xl border-2 border-[var(--border-cherry-soft)] bg-white px-3 py-3 ${isDayClosed ? "opacity-85" : ""}`}
+                  className={`flex flex-col gap-3 rounded-xl border-2 border-[var(--border-cherry-soft)] bg-white px-3 py-3 sm:flex-row sm:items-stretch sm:gap-4 ${isDayClosed ? "opacity-85" : ""}`}
                 >
-                  <div className="min-w-0 flex-1">
-                    <button
-                      type="button"
-                      className="w-full text-start"
-                      onClick={() => {
-                        if (!isAiMeal || !aiRows) return;
-                        setAiExpandedId((x) => (x === item.id ? null : item.id));
-                      }}
-                    >
-                      <p className="flex flex-wrap items-center gap-1 font-semibold text-[var(--text)]">
-                        {isAiMeal && (
-                          <span className="inline-flex items-center gap-1 rounded-md border border-[var(--border-cherry-soft)] bg-white px-2 py-0.5 text-[10px] font-extrabold text-[var(--cherry)]">
-                            🤖 ארוחת AI
-                          </span>
-                        )}
+                  <div className="min-w-0 w-full flex-1 space-y-1.5">
+                    <div className="flex flex-wrap items-center gap-1.5">
+                      {isAiMeal && (
+                        <span className="inline-flex items-center gap-1 rounded-md border border-[var(--border-cherry-soft)] bg-white px-2 py-0.5 text-[10px] font-extrabold text-[var(--cherry)]">
+                          🤖 ארוחת AI
+                        </span>
+                      )}
                       {item.verified && (
                         <span
                           className="inline-flex shrink-0 items-center gap-1"
@@ -1420,13 +1412,25 @@ export function HomeClient() {
                           </span>
                         </span>
                       )}
-                        <span className="min-w-0">{item.food}</span>
+                    </div>
+                    <button
+                      type="button"
+                      className="w-full text-start"
+                      onClick={() => {
+                        if (!isAiMeal || !aiRows) return;
+                        setAiExpandedId((x) => (x === item.id ? null : item.id));
+                      }}
+                    >
+                      <span className="flex items-start justify-between gap-2">
+                        <span className="min-w-0 flex-1 break-words text-start text-base font-semibold leading-snug text-[var(--text)]">
+                          {item.food}
+                        </span>
                         {isAiMeal && aiRows ? (
-                          <span className="ms-auto text-xs font-bold text-[var(--stem)]/55">
+                          <span className="shrink-0 pt-0.5 text-xs font-bold text-[var(--stem)]/55">
                             {aiExpandedId === item.id ? "▲" : "▼"}
                           </span>
                         ) : null}
-                      </p>
+                      </span>
                     </button>
                     <p className="text-sm text-[var(--text)]/80">
                       {formatEntryTime(item.createdAt) ? (
@@ -1469,7 +1473,7 @@ export function HomeClient() {
                       </div>
                     )}
                   </div>
-                  <div className="flex max-w-full shrink-0 flex-wrap items-start justify-end gap-1.5">
+                  <div className="flex w-full shrink-0 flex-wrap content-start items-center justify-end gap-2 border-t border-[var(--border-cherry-soft)]/55 pt-2 sm:w-auto sm:max-w-[6rem] sm:flex-col sm:items-stretch sm:justify-start sm:border-s sm:border-t-0 sm:ps-2 sm:pt-0">
                     <button
                       type="button"
                       className={foodToolbarBtnClass}
