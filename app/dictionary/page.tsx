@@ -1,7 +1,6 @@
 "use client";
 
 import { AnimatePresence, motion } from "framer-motion";
-import Link from "next/link";
 import {
   useCallback,
   useEffect,
@@ -35,7 +34,6 @@ import {
   dictionaryHeading,
   dictionaryIntroBody,
   dictionaryIntroTitle,
-  dictionarySavedFilterLabel,
   dictionarySavedFilterPlaceholder,
   gf,
 } from "@/lib/hebrewGenderUi";
@@ -143,13 +141,6 @@ export default function DictionaryPage() {
     window.addEventListener("focus", onFocus);
     return () => window.removeEventListener("focus", onFocus);
   }, [refresh]);
-
-  const clearSearch = useCallback(() => {
-    setRawQ("");
-    requestAnimationFrame(() => {
-      searchInputRef.current?.focus();
-    });
-  }, []);
 
   const filteredSaved = useMemo(
     () => sortSavedByQuery(saved, rawQ),
@@ -299,60 +290,24 @@ export default function DictionaryPage() {
         </p>
       )}
 
-      <div className="mb-5 rounded-2xl border-2 border-[var(--border-cherry-soft)] bg-white/90 p-4 shadow-sm">
-        <h2 className="panel-title-cherry text-base">חיפוש והוספה — כמו ביומן</h2>
-        <p className="mt-1 text-sm leading-relaxed text-[var(--stem)]/90">
-          חיפוש מהיר והוספת ארוחה ליום מתבצעים ממסך הבית או ממסך הוספת מזון. למטה מופיע רק{" "}
-          <span className="font-semibold text-[var(--cherry)]">סינון הרשומות השמורות במילון</span>.
-        </p>
-        <div className="mt-3 flex flex-col gap-2 sm:flex-row">
-          <Link
-            href="/"
-            className="btn-stem flex-1 rounded-xl py-3 text-center text-sm font-bold"
-          >
-            חיפוש — מסך הבית
-          </Link>
-          <Link
-            href="/add-food"
-            className="flex-1 rounded-xl border-2 border-[var(--border-cherry-soft)] bg-white py-3 text-center text-sm font-extrabold text-[var(--stem)] shadow-sm transition hover:bg-[var(--cherry-muted)]"
-          >
-            הוספת מזון
-          </Link>
-        </div>
-      </div>
-
-      <label className="mb-4 block">
+      <label className="mb-5 block">
         <span className="mb-1 block text-xs font-semibold text-[var(--cherry)]">
-          סינון במילון · {dictionarySavedFilterLabel(gender)}
+          חיפוש
         </span>
-        <div className="relative">
-          <input
-            ref={searchInputRef}
-            type="text"
-            inputMode="search"
-            enterKeyHint="search"
-            value={rawQ}
-            onChange={(e) => setRawQ(e.target.value)}
-            placeholder={dictionarySavedFilterPlaceholder(gender)}
-            className="input-luxury-search w-full ps-11 pe-11"
-            autoComplete="off"
-            autoCorrect="off"
-            autoCapitalize="none"
-            spellCheck={false}
-          />
-          {rawQ.length > 0 && (
-            <button
-              type="button"
-              className="absolute start-2 top-1/2 z-[1] flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-lg border border-[var(--border-cherry-soft)] bg-white text-lg font-bold leading-none text-[var(--stem)] shadow-sm transition hover:bg-[var(--cherry-muted)] hover:text-[var(--cherry)] focus-visible:outline focus-visible:ring-2 focus-visible:ring-[var(--stem)]"
-              aria-label="ניקוי חיפוש"
-              title="ניקוי"
-              onMouseDown={(e) => e.preventDefault()}
-              onClick={() => clearSearch()}
-            >
-              ×
-            </button>
-          )}
-        </div>
+        <input
+          ref={searchInputRef}
+          type="text"
+          inputMode="search"
+          enterKeyHint="search"
+          value={rawQ}
+          onChange={(e) => setRawQ(e.target.value)}
+          placeholder={dictionarySavedFilterPlaceholder(gender)}
+          className="input-luxury-search w-full"
+          autoComplete="off"
+          autoCorrect="off"
+          autoCapitalize="none"
+          spellCheck={false}
+        />
       </label>
 
       <motion.section

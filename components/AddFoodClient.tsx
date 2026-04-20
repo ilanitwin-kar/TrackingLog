@@ -1120,7 +1120,7 @@ export function AddFoodClient({
                 <div className="relative">
                   <input
                     ref={searchInputRef}
-                    type="search"
+                    type="text"
                     inputMode="search"
                     enterKeyHint="search"
                     value={food}
