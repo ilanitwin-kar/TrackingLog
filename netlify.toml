@@ -1,9 +1,10 @@
-# Next.js 15 on Netlify — use the official adapter (OpenNext).
-# In Netlify UI: leave “Publish directory” empty unless you know you need a custom value;
-# the plugin sets the correct output.
+# Next.js on Netlify — @netlify/plugin-nextjs (OpenNext).
+# Publish must NOT be the repo root (Netlify default). Use `.next` after `next build`.
+# אם מגדירים גם ב-UI: אותו ערך — `.next` (לא שורש ולא ריק).
 
 [build]
   command = "npm run build"
+  publish = ".next"
 
 [build.environment]
   NODE_VERSION = "20"
