@@ -389,8 +389,9 @@ function HomeAssistantInsightBubble({
 const quickNavBtnClass =
   "flex min-h-[2.75rem] flex-1 min-w-0 items-center justify-center gap-2 rounded-2xl border-2 border-[var(--border-cherry-soft)] bg-white/75 px-2 py-2.5 text-xs font-semibold text-[var(--cherry)] shadow-[0_4px_14px_rgba(0,0,0,0.06)] backdrop-blur-sm transition hover:bg-[var(--cherry-muted)] active:scale-[0.99] sm:text-sm";
 
+/** כפתורי שורת הפעולות — שורה אופקית; לא לצמצם רוחב כדי שלא יידחפו כותרות */
 const foodToolbarBtnClass =
-  "inline-flex min-w-[2.65rem] flex-col items-center justify-center gap-0.5 rounded-xl border border-[var(--border-cherry-soft)] bg-white/95 px-1.5 py-1.5 text-[var(--stem)] shadow-sm transition hover:bg-[var(--cherry-muted)] disabled:cursor-not-allowed disabled:opacity-40";
+  "inline-flex min-h-[2.75rem] min-w-[2.75rem] flex-col items-center justify-center gap-0.5 rounded-xl border border-[var(--border-cherry-soft)] bg-white/95 px-2 py-1.5 text-[var(--stem)] shadow-sm transition hover:bg-[var(--cherry-muted)] disabled:cursor-not-allowed disabled:opacity-40";
 
 export function HomeClient() {
   const gender = loadProfile().gender;
@@ -1392,9 +1393,13 @@ export function HomeClient() {
                   transition={{
                     layout: { type: "spring", damping: 28, stiffness: 400 },
                   }}
-                  className={`flex flex-col gap-3 rounded-xl border-2 border-[var(--border-cherry-soft)] bg-white px-3 py-3 sm:flex-row sm:items-stretch sm:gap-4 ${isDayClosed ? "opacity-85" : ""}`}
+                  className={`flex flex-col rounded-xl border-2 border-[var(--border-cherry-soft)] bg-white px-3 py-3 ${isDayClosed ? "opacity-85" : ""}`}
                 >
-                  <div className="min-w-0 w-full flex-1 space-y-1.5">
+                  {/*
+                    LOCKED journal meal card layout (do not revert to side toolbar):
+                    flex-col — כותרת ומאקרו ברוחב מלא; פס פעולות אופקי למטה בלבד.
+                  */}
+                  <div className="flex min-w-0 w-full flex-col gap-2">
                     <div className="flex flex-wrap items-center gap-1.5">
                       {isAiMeal && (
                         <span className="inline-flex items-center gap-1 rounded-md border border-[var(--border-cherry-soft)] bg-white px-2 py-0.5 text-[10px] font-extrabold text-[var(--cherry)]">
@@ -1413,26 +1418,31 @@ export function HomeClient() {
                         </span>
                       )}
                     </div>
-                    <button
-                      type="button"
-                      className="w-full text-start"
-                      onClick={() => {
-                        if (!isAiMeal || !aiRows) return;
-                        setAiExpandedId((x) => (x === item.id ? null : item.id));
-                      }}
-                    >
-                      <span className="flex items-start justify-between gap-2">
-                        <span className="min-w-0 flex-1 break-words text-start text-base font-semibold leading-snug text-[var(--text)]">
-                          {item.food}
-                        </span>
-                        {isAiMeal && aiRows ? (
+
+                    {isAiMeal && aiRows ? (
+                      <button
+                        type="button"
+                        className="w-full max-w-full text-start"
+                        onClick={() => {
+                          setAiExpandedId((x) => (x === item.id ? null : item.id));
+                        }}
+                      >
+                        <span className="flex w-full max-w-full items-start justify-between gap-2">
+                          <span className="min-w-0 flex-1 break-words text-base font-semibold leading-snug text-[var(--text)]">
+                            {item.food}
+                          </span>
                           <span className="shrink-0 pt-0.5 text-xs font-bold text-[var(--stem)]/55">
                             {aiExpandedId === item.id ? "▲" : "▼"}
                           </span>
-                        ) : null}
-                      </span>
-                    </button>
-                    <p className="text-sm text-[var(--text)]/80">
+                        </span>
+                      </button>
+                    ) : (
+                      <p className="w-full max-w-full break-words text-base font-semibold leading-snug text-[var(--text)]">
+                        {item.food}
+                      </p>
+                    )}
+
+                    <p className="w-full text-sm text-[var(--text)]/80">
                       {formatEntryTime(item.createdAt) ? (
                         <>
                           <span className="tabular-nums font-medium text-[var(--text)]">
@@ -1444,13 +1454,13 @@ export function HomeClient() {
                       {formatQtyLabel(item.quantity, item.unit)} {item.unit} ·{" "}
                       {item.calories} קק״ל
                     </p>
-                    <p className="text-xs text-[var(--text)]/65">
+                    <p className="w-full text-xs text-[var(--text)]/65">
                       חלבון {formatMacroCell(item.proteinG)} · פחמימות{" "}
                       {formatMacroCell(item.carbsG)} · שומן{" "}
                       {formatMacroCell(item.fatG)}
                     </p>
                     {isAiMeal && aiRows && aiExpandedId === item.id && (
-                      <div className="mt-3 rounded-xl border border-[var(--border-cherry-soft)] bg-white/80 p-3 text-sm">
+                      <div className="mt-1 w-full rounded-xl border border-[var(--border-cherry-soft)] bg-white/80 p-3 text-sm">
                         <p className="mb-2 text-xs font-extrabold text-[var(--cherry)]">
                           פירוט חישוב ה-AI
                         </p>
@@ -1473,7 +1483,12 @@ export function HomeClient() {
                       </div>
                     )}
                   </div>
-                  <div className="flex w-full shrink-0 flex-wrap content-start items-center justify-end gap-2 border-t border-[var(--border-cherry-soft)]/55 pt-2 sm:w-auto sm:max-w-[6rem] sm:flex-col sm:items-stretch sm:justify-start sm:border-s sm:border-t-0 sm:ps-2 sm:pt-0">
+
+                  <div
+                    role="toolbar"
+                    aria-label="פעולות על המנה"
+                    className="mt-3 flex w-full max-w-full flex-wrap items-center justify-center gap-2 border-t border-[var(--border-cherry-soft)]/60 bg-gradient-to-b from-[var(--cherry-muted)]/35 to-transparent px-1 py-2.5 sm:gap-3"
+                  >
                     <button
                       type="button"
                       className={foodToolbarBtnClass}
