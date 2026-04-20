@@ -8,12 +8,7 @@ import { BarcodeScanModal } from "@/components/BarcodeScanModal";
 import { IconCaption } from "@/components/IconCaption";
 import { IconPlusCircle, IconScanBarcode, IconVerified } from "@/components/Icons";
 import { addDaysToDateKey, getTodayKey } from "@/lib/dateKey";
-import {
-  GEMINI_UNAVAILABLE_MSG,
-  type GeminiInsightState,
-  type HomeSuggestRow,
-  sortHomeLocalRows,
-} from "@/lib/foodSearchShared";
+import { type HomeSuggestRow, sortHomeLocalRows } from "@/lib/foodSearchShared";
 import { optionalMacroGram } from "@/lib/macroGrams";
 import { SEARCH_DEBOUNCE_MS } from "@/lib/searchDebounce";
 import {
@@ -63,6 +58,36 @@ function uid(): string {
   return `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
 }
 
+function pickRandom<T>(arr: readonly T[]): T {
+  return arr[Math.floor(Math.random() * arr.length)]!;
+}
+
+const AI_CHERRY_OPENERS = [
+  "היי! מה היה הדובדבן שבקצפת היום? רשמי כאן הכל...",
+  "Cherry כאן כדי להקשיב. אכלת משהו טוב? פשוט תגידי לי במילים שלך.",
+  "בואי נעדכן את היומן שלך. מה אכלת היום?",
+  "ספרי לי על הארוחה שלך, אני כבר אדאג לכל החישובים.",
+] as const;
+
+const AI_BLUE_OPENERS = [
+  "אהלן! מה אכלנו היום? תרשום כאן בחופשיות...",
+  "Blue כאן כדי לעשות לך סדר בנתונים. מה היה בארוחה האחרונה?",
+  "בוא נסגור את הפינה של האוכל. מה אכלת? (אפשר גם להקליט).",
+  "תרשום מה היה בצלחת, אני כבר מחשב לך הכל.",
+] as const;
+
+const AI_CHERRY_PLACEHOLDERS = [
+  'למשל: "חצי בננה וביס מלחם"',
+  'למשל: "סלט עם טחינה וקפה עם חלב"',
+  'למשל: "כוס יוגורט וכמה שקדים"',
+] as const;
+
+const AI_BLUE_PLACEHOLDERS = [
+  'למשל: "חצי בננה וביס מלחם"',
+  'למשל: "המבורגר וצ׳יפס (מסעדה)"',
+  'למשל: "קפה עם חלב ופרוסת לחם"',
+] as const;
+
 function resolveDateKey(raw: string | null): string {
   const today = getTodayKey();
   if (!raw || !/^\d{4}-\d{2}-\d{2}$/.test(raw)) return today;
@@ -83,9 +108,15 @@ export function AddFoodClient() {
   const [homeSearchLoading, setHomeSearchLoading] = useState(false);
   const [worldRows, setWorldRows] = useState<HomeSuggestRow[]>([]);
   const [worldSearchLoading, setWorldSearchLoading] = useState(false);
-  const [geminiInsight, setGeminiInsight] = useState<GeminiInsightState>({
-    kind: "idle",
-  });
+  // AI meal log (free-form)
+  const [aiMealText, setAiMealText] = useState("");
+  const [aiMealLoading, setAiMealLoading] = useState(false);
+  const [aiMealQuestion, setAiMealQuestion] = useState<string | null>(null);
+  const [aiMealOriginal, setAiMealOriginal] = useState<string | null>(null);
+  const [aiMealError, setAiMealError] = useState<string | null>(null);
+  const [aiListening, setAiListening] = useState(false);
+  const [aiGreeting, setAiGreeting] = useState("");
+  const [aiPlaceholder, setAiPlaceholder] = useState("");
 
   const [scanModalOpen, setScanModalOpen] = useState(false);
   const [manualOpen, setManualOpen] = useState(false);
@@ -116,6 +147,169 @@ export function AddFoodClient() {
   const pickTitleId = useId();
   const searchInputRef = useRef<HTMLInputElement>(null);
   const [recentPicks, setRecentPicks] = useState<HomeSuggestRow[]>([]);
+
+  const speechRecRef = useRef<SpeechRecognition | null>(null);
+
+  useEffect(() => {
+    // Refresh “personality” lines per track (Cherry/Blue) to keep it fresh.
+    if (gender === "male") {
+      setAiGreeting(pickRandom(AI_BLUE_OPENERS));
+      setAiPlaceholder(pickRandom(AI_BLUE_PLACEHOLDERS));
+    } else {
+      setAiGreeting(pickRandom(AI_CHERRY_OPENERS));
+      setAiPlaceholder(pickRandom(AI_CHERRY_PLACEHOLDERS));
+    }
+  }, [gender]);
+
+  function stopAiDictation() {
+    const r = speechRecRef.current;
+    speechRecRef.current = null;
+    setAiListening(false);
+    if (r) {
+      try {
+        r.onresult = null;
+        r.onerror = null;
+        r.onend = null;
+        r.stop();
+      } catch {
+        /* ignore */
+      }
+    }
+  }
+
+  function toggleAiDictation() {
+    const AnyRec =
+      (window as unknown as { SpeechRecognition?: typeof SpeechRecognition }).SpeechRecognition ??
+      (window as unknown as { webkitSpeechRecognition?: typeof SpeechRecognition })
+        .webkitSpeechRecognition;
+    if (!AnyRec) {
+      setAiMealError("הכתבה לא נתמכת בדפדפן הזה.");
+      return;
+    }
+    if (aiListening) {
+      stopAiDictation();
+      return;
+    }
+    setAiMealError(null);
+    const rec = new AnyRec();
+    rec.lang = "he-IL";
+    rec.interimResults = true;
+    rec.continuous = true;
+    rec.onresult = (event) => {
+      let out = "";
+      for (let i = event.resultIndex; i < event.results.length; i++) {
+        const r = event.results[i];
+        const t = r?.[0]?.transcript ?? "";
+        out += t;
+      }
+      if (out.trim()) {
+        setAiMealText((prev) => (prev ? `${prev} ${out}` : out).replace(/\s+/g, " "));
+      }
+    };
+    rec.onerror = () => {
+      setAiMealError("לא הצלחנו להפעיל את ההכתבה. בדקי הרשאות מיקרופון.");
+      stopAiDictation();
+    };
+    rec.onend = () => {
+      setAiListening(false);
+      speechRecRef.current = null;
+    };
+    speechRecRef.current = rec;
+    setAiListening(true);
+    try {
+      rec.start();
+    } catch {
+      setAiMealError("לא הצלחנו להתחיל הכתבה.");
+      stopAiDictation();
+    }
+  }
+
+  async function runAiMeal(mode: "start" | "answer") {
+    const original = (mode === "start" ? aiMealText : aiMealOriginal ?? "").trim();
+    const input = (mode === "start" ? aiMealText : aiMealText).trim();
+    if (mode === "start" && original.length < 2) return;
+    if (mode === "answer" && input.length < 1) return;
+
+    setAiMealError(null);
+    setAiMealLoading(true);
+    try {
+      const res = await fetch("/api/ai-meal-log", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          mode,
+          original: mode === "answer" ? original : undefined,
+          input: mode === "start" ? original : input,
+        }),
+      });
+      const data = (await res.json()) as {
+        result?: unknown;
+        error?: string;
+      };
+      if (!res.ok) {
+        setAiMealError(data.error ?? "שירות הניתוח זמנית לא זמין");
+        return;
+      }
+      const r = data.result as
+        | null
+        | {
+            kind: "question";
+            original: string;
+            question: string;
+          }
+        | {
+            kind: "result";
+            original: string;
+            totals: { calories: number; protein: number; carbs: number; fat: number };
+            breakdown: Array<{
+              item: string;
+              qty: string;
+              calories: number;
+              protein: number;
+              carbs: number;
+              fat: number;
+            }>;
+          };
+      if (!r) {
+        setAiMealError("לא הצלחתי לחשב את הארוחה. נסי לנסח אחרת.");
+        return;
+      }
+      if (r.kind === "question") {
+        setAiMealOriginal(r.original);
+        setAiMealQuestion(r.question);
+        // user answers in same box
+        setAiMealText("");
+        return;
+      }
+
+      // Final: add one entry to diary (AI Meal)
+      const entry: LogEntry = {
+        id: uid(),
+        food: r.original.trim(),
+        calories: Math.max(0, Math.round(r.totals.calories)),
+        quantity: 1,
+        unit: "יחידה",
+        createdAt: new Date().toISOString(),
+        mealStarred: false,
+        verified: false,
+        aiMeal: true,
+        aiBreakdownJson: JSON.stringify(r.breakdown ?? []),
+        proteinG: r.totals.protein,
+        carbsG: r.totals.carbs,
+        fatG: r.totals.fat,
+      };
+      const existing = getEntriesForDate(dateKey);
+      saveDayLogEntries(dateKey, [entry, ...existing]);
+      setAiMealText("");
+      setAiMealQuestion(null);
+      setAiMealOriginal(null);
+      setDictFeedback("ארוחת AI נוספה ליומן.");
+    } catch {
+      setAiMealError("שירות הניתוח זמנית לא זמין");
+    } finally {
+      setAiMealLoading(false);
+    }
+  }
 
   const pickCubeBaseClass =
     "flex min-h-[5.5rem] flex-col items-center justify-center gap-1 rounded-xl border-2 px-1.5 py-2.5 text-center text-[11px] font-bold leading-snug text-[var(--cherry)] transition-[transform,box-shadow,background-color,border-color] duration-200 ease-out sm:min-h-[5.75rem] sm:text-xs";
@@ -228,7 +422,6 @@ export function AddFoodClient() {
       setHomeSearchLoading(false);
       setWorldRows([]);
       setWorldSearchLoading(false);
-      setGeminiInsight({ kind: "idle" });
     }
   }, [food]);
 
@@ -236,7 +429,7 @@ export function AddFoodClient() {
     const t = food.trim();
     if (t.length < 2) return;
     if (t !== debouncedFoodSearch) {
-      setGeminiInsight({ kind: "idle" });
+      // no-op (AI is separated from normal search)
     }
   }, [food, debouncedFoodSearch]);
 
@@ -246,22 +439,17 @@ export function AddFoodClient() {
       setHomeSearchLoading(false);
       setWorldRows([]);
       setWorldSearchLoading(false);
-      setGeminiInsight({ kind: "idle" });
       return;
     }
     const ac = new AbortController();
     setHomeSearchLoading(true);
-    setGeminiInsight({ kind: "idle" });
     void (async () => {
       try {
         const params = new URLSearchParams({
           q: debouncedFoodSearch,
-          sort: "caloriesAsc",
-          category: "הכל",
-          page: "1",
-          pageSize: "40",
+          limit: "20",
         });
-        const resL = await fetch(`/api/food-explorer?${params}`, {
+        const resL = await fetch(`/api/home-smart-search?${params}`, {
           signal: ac.signal,
         });
         if (ac.signal.aborted) return;
@@ -271,7 +459,7 @@ export function AddFoodClient() {
             items?: Array<{
               id: string;
               name: string;
-              category: string;
+              category?: string;
               calories: number;
               protein: number;
               fat: number;
@@ -318,7 +506,7 @@ export function AddFoodClient() {
       try {
         const params = new URLSearchParams({
           q: debouncedFoodSearch,
-          pageSize: "24",
+          pageSize: "50",
         });
         const resW = await fetch(`/api/openfoodfacts-search?${params}`, {
           signal: ac.signal,
@@ -360,66 +548,18 @@ export function AddFoodClient() {
     return () => ac.abort();
   }, [debouncedFoodSearch]);
 
-  useEffect(() => {
-    if (debouncedFoodSearch.length < 2) {
-      setGeminiInsight({ kind: "idle" });
-      return;
-    }
-    if (homeSearchLoading || worldSearchLoading) return;
-    if (homeLocalRows.length > 0 || worldRows.length > 0) {
-      setGeminiInsight({ kind: "idle" });
-      return;
-    }
-    const ac = new AbortController();
-    setGeminiInsight({ kind: "loading" });
-    void (async () => {
-      try {
-        const res = await fetch("/api/gemini-food-analyze", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ query: debouncedFoodSearch }),
-          signal: ac.signal,
-        });
-        const data = (await res.json()) as {
-          result?: {
-            name: string;
-            calories: number;
-            protein: number;
-            carbs: number;
-            fat: number;
-          } | null;
-          error?: string;
-        };
-        if (ac.signal.aborted) return;
-        if (!res.ok) {
-          setGeminiInsight({
-            kind: "error",
-            message: GEMINI_UNAVAILABLE_MSG,
-          });
-          return;
-        }
-        if (data.result == null) {
-          setGeminiInsight({ kind: "notFood" });
-          return;
-        }
-        setGeminiInsight({ kind: "ok", ...data.result });
-      } catch {
-        if (!ac.signal.aborted) {
-          setGeminiInsight({
-            kind: "error",
-            message: GEMINI_UNAVAILABLE_MSG,
-          });
-        }
-      }
-    })();
-    return () => ac.abort();
-  }, [
-    debouncedFoodSearch,
-    homeSearchLoading,
-    homeLocalRows.length,
-    worldSearchLoading,
-    worldRows.length,
-  ]);
+  const mergedSuggestRows = useMemo(() => {
+    const local: HomeSuggestRow[] = homeLocalRows.map((r) => ({
+      ...r,
+      source: r.source ?? "local",
+    }));
+    const world: HomeSuggestRow[] = worldRows.map((r) => ({
+      ...r,
+      source: r.source ?? "openFoodFacts",
+    }));
+    const out: HomeSuggestRow[] = [...local, ...world];
+    return out;
+  }, [homeLocalRows, worldRows]);
 
   useEffect(() => {
     if (!dictFeedback) return;
@@ -528,7 +668,6 @@ export function AddFoodClient() {
     setWorldRows([]);
     setHomeSearchLoading(false);
     setWorldSearchLoading(false);
-    setGeminiInsight({ kind: "idle" });
     queueMicrotask(() => searchInputRef.current?.focus());
   }
 
@@ -979,33 +1118,40 @@ export function AddFoodClient() {
               )}
 
               {searchPanelSync && (
-                <>
-                  <div>
-                    <p className="px-2 pb-2 text-sm font-bold text-[var(--cherry)]">
-                      מאגר אינטליגנציה קלורית
+                <div>
+                  <p className="px-2 pb-2 text-sm font-bold text-[var(--cherry)]">
+                    תוצאות חיפוש (מאוחד)
+                  </p>
+
+                  {(homeSearchLoading || worldSearchLoading) &&
+                  mergedSuggestRows.length === 0 ? (
+                    <div
+                      className="flex items-center gap-2 px-2 py-2 text-sm text-[var(--stem)]"
+                      role="status"
+                    >
+                      <span
+                        className="inline-block size-4 animate-spin rounded-full border-2 border-[var(--border-cherry-soft)] border-t-[var(--cherry)]"
+                        aria-hidden
+                      />
+                      טוען…
+                    </div>
+                  ) : mergedSuggestRows.length === 0 ? (
+                    <p className="px-2 py-1 text-xs text-[var(--cherry)]/65">
+                      לא נמצאו תוצאות.
                     </p>
-                    {homeSearchLoading && homeLocalRows.length === 0 ? (
-                      <div
-                        className="flex items-center gap-2 px-2 py-2 text-sm text-[var(--stem)]"
-                        role="status"
-                      >
-                        <span
-                          className="inline-block size-4 animate-spin rounded-full border-2 border-[var(--border-cherry-soft)] border-t-[var(--cherry)]"
-                          aria-hidden
-                        />
-                        טוען…
-                      </div>
-                    ) : homeLocalRows.length === 0 ? (
-                      <p className="px-2 py-1 text-xs text-[var(--cherry)]/65">
-                        אין התאמות במאגר
-                      </p>
-                    ) : (
-                      <ul className="space-y-1">
-                        {homeLocalRows.map((s) => (
-                          <li
-                            key={`l-${s.id}`}
-                            className="flex items-stretch gap-1.5"
-                          >
+                  ) : (
+                    <ul className="space-y-1">
+                      {mergedSuggestRows.map((s) => {
+                        const src = s.source ?? "local";
+                        const isVerified = src === "local";
+                        const badge = isVerified
+                          ? { label: "מאומת", bg: "bg-[#fff9e6]", border: "border-[#e6c65c]/80", text: "text-[#b8860b]" }
+                          : src === "openFoodFacts"
+                            ? { label: "עולמי", bg: "bg-white", border: "border-[var(--border-cherry-soft)]", text: "text-[var(--stem)]" }
+                            : { label: "AI", bg: "bg-white", border: "border-[var(--border-cherry-soft)]", text: "text-[var(--cherry)]" };
+
+                        return (
+                          <li key={`${src}-${s.id}`} className="flex items-stretch gap-1.5">
                             <button
                               type="button"
                               className="suggestion-item flex min-w-0 flex-1 flex-col items-stretch gap-0.5 rounded-lg px-3 py-2.5 text-right transition hover:bg-[var(--cherry-muted)]"
@@ -1013,30 +1159,29 @@ export function AddFoodClient() {
                             >
                               <span className="flex flex-wrap items-center justify-end gap-x-2 gap-y-1 font-semibold text-[var(--stem)]">
                                 <span>{s.name}</span>
-                                {(s.source ?? "local") !== "openFoodFacts" && (
-                                  <span
-                                    className="inline-flex items-center gap-1 rounded-md border border-[#e6c65c]/80 bg-[#fff9e6] px-2 py-0.5"
-                                    title="מאומת"
-                                  >
-                                    <span
-                                      className="text-sm font-bold leading-none text-[#d4a017]"
-                                      aria-hidden
-                                    >
-                                      ★
-                                    </span>
-                                    <IconVerified className="h-3.5 w-3.5 shrink-0 text-[#d4a017]" />
-                                    <span className="text-[10px] font-extrabold tracking-wide text-[#b8860b]">
-                                      מאומת
-                                    </span>
+                                <span
+                                  className={`inline-flex items-center gap-1 rounded-md border px-2 py-0.5 ${badge.border} ${badge.bg}`}
+                                  title={badge.label}
+                                >
+                                  {isVerified ? (
+                                    <>
+                                      <span className="text-sm font-bold leading-none text-[#d4a017]" aria-hidden>
+                                        ✓
+                                      </span>
+                                      <IconVerified className="h-3.5 w-3.5 shrink-0 text-[#16a34a]" />
+                                    </>
+                                  ) : null}
+                                  <span className={`text-[10px] font-extrabold tracking-wide ${badge.text}`}>
+                                    {badge.label}
                                   </span>
-                                )}
+                                </span>
                               </span>
-                              {s.category != null && (
+                              {s.category != null ? (
                                 <span className="text-[11px] text-[var(--cherry)]/65">
                                   {s.category}
                                 </span>
-                              )}
-                              {s.calories != null && (
+                              ) : null}
+                              {s.calories != null ? (
                                 <span className="text-[11px] text-[var(--cherry)]/75">
                                   קלוריות: {Math.round(s.calories)} · חלבון:{" "}
                                   {s.protein ?? "—"} · פחמימות:{" "}
@@ -1045,7 +1190,7 @@ export function AddFoodClient() {
                                     (ל־100 ג׳)
                                   </span>
                                 </span>
-                              )}
+                              ) : null}
                             </button>
                             <button
                               type="button"
@@ -1059,161 +1204,79 @@ export function AddFoodClient() {
                               </IconCaption>
                             </button>
                           </li>
-                        ))}
-                      </ul>
-                    )}
-                  </div>
+                        );
+                      })}
+                    </ul>
+                  )}
 
-                  <div className="border-t border-[var(--border-cherry-soft)] pt-2">
-                    <p className="px-2 pb-2 text-sm font-bold text-[var(--cherry)]">
-                      מאגר עולמי
-                    </p>
-                    {worldSearchLoading && worldRows.length === 0 ? (
-                        <div
-                          className="flex items-center gap-2 px-2 py-2 text-sm text-[var(--stem)]"
-                          role="status"
-                        >
-                          <span
-                            className="inline-block size-4 animate-spin rounded-full border-2 border-[var(--border-cherry-soft)] border-t-[var(--cherry)]"
-                            aria-hidden
-                          />
-                          טוען מאגר עולמי…
-                        </div>
-                      ) : worldRows.length === 0 ? (
-                        <p className="px-2 py-1 text-xs text-[var(--cherry)]/65">
-                          לא נמצאו תוצאות במאגר העולמי.
-                        </p>
-                      ) : (
-                        <ul className="space-y-1">
-                          {worldRows.map((s) => (
-                            <li
-                              key={`w-${s.id}`}
-                              className="flex items-stretch gap-1.5"
-                            >
-                              <button
-                                type="button"
-                                className="suggestion-item flex min-w-0 flex-1 flex-col items-stretch gap-0.5 rounded-lg px-3 py-2.5 text-right transition hover:bg-[var(--cherry-muted)]"
-                                onClick={() => setFood(s.name)}
-                              >
-                                <span className="font-semibold text-[var(--stem)]">
-                                  {s.name}
-                                </span>
-                                {s.calories != null && (
-                                  <span className="text-[11px] text-[var(--cherry)]/75">
-                                    קלוריות: {Math.round(s.calories)} · חלבון:{" "}
-                                    {s.protein ?? "—"} · פחמימות:{" "}
-                                    {s.carbs ?? "—"} · שומן: {s.fat ?? "—"}{" "}
-                                    <span className="text-[var(--cherry)]/55">
-                                      (ל־100 ג׳)
-                                    </span>
-                                  </span>
-                                )}
-                              </button>
-                              <button
-                                type="button"
-                                className="flex min-w-[3.35rem] shrink-0 flex-col items-center justify-center rounded-lg border-2 border-[var(--border-cherry-soft)] bg-white px-0.5 py-1 text-[var(--stem)] shadow-sm transition hover:bg-[var(--cherry-muted)] active:scale-[0.98]"
-                                aria-label={`הוספת «${s.name}» — בחירת כמות ויעד ליומן`}
-                                title="הוספה ליומן — בחירת כמות"
-                                onClick={(e) => openPickModal(s, e)}
-                              >
-                                <IconCaption label="הוספה">
-                                  <IconPlusCircle className="h-6 w-6 sm:h-7 sm:w-7" />
-                                </IconCaption>
-                              </button>
-                            </li>
-                          ))}
-                        </ul>
-                      )}
-                  </div>
-
-                  {!homeSearchLoading &&
-                    homeLocalRows.length === 0 &&
-                    !worldSearchLoading &&
-                    worldRows.length === 0 && (
-                      <div className="border-t border-[var(--border-cherry-soft)] pt-2">
-                        <p className="px-2 pb-2 text-sm font-bold text-[var(--cherry)]">
-                          השלמה חכמה
-                        </p>
-                        {geminiInsight.kind === "loading" && (
-                          <div
-                            className="flex items-center gap-2 px-2 py-2 text-sm text-[var(--stem)]"
-                            role="status"
-                          >
-                            <span
-                              className="inline-block size-4 animate-spin rounded-full border-2 border-[var(--border-cherry-soft)] border-t-[var(--cherry)]"
-                              aria-hidden
-                            />
-                            טוען…
-                          </div>
-                        )}
-                        {geminiInsight.kind === "error" && (
-                          <p className="px-2 py-1 text-xs text-[#a94444]">
-                            {geminiInsight.message}
-                          </p>
-                        )}
-                        {geminiInsight.kind === "notFood" && (
-                          <p className="px-2 py-1 text-xs text-[var(--cherry)]/70">
-                            לא זוהה כמזון.
-                          </p>
-                        )}
-                        {geminiInsight.kind === "ok" && (
-                          <div className="flex items-stretch gap-1.5 px-1">
-                            <button
-                              type="button"
-                              className="suggestion-item flex min-w-0 flex-1 flex-col items-stretch gap-0.5 rounded-lg py-2 pe-3 ps-2 text-right hover:bg-[var(--cherry-muted)]"
-                              onClick={() => setFood(geminiInsight.name)}
-                            >
-                              <span className="font-semibold text-[var(--stem)]">
-                                {geminiInsight.name}
-                              </span>
-                              <span className="text-[11px] text-[var(--cherry)]/75">
-                                קלוריות: {Math.round(geminiInsight.calories)} ·
-                                חלבון: {Math.round(geminiInsight.protein)} ·
-                                פחמימות: {Math.round(geminiInsight.carbs)} ·
-                                שומן: {Math.round(geminiInsight.fat)}
-                                <span className="text-[var(--cherry)]/55">
-                                  {" "}
-                                  (ל־100 ג׳ — הערכה)
-                                </span>
-                              </span>
-                            </button>
-                            <button
-                              type="button"
-                              className="flex min-w-[3.35rem] shrink-0 flex-col items-center justify-center rounded-lg border-2 border-[var(--border-cherry-soft)] bg-white px-0.5 py-1 text-[var(--stem)] shadow-sm transition hover:bg-[var(--cherry-muted)] active:scale-[0.98]"
-                              aria-label={`הוספת «${geminiInsight.name}» — בחירת כמות ויעד ליומן`}
-                              title="הוספה ליומן — בחירת כמות"
-                              onClick={(e) =>
-                                openPickModal(
-                                  {
-                                    id: "gemini",
-                                    name: geminiInsight.name,
-                                    verified: false,
-                                    calories: geminiInsight.calories,
-                                    protein: geminiInsight.protein,
-                                    carbs: geminiInsight.carbs,
-                                    fat: geminiInsight.fat,
-                                  },
-                                  e
-                                )
-                              }
-                            >
-                              <IconCaption label="הוספה">
-                                <IconPlusCircle className="h-6 w-6 sm:h-7 sm:w-7" />
-                              </IconCaption>
-                            </button>
-                          </div>
-                        )}
-                        {geminiInsight.kind === "idle" && (
-                          <p className="px-2 py-1 text-[11px] text-[var(--cherry)]/55">
-                            ממתין…
-                          </p>
-                        )}
-                      </div>
-                    )}
-                </>
+                  {/* AI moved to separate free-form section below */}
+                </div>
               )}
             </div>
           )}
+        </div>
+
+        {/* רישום ארוחה חופשי ב-AI */}
+        <div className="mt-4 rounded-2xl border-2 border-[var(--border-cherry-soft)] bg-white/90 p-3 shadow-sm">
+          <p className="px-1 pb-2 text-sm font-extrabold text-[var(--cherry)]">
+            רישום ארוחה חופשי ב-AI
+          </p>
+          <p className="px-1 pb-2 text-sm font-semibold leading-relaxed text-[var(--stem)]/90">
+            {aiGreeting}
+          </p>
+          <p className="px-1 pb-2 text-xs text-[var(--stem)]/75">
+            אם חסר מידע משמעותי — נשאל שאלה קצרה ואז נסכם לשורה אחת ביומן.
+          </p>
+
+          {aiMealQuestion && aiMealOriginal && (
+            <div className="mb-3 rounded-xl border border-[var(--border-cherry-soft)] bg-[var(--cherry-muted)] px-3 py-2 text-sm text-[var(--stem)]">
+              <p className="font-bold text-[var(--cherry)]">שאלה מה-AI</p>
+              <p className="mt-1 leading-relaxed">{aiMealQuestion}</p>
+              <p className="mt-2 text-xs text-[var(--stem)]/75">
+                כתבי את התשובה בתיבה למטה ולחצי על &quot;סיכום&quot;.
+              </p>
+            </div>
+          )}
+
+          <textarea
+            value={aiMealText}
+            onChange={(e) => setAiMealText(e.target.value)}
+            placeholder={
+              aiMealQuestion
+                ? "התשובה שלך…"
+                : aiPlaceholder
+            }
+            rows={4}
+            className="w-full resize-none rounded-2xl border-2 border-[var(--border-cherry-soft)] bg-white px-3 py-3 text-sm text-[var(--stem)] shadow-sm outline-none focus:border-[var(--cherry)]"
+          />
+
+          {aiMealError && (
+            <p className="mt-2 text-sm font-semibold text-[#a94444]">
+              {aiMealError}
+            </p>
+          )}
+
+          <div className="mt-3 flex gap-2">
+            <button
+              type="button"
+              className={`flex min-w-[3.25rem] items-center justify-center rounded-2xl border-2 border-[var(--border-cherry-soft)] bg-white px-3 py-2.5 text-sm font-bold text-[var(--stem)] shadow-sm transition hover:bg-[var(--cherry-muted)] ${
+                aiListening ? "ring-2 ring-[var(--cherry)]" : ""
+              }`}
+              onClick={toggleAiDictation}
+              aria-label={aiListening ? "עצירת הכתבה" : "הפעלת הכתבה"}
+              title={aiListening ? "עצירת הכתבה" : "הפעלת הכתבה"}
+            >
+              {gender === "male" ? "🫐" : "🍒"}
+            </button>
+            <button
+              type="button"
+              disabled={aiMealLoading || aiMealText.trim().length < 1}
+              className="btn-stem flex-1 rounded-2xl py-3 text-center text-sm font-extrabold disabled:opacity-50"
+              onClick={() => void runAiMeal(aiMealQuestion ? "answer" : "start")}
+            >
+              {aiMealLoading ? "מחשב…" : aiMealQuestion ? "סיכום" : "חשב וסכם"}
+            </button>
+          </div>
         </div>
       </div>
 
