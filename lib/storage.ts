@@ -539,6 +539,41 @@ function makeId(): string {
   return `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
 }
 
+/**
+ * ארוחת AI במילון: שם נקי בלבד. אם השם כבר קיים — מעדכן ערכים תזונתיים (לפי מפתח מזון מנורמל).
+ */
+export function upsertDictionaryFromAiMeal(
+  displayName: string,
+  totals: {
+    calories: number;
+    protein: number;
+    carbs: number;
+    fat: number;
+  }
+): "added" | "updated" {
+  const food = displayName.trim();
+  if (!food) return "added";
+  const items = loadDictionary();
+  const n = normalizeFoodKey(food);
+  const idx = items.findIndex((d) => normalizeFoodKey(d.food) === n);
+  const kcal = Math.max(0, Math.round(totals.calories));
+  const row: DictionaryItem = {
+    id: idx >= 0 ? items[idx]!.id : makeId(),
+    food,
+    quantity: 1,
+    unit: "יחידה",
+    lastCalories: kcal,
+    caloriesPer100g: Math.max(1, kcal),
+    proteinPer100g: Math.max(0, totals.protein),
+    carbsPer100g: Math.max(0, totals.carbs),
+    fatPer100g: Math.max(0, totals.fat),
+    source: "ai-meal",
+  };
+  const rest = items.filter((_, i) => i !== idx);
+  saveDictionary([row, ...rest]);
+  return idx >= 0 ? "updated" : "added";
+}
+
 const EXPLORER_FOOD_SOURCE_PREFIX = "explorer-food:";
 
 export function explorerFoodSourceKey(explorerFoodId: string): string {

@@ -15,18 +15,26 @@ import {
   type MealPreset,
   type MealPresetComponent,
   applyMealPresetToToday,
+  isExplorerFoodInDictionary,
   loadDictionary,
   loadMealPresets,
   loadProfile,
   patchDictionaryItemById,
   removeDictionaryItem,
+  toggleExplorerFoodInDictionary,
 } from "@/lib/storage";
 import {
   addToShopping,
   loadShoppingFoodIds,
 } from "@/lib/explorerStorage";
 import { IconCaption } from "@/components/IconCaption";
-import { IconCart, IconPencil, IconTrash } from "@/components/Icons";
+import {
+  IconBookmark,
+  IconCart,
+  IconPencil,
+  IconTrash,
+  IconVerified,
+} from "@/components/Icons";
 import { InfoCard } from "@/components/InfoCard";
 import { emitMealLoggedFeedback } from "@/lib/feedbackEvents";
 import {
@@ -37,9 +45,20 @@ import {
   dictionarySavedFilterPlaceholder,
   gf,
 } from "@/lib/hebrewGenderUi";
+import Link from "next/link";
 
 const fontFood =
   "font-[Calibri,'Segoe_UI','Helvetica_Neue',system-ui,sans-serif]";
+
+type ExplorerFoodRow = {
+  id: string;
+  name: string;
+  calories: number;
+  protein: number;
+  fat: number;
+  carbs: number;
+  category: string;
+};
 
 const UNITS: FoodUnit[] = [
   "גרם",
@@ -113,6 +132,11 @@ export default function DictionaryPage() {
     () => new Map()
   );
   const [rawQ, setRawQ] = useState("");
+  const [debouncedQ, setDebouncedQ] = useState("");
+  const [explorerRows, setExplorerRows] = useState<ExplorerFoodRow[]>([]);
+  const [offRows, setOffRows] = useState<ExplorerFoodRow[]>([]);
+  const [extSearchLoading, setExtSearchLoading] = useState(false);
+  const [explorerUiTick, setExplorerUiTick] = useState(0);
   const [appliedMealId, setAppliedMealId] = useState<string | null>(null);
   const [shopTick, setShopTick] = useState(0);
   const [shopToast, setShopToast] = useState(false);
@@ -147,10 +171,93 @@ export default function DictionaryPage() {
     [saved, rawQ]
   );
 
+  useEffect(() => {
+    const t = rawQ.trim();
+    if (t.length < 2) {
+      setDebouncedQ("");
+      return;
+    }
+    const id = window.setTimeout(() => setDebouncedQ(t), 280);
+    return () => window.clearTimeout(id);
+  }, [rawQ]);
+
+  useEffect(() => {
+    if (debouncedQ.length < 2) {
+      setExplorerRows([]);
+      setOffRows([]);
+      setExtSearchLoading(false);
+      return;
+    }
+    const ac = new AbortController();
+    (async () => {
+      setExtSearchLoading(true);
+      setExplorerRows([]);
+      setOffRows([]);
+      try {
+        const exParams = new URLSearchParams({
+          q: debouncedQ,
+          sort: "caloriesAsc",
+          category: "הכל",
+          page: "1",
+          pageSize: "40",
+        });
+        const offParams = new URLSearchParams({
+          q: debouncedQ,
+          pageSize: "16",
+        });
+        const [exRes, offRes] = await Promise.all([
+          fetch(`/api/food-explorer?${exParams}`, { signal: ac.signal }),
+          fetch(`/api/openfoodfacts-search?${offParams}`, { signal: ac.signal }),
+        ]);
+        if (ac.signal.aborted) return;
+        if (exRes.ok) {
+          const exData = (await exRes.json()) as { items?: ExplorerFoodRow[] };
+          setExplorerRows(exData.items ?? []);
+        } else {
+          setExplorerRows([]);
+        }
+        if (offRes.ok) {
+          const offData = (await offRes.json()) as {
+            items?: Array<{
+              id: string;
+              name: string;
+              calories: number;
+              protein: number;
+              fat: number;
+              carbs: number;
+            }>;
+          };
+          setOffRows(
+            (offData.items ?? []).map((r) => ({
+              id: r.id,
+              name: r.name,
+              calories: r.calories,
+              protein: r.protein,
+              fat: r.fat,
+              carbs: r.carbs,
+              category: "Open Food Facts",
+            }))
+          );
+        } else {
+          setOffRows([]);
+        }
+      } catch {
+        if (!ac.signal.aborted) {
+          setExplorerRows([]);
+          setOffRows([]);
+        }
+      } finally {
+        if (!ac.signal.aborted) setExtSearchLoading(false);
+      }
+    })();
+    return () => ac.abort();
+  }, [debouncedQ]);
+
   const cartLookup = useMemo(() => {
     void shopTick;
+    void explorerUiTick;
     return new Set(loadShoppingFoodIds());
-  }, [shopTick]);
+  }, [shopTick, explorerUiTick]);
 
   useEffect(() => {
     if (!shopToast) return;
@@ -189,6 +296,33 @@ export default function DictionaryPage() {
     });
     setShopTick((x) => x + 1);
     if (anyNew) setShopToast(true);
+  }
+
+  function onExplorerDictionary(row: ExplorerFoodRow) {
+    toggleExplorerFoodInDictionary({
+      id: row.id,
+      name: row.name,
+      calories: row.calories,
+      protein: row.protein,
+      fat: row.fat,
+      carbs: row.carbs,
+    });
+    setExplorerUiTick((x) => x + 1);
+    refresh();
+  }
+
+  function onExplorerCart(row: ExplorerFoodRow) {
+    const added = addToShopping({
+      foodId: row.id,
+      name: row.name,
+      category: row.category,
+      calories: row.calories,
+      protein: row.protein,
+      carbs: row.carbs,
+      fat: row.fat,
+    });
+    setShopTick((x) => x + 1);
+    if (added) setShopToast(true);
   }
 
   function mealFullyInCart(preset: MealPreset): boolean {
@@ -308,6 +442,13 @@ export default function DictionaryPage() {
           autoCapitalize="none"
           spellCheck={false}
         />
+        <p className="mt-1 text-[11px] font-medium text-[var(--stem)]/65">
+          {gf(
+            gender,
+            "אותו שדה: למעלה המילון האישי, למטה מאגר פנימי + Open Food Facts (כמו בחיפוש המאוחד בבית).",
+            "אותו שדה: למעלה המילון האישי, למטה מאגר פנימי + Open Food Facts (כמו בחיפוש המאוחד בבית)."
+          )}
+        </p>
       </label>
 
       <motion.section
@@ -318,8 +459,29 @@ export default function DictionaryPage() {
         <h2 className="panel-title-cherry mb-3 text-lg">המילון שלי</h2>
         {filteredSaved.length === 0 ? (
           <p className="text-[var(--text)]/85">
-            עדיין ריק או אין התאמה לחיפוש. פריטים מהיומן, ארוחות שמורות מבית
-            וסריקות יופיעו כאן.
+            {saved.length === 0 && rawQ.trim().length < 2
+              ? gf(
+                  gender,
+                  "עדיין אין כאן פריטים. פריטים מהיומן, ארוחות שמורות מבית וסריקות יופיעו כאן.",
+                  "עדיין אין כאן פריטים. פריטים מהיומן, ארוחות שמורות מבית וסריקות יופיעו כאן."
+                )
+              : saved.length === 0 && rawQ.trim().length >= 2
+                ? gf(
+                    gender,
+                    "המילון האישי עדיין ריק — בדקי למטה במאגר הפנימי, או שמרי מזון מהיומן/ממגלה המזונות.",
+                    "המילון האישי עדיין ריק — בדוק למטה במאגר הפנימי, או שמור מזון מהיומן/ממגלה המזונות."
+                  )
+              : rawQ.trim().length >= 2
+                ? gf(
+                    gender,
+                    "אין התאמה במילון האישי לחיפוש הזה — בדקי למטה במאגר הפנימי.",
+                    "אין התאמה במילון האישי לחיפוש הזה — בדוק למטה במאגר הפנימי."
+                  )
+                : gf(
+                    gender,
+                    "הקלידי לפחות 2 אותיות כדי לסנן את הרשימה.",
+                    "הקלד לפחות 2 אותיות כדי לסנן את הרשימה."
+                  )}
           </p>
         ) : (
           <ul className="space-y-2">
@@ -474,6 +636,228 @@ export default function DictionaryPage() {
               );
             })}
           </ul>
+        )}
+      </motion.section>
+
+      <motion.section
+        className="glass-panel mt-4 p-4"
+        initial={{ opacity: 0, y: 8 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 0.03 }}
+      >
+        <h2 className="panel-title-cherry mb-1 text-lg">מחוץ למילון (פנימי + עולמי)</h2>
+        <p className="mb-3 text-xs text-[var(--stem)]/65">
+          {gf(
+            gender,
+            "מאגר פנימי מאומת ו־Open Food Facts — אותו חיפוש כמו בשדה החיפוש למעלה.",
+            "מאגר פנימי מאומת ו־Open Food Facts — אותו חיפוש כמו בשדה החיפוש למעלה."
+          )}
+        </p>
+        {debouncedQ.length < 2 ? (
+          <p className="text-sm text-[var(--text)]/85">
+            {gf(
+              gender,
+              "כשמקלידים לפחות 2 תווים בשדה למעלה — יוצגו כאן תוצאות מהמאגר הפנימי ומהעולם.",
+              "כשמקלידים לפחות 2 תווים בשדה למעלה — יוצגו כאן תוצאות מהמאגר הפנימי ומהעולם."
+            )}
+          </p>
+        ) : extSearchLoading ? (
+          <p className="text-center text-sm text-[var(--cherry)]/80">
+            {gf(gender, "טוען מאגר פנימי ו־Open Food Facts…", "טוען מאגר פנימי ו־Open Food Facts…")}
+          </p>
+        ) : explorerRows.length === 0 && offRows.length === 0 ? (
+          <p className="text-sm text-[var(--text)]/85">
+            {gf(
+              gender,
+              "לא נמצאו פריטים במאגר הפנימי או ב־Open Food Facts לחיפוש הזה.",
+              "לא נמצאו פריטים במאגר הפנימי או ב־Open Food Facts לחיפוש הזה."
+            )}
+          </p>
+        ) : (
+          <>
+            {explorerRows.length > 0 && (
+              <>
+                <h3 className="mb-2 text-sm font-extrabold text-[var(--stem)]">מאגר פנימי</h3>
+                <ul className="mb-5 space-y-2">
+                  {explorerRows.map((row) => {
+                    void explorerUiTick;
+                    const inDict = isExplorerFoodInDictionary(row.id);
+                    const inCart = cartLookup.has(row.id);
+                    return (
+                      <li
+                        key={`ex-${row.id}-${row.name}`}
+                        className="flex flex-wrap items-start gap-2 rounded-2xl border-2 border-[var(--border-cherry-soft)] bg-gradient-to-b from-white to-[var(--welcome-gradient-to)] px-3 py-3"
+                        style={{ boxShadow: "var(--explorer-bubble-shadow)" }}
+                      >
+                        <div className="min-w-0 flex-1">
+                          <p className="flex flex-wrap items-center gap-1.5 font-semibold text-[var(--stem)]">
+                            <span
+                              className="inline-flex shrink-0 items-center gap-1"
+                              title="מאגר פנימי מאומת"
+                            >
+                              <IconVerified className="h-4 w-4 text-[#d4a017]" />
+                              <span className="text-[10px] font-bold text-[var(--stem)]/90">
+                                מאגר
+                              </span>
+                            </span>
+                            <span>{row.name}</span>
+                          </p>
+                          <p className="mt-0.5 text-xs text-[var(--cherry)]/75">{row.category}</p>
+                          <p className="mt-1 text-sm leading-relaxed text-[var(--stem)]/95">
+                            <span className="font-semibold">קלוריות</span>{" "}
+                            {Math.round(row.calories)} (ל־100 גרם) ·{" "}
+                            <span className="font-semibold">חלבון</span> {row.protein} ·{" "}
+                            <span className="font-semibold">פחמימות</span> {row.carbs} ·{" "}
+                            <span className="font-semibold">שומן</span> {row.fat}
+                          </p>
+                        </div>
+                        <div className="flex shrink-0 gap-2">
+                          <button
+                            type="button"
+                            className={`btn-icon-luxury min-w-[3.25rem] flex-col justify-center gap-0.5 py-2 transition-colors ${
+                              inDict
+                                ? "bg-[var(--cherry-muted)] ring-2 ring-[var(--border-cherry-soft)]"
+                                : ""
+                            }`}
+                            title="הוספה או הסרה מהמילון האישי"
+                            aria-label="מילון — הוספה או הסרה מהמילון האישי"
+                            aria-pressed={inDict}
+                            onClick={() => onExplorerDictionary(row)}
+                          >
+                            <IconCaption label="מילון">
+                              <IconBookmark
+                                filled={inDict}
+                                className={`h-5 w-5 ${
+                                  inDict ? "text-[var(--cherry)]" : "text-[var(--stem)]"
+                                }`}
+                              />
+                            </IconCaption>
+                          </button>
+                          <button
+                            type="button"
+                            className={`btn-icon-luxury min-w-[3.25rem] flex-col justify-center gap-0.5 py-2 transition-colors ${
+                              inCart
+                                ? "bg-[var(--cherry-muted)] ring-2 ring-[var(--border-cherry-soft)]"
+                                : ""
+                            }`}
+                            title="הוספה לרשימת הקניות"
+                            aria-label="קניות — הוספה לרשימת קניות"
+                            aria-pressed={inCart}
+                            onClick={() => onExplorerCart(row)}
+                          >
+                            <IconCaption label="קניות">
+                              <IconCart
+                                filled={inCart}
+                                className={`h-5 w-5 ${
+                                  inCart ? "text-[var(--cherry)]" : "text-[var(--stem)]"
+                                }`}
+                              />
+                            </IconCaption>
+                          </button>
+                        </div>
+                      </li>
+                    );
+                  })}
+                </ul>
+              </>
+            )}
+            {offRows.length > 0 && (
+              <>
+                <h3 className="mb-2 text-sm font-extrabold text-[var(--stem)]">
+                  Open Food Facts (עולמי)
+                </h3>
+                <ul className="space-y-2">
+                  {offRows.map((row) => {
+                    void explorerUiTick;
+                    const inDict = isExplorerFoodInDictionary(row.id);
+                    const inCart = cartLookup.has(row.id);
+                    return (
+                      <li
+                        key={`off-${row.id}-${row.name}`}
+                        className="flex flex-wrap items-start gap-2 rounded-2xl border-2 border-[var(--border-cherry-soft)] bg-gradient-to-b from-white to-[var(--welcome-gradient-to)] px-3 py-3"
+                        style={{ boxShadow: "var(--explorer-bubble-shadow)" }}
+                      >
+                        <div className="min-w-0 flex-1">
+                          <p className="flex flex-wrap items-center gap-1.5 font-semibold text-[var(--stem)]">
+                            <span className="text-[10px] font-bold text-[var(--stem)]/90">
+                              עולמי
+                            </span>
+                            <span>{row.name}</span>
+                          </p>
+                          <p className="mt-0.5 text-xs text-[var(--cherry)]/75">{row.category}</p>
+                          <p className="mt-1 text-sm leading-relaxed text-[var(--stem)]/95">
+                            <span className="font-semibold">קלוריות</span>{" "}
+                            {Math.round(row.calories)} (ל־100 גרם) ·{" "}
+                            <span className="font-semibold">חלבון</span> {row.protein} ·{" "}
+                            <span className="font-semibold">פחמימות</span> {row.carbs} ·{" "}
+                            <span className="font-semibold">שומן</span> {row.fat}
+                          </p>
+                        </div>
+                        <div className="flex shrink-0 gap-2">
+                          <button
+                            type="button"
+                            className={`btn-icon-luxury min-w-[3.25rem] flex-col justify-center gap-0.5 py-2 transition-colors ${
+                              inDict
+                                ? "bg-[var(--cherry-muted)] ring-2 ring-[var(--border-cherry-soft)]"
+                                : ""
+                            }`}
+                            title="הוספה או הסרה מהמילון האישי"
+                            aria-label="מילון — הוספה או הסרה מהמילון האישי"
+                            aria-pressed={inDict}
+                            onClick={() => onExplorerDictionary(row)}
+                          >
+                            <IconCaption label="מילון">
+                              <IconBookmark
+                                filled={inDict}
+                                className={`h-5 w-5 ${
+                                  inDict ? "text-[var(--cherry)]" : "text-[var(--stem)]"
+                                }`}
+                              />
+                            </IconCaption>
+                          </button>
+                          <button
+                            type="button"
+                            className={`btn-icon-luxury min-w-[3.25rem] flex-col justify-center gap-0.5 py-2 transition-colors ${
+                              inCart
+                                ? "bg-[var(--cherry-muted)] ring-2 ring-[var(--border-cherry-soft)]"
+                                : ""
+                            }`}
+                            title="הוספה לרשימת הקניות"
+                            aria-label="קניות — הוספה לרשימת קניות"
+                            aria-pressed={inCart}
+                            onClick={() => onExplorerCart(row)}
+                          >
+                            <IconCaption label="קניות">
+                              <IconCart
+                                filled={inCart}
+                                className={`h-5 w-5 ${
+                                  inCart ? "text-[var(--cherry)]" : "text-[var(--stem)]"
+                                }`}
+                              />
+                            </IconCaption>
+                          </button>
+                        </div>
+                      </li>
+                    );
+                  })}
+                </ul>
+              </>
+            )}
+            {explorerRows.length > 0 && (
+              <p className="mt-4 text-center">
+                <Link
+                  href={`/explorer?q=${encodeURIComponent(debouncedQ)}`}
+                  className="text-sm font-semibold text-[var(--cherry)] underline-offset-2 hover:underline"
+                >
+                  {gf(
+                    gender,
+                    "פתיחה במגלה המלאה (מיון וקטגוריות)",
+                    "פתיחה במגלה המלאה (מיון וקטגוריות)"
+                  )}
+                </Link>
+              </p>
+            )}
+          </>
         )}
       </motion.section>
 

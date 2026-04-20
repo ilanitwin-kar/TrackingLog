@@ -183,6 +183,17 @@ export function AddFoodClient({
     }
   }, [gender]);
 
+  const mealPrefilledRef = useRef(false);
+  useEffect(() => {
+    if (screen !== "ai" || mealPrefilledRef.current) return;
+    const raw = searchParams.get("meal") ?? searchParams.get("text") ?? "";
+    const t = raw.trim();
+    if (t) {
+      setAiMealText(t);
+      mealPrefilledRef.current = true;
+    }
+  }, [screen, searchParams]);
+
   function stopAiDictation() {
     const r = speechRecRef.current;
     speechRecRef.current = null;
