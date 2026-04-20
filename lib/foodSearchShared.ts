@@ -8,7 +8,7 @@ export type HomeSuggestRow = {
   protein?: number;
   fat?: number;
   carbs?: number;
-  source?: "local" | "openFoodFacts";
+  source?: "local" | "openFoodFacts" | "ai";
 };
 
 /** Lower = better. Tier: word-start → after-space substring → any partial. */

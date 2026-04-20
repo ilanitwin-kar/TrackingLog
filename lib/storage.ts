@@ -43,6 +43,10 @@ export type LogEntry = {
   carbsG?: number;
   /** שומן (גרם) */
   fatG?: number;
+  /** רשומת AI: חישוב ארוחה חופשית */
+  aiMeal?: boolean;
+  /** פירוט חישוב של ה-AI (JSON) להצגה באקורדיון */
+  aiBreakdownJson?: string;
 };
 
 export type MealPresetComponent = {

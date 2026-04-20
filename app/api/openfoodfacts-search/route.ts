@@ -110,19 +110,26 @@ export async function GET(req: Request) {
   if (q.length < 2) {
     return NextResponse.json({ items: [] as const });
   }
-  const pageSizeRaw = Number(searchParams.get("pageSize") ?? "24");
+  const pageSizeRaw = Number(searchParams.get("pageSize") ?? "50");
   const pageSize = Math.min(
-    40,
-    Math.max(4, Number.isFinite(pageSizeRaw) ? pageSizeRaw : 24)
+    50,
+    Math.max(4, Number.isFinite(pageSizeRaw) ? pageSizeRaw : 50)
   );
 
   const enc = encodeURIComponent(q);
+  // Prefer Israel products when possible (as requested).
+  // OFF supports both CGI search and v2. We try v2 first with countries_tags.
+  const israelTag = encodeURIComponent("en:israel");
 
   const tryUrls = [
-    `https://world.openfoodfacts.net/cgi/search.pl?action=process&search_terms=${enc}&json=true&page_size=${pageSize}&sort_by=unique_scans_n`,
-    `https://world.openfoodfacts.org/cgi/search.pl?action=process&search_terms=${enc}&json=true&page_size=${pageSize}&sort_by=unique_scans_n`,
-    `https://world.openfoodfacts.net/api/v2/search?search_terms=${enc}&page_size=${pageSize}&fields=code,product_name,product_name_en,generic_name,nutriments`,
+    `https://world.openfoodfacts.org/api/v2/search?search_terms=${enc}&page_size=${pageSize}&countries_tags=${israelTag}&fields=code,product_name,product_name_en,generic_name,nutriments`,
+    `https://world.openfoodfacts.net/api/v2/search?search_terms=${enc}&page_size=${pageSize}&countries_tags=${israelTag}&fields=code,product_name,product_name_en,generic_name,nutriments`,
+    // Fallback to general search if Israel-filtered yields no results.
     `https://world.openfoodfacts.org/api/v2/search?search_terms=${enc}&page_size=${pageSize}&fields=code,product_name,product_name_en,generic_name,nutriments`,
+    `https://world.openfoodfacts.net/api/v2/search?search_terms=${enc}&page_size=${pageSize}&fields=code,product_name,product_name_en,generic_name,nutriments`,
+    // Legacy CGI endpoints (some deployments are flaky).
+    `https://world.openfoodfacts.org/cgi/search.pl?action=process&search_terms=${enc}&json=true&page_size=${pageSize}&sort_by=unique_scans_n`,
+    `https://world.openfoodfacts.net/cgi/search.pl?action=process&search_terms=${enc}&json=true&page_size=${pageSize}&sort_by=unique_scans_n`,
   ];
 
   for (const url of tryUrls) {

@@ -288,6 +288,7 @@ export function HomeClient() {
   }, [editQtyText]);
   const [editUnit, setEditUnit] = useState<FoodUnit>("גרם");
   const [editLoading, setEditLoading] = useState(false);
+  const [aiExpandedId, setAiExpandedId] = useState<string | null>(null);
 
   const [journalClosedMap, setJournalClosedMap] = useState<
     Record<string, boolean>
@@ -906,7 +907,7 @@ export function HomeClient() {
         />
 
         <nav
-          className="flex w-full gap-2 sm:gap-3"
+          className="flex w-full flex-wrap gap-2 sm:gap-3"
           aria-label="פעולות מהירות"
         >
           <Link
@@ -929,6 +930,12 @@ export function HomeClient() {
               🧺
             </span>
             <span className="truncate">סל האוצרות</span>
+          </Link>
+          <Link href="/daily-summary" className={quickNavBtnClass}>
+            <span className="text-lg" aria-hidden>
+              📊
+            </span>
+            <span className="truncate">סיכום יומי</span>
           </Link>
         </nav>
       </header>
@@ -1093,6 +1100,26 @@ export function HomeClient() {
             {entries.map((item) => {
               const inDictionary = isFoodStarred(item.food);
               const mealOn = item.mealStarred === true;
+              const isAiMeal = item.aiMeal === true;
+              const hasAiBreakdown =
+                typeof item.aiBreakdownJson === "string" &&
+                item.aiBreakdownJson.trim().length > 2;
+              const aiRows = (() => {
+                if (!hasAiBreakdown) return null;
+                try {
+                  const parsed = JSON.parse(item.aiBreakdownJson!) as Array<{
+                    item: string;
+                    qty: string;
+                    calories: number;
+                    protein: number;
+                    carbs: number;
+                    fat: number;
+                  }>;
+                  return Array.isArray(parsed) ? parsed : null;
+                } catch {
+                  return null;
+                }
+              })();
               return (
                 <motion.li
                   key={item.id}
@@ -1105,7 +1132,20 @@ export function HomeClient() {
                   className={`flex flex-wrap items-center gap-2 rounded-xl border-2 border-[var(--border-cherry-soft)] bg-white px-3 py-3 ${isDayClosed ? "opacity-85" : ""}`}
                 >
                   <div className="min-w-0 flex-1">
-                    <p className="flex flex-wrap items-center gap-1 font-semibold text-[var(--text)]">
+                    <button
+                      type="button"
+                      className="w-full text-start"
+                      onClick={() => {
+                        if (!isAiMeal || !aiRows) return;
+                        setAiExpandedId((x) => (x === item.id ? null : item.id));
+                      }}
+                    >
+                      <p className="flex flex-wrap items-center gap-1 font-semibold text-[var(--text)]">
+                        {isAiMeal && (
+                          <span className="inline-flex items-center gap-1 rounded-md border border-[var(--border-cherry-soft)] bg-white px-2 py-0.5 text-[10px] font-extrabold text-[var(--cherry)]">
+                            🤖 ארוחת AI
+                          </span>
+                        )}
                       {item.verified && (
                         <span
                           className="inline-flex shrink-0 items-center gap-1"
@@ -1117,8 +1157,14 @@ export function HomeClient() {
                           </span>
                         </span>
                       )}
-                      <span>{item.food}</span>
-                    </p>
+                        <span className="min-w-0">{item.food}</span>
+                        {isAiMeal && aiRows ? (
+                          <span className="ms-auto text-xs font-bold text-[var(--stem)]/55">
+                            {aiExpandedId === item.id ? "▲" : "▼"}
+                          </span>
+                        ) : null}
+                      </p>
+                    </button>
                     <p className="text-sm text-[var(--text)]/80">
                       {formatEntryTime(item.createdAt) ? (
                         <>
@@ -1136,6 +1182,29 @@ export function HomeClient() {
                       {formatMacroCell(item.carbsG)} · שומן{" "}
                       {formatMacroCell(item.fatG)}
                     </p>
+                    {isAiMeal && aiRows && aiExpandedId === item.id && (
+                      <div className="mt-3 rounded-xl border border-[var(--border-cherry-soft)] bg-white/80 p-3 text-sm">
+                        <p className="mb-2 text-xs font-extrabold text-[var(--cherry)]">
+                          פירוט חישוב ה-AI
+                        </p>
+                        <ul className="space-y-2">
+                          {aiRows.map((r, idx) => (
+                            <li key={`${item.id}-ai-${idx}`} className="leading-relaxed">
+                              <p className="font-semibold text-[var(--stem)]">
+                                {r.item}{" "}
+                                <span className="text-xs font-semibold text-[var(--stem)]/70">
+                                  ({r.qty})
+                                </span>
+                              </p>
+                              <p className="text-xs text-[var(--stem)]/75">
+                                קלוריות {Math.round(r.calories)} · חלבון {r.protein} ·
+                                פחמימות {r.carbs} · שומן {r.fat}
+                              </p>
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
                   </div>
                   <div className="flex max-w-full shrink-0 flex-wrap items-start justify-end gap-1.5">
                     <button
