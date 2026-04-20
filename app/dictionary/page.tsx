@@ -29,6 +29,7 @@ import {
 import { IconCaption } from "@/components/IconCaption";
 import { IconCart, IconPencil, IconTrash } from "@/components/Icons";
 import { InfoCard } from "@/components/InfoCard";
+import { emitMealLoggedFeedback } from "@/lib/feedbackEvents";
 import {
   dictionaryEditFoodError,
   dictionaryHeading,
@@ -36,6 +37,7 @@ import {
   dictionaryIntroTitle,
   dictionarySavedFilterLabel,
   dictionarySavedFilterPlaceholder,
+  gf,
 } from "@/lib/hebrewGenderUi";
 
 const fontFood =
@@ -207,6 +209,13 @@ export default function DictionaryPage() {
 
   function applyPreset(preset: MealPreset) {
     applyMealPresetToToday(preset);
+    emitMealLoggedFeedback(
+      gf(
+        gender,
+        `הארוחה «${preset.name}» נוספה ליומן היום`,
+        `הארוחה «${preset.name}» נוספה ליומן היום`
+      )
+    );
     setAppliedMealId(preset.id);
     window.setTimeout(() => setAppliedMealId(null), 2500);
   }

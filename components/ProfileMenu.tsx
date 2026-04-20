@@ -27,12 +27,17 @@ import {
   saveProfile,
 } from "@/lib/storage";
 import { gf } from "@/lib/hebrewGenderUi";
+import {
+  loadSoundEffectsEnabled,
+  saveSoundEffectsEnabled,
+} from "@/lib/soundSettings";
 
 export function ProfileMenu() {
   const router = useRouter();
   const appVariant = useAppVariant();
   const [open, setOpen] = useState(false);
   const [showLogout, setShowLogout] = useState(false);
+  const [soundsOn, setSoundsOn] = useState(true);
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
   const rootRef = useRef<HTMLDivElement>(null);
   const avatarInputRef = useRef<HTMLInputElement>(null);
@@ -46,6 +51,16 @@ export function ProfileMenu() {
     syncLogout();
     window.addEventListener("cj-auth-changed", syncLogout);
     return () => window.removeEventListener("cj-auth-changed", syncLogout);
+  }, []);
+
+  useEffect(() => {
+    function syncSounds() {
+      setSoundsOn(loadSoundEffectsEnabled());
+    }
+    syncSounds();
+    window.addEventListener("cj-sound-settings-changed", syncSounds);
+    return () =>
+      window.removeEventListener("cj-sound-settings-changed", syncSounds);
   }, []);
 
   useEffect(() => {
@@ -171,6 +186,23 @@ export function ProfileMenu() {
               }}
             >
               העלאת תמונת פרופיל
+            </button>
+            <button
+              type="button"
+              role="menuitem"
+              aria-label={
+                soundsOn
+                  ? "צלילים באפליקציה מופעלים — לחץ לכיבוי"
+                  : "צלילים באפליקציה כבויים — לחץ להפעלה"
+              }
+              className="block w-full px-4 py-3 text-start text-sm font-semibold text-[var(--stem)] hover:bg-[var(--cherry-muted)]"
+              onClick={() => {
+                const next = !loadSoundEffectsEnabled();
+                saveSoundEffectsEnabled(next);
+                setSoundsOn(next);
+              }}
+            >
+              צלילים באפליקציה — {soundsOn ? "מופעל" : "כבוי"}
             </button>
             {avatarUrl && (
               <button

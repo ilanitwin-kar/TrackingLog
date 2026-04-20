@@ -23,8 +23,10 @@ import {
   loadProfile,
   saveDayLogEntries,
   saveFoodMemoryKey,
+  upsertDictionaryFromAiMeal,
   upsertDictionaryFromScan,
 } from "@/lib/storage";
+import { emitMealLoggedFeedback } from "@/lib/feedbackEvents";
 import { gf } from "@/lib/hebrewGenderUi";
 
 function clampGrams(q: number): number {
@@ -123,6 +125,7 @@ export function AddFoodClient({
   const [aiPlaceholder, setAiPlaceholder] = useState("");
   const [aiPending, setAiPending] = useState<null | {
     original: string;
+    displayName: string;
     totals: { calories: number; protein: number; carbs: number; fat: number };
     breakdown: Array<{
       item: string;
@@ -133,7 +136,6 @@ export function AddFoodClient({
       fat: number;
     }>;
   }>(null);
-  const [aiToast, setAiToast] = useState<string | null>(null);
   const [aiConfirmOpen, setAiConfirmOpen] = useState(false);
 
   const [scanModalOpen, setScanModalOpen] = useState(false);
@@ -281,6 +283,7 @@ export function AddFoodClient({
         | {
             kind: "result";
             original: string;
+            displayName?: string;
             totals: { calories: number; protein: number; carbs: number; fat: number };
             breakdown: Array<{
               item: string;
@@ -304,8 +307,10 @@ export function AddFoodClient({
       }
 
       // Final: show summary card first (validation step), only save on explicit confirm.
+      const displayName = (r.displayName ?? "").trim() || r.original.trim();
       setAiPending({
         original: r.original.trim(),
+        displayName,
         totals: r.totals,
         breakdown: r.breakdown ?? [],
       });
@@ -317,12 +322,16 @@ export function AddFoodClient({
     }
   }
 
-  function confirmAiPending() {
+  function commitAiJournal(includeDictionary: boolean) {
     if (!aiPending) return;
     const r = aiPending;
+    const cleanName = r.displayName.trim();
+    if (includeDictionary) {
+      upsertDictionaryFromAiMeal(cleanName, r.totals);
+    }
     const entry: LogEntry = {
       id: uid(),
-      food: r.original.trim(),
+      food: cleanName,
       calories: Math.max(0, Math.round(r.totals.calories)),
       quantity: 1,
       unit: "יחידה",
@@ -344,8 +353,23 @@ export function AddFoodClient({
     setAiMealOriginal(null);
     setAiMealError(null);
     stopAiDictation();
-    const emoji = gender === "male" ? "🫐" : "🍒";
-    setAiToast(`הארוחה נוספה בהצלחה ל-${gender === "male" ? "Blue" : "Cherry"} שלך! ${emoji}`);
+    emitMealLoggedFeedback(
+      includeDictionary
+        ? gf(
+            gender,
+            `«${cleanName}» נוסף ליומן ולמילון`,
+            `«${cleanName}» נוסף ליומן ולמילון`
+          )
+        : gf(gender, `«${cleanName}» נוסף ליומן`, `«${cleanName}» נוסף ליומן`)
+    );
+  }
+
+  function confirmAiPending() {
+    commitAiJournal(false);
+  }
+
+  function confirmAiPendingAndDictionary() {
+    commitAiJournal(true);
   }
 
   const pickCubeBaseClass =
@@ -605,12 +629,6 @@ export function AddFoodClient({
   }, [dictFeedback]);
 
   useEffect(() => {
-    if (!aiToast) return;
-    const id = window.setTimeout(() => setAiToast(null), 2200);
-    return () => window.clearTimeout(id);
-  }, [aiToast]);
-
-  useEffect(() => {
     return () => {
       if (pickFeedbackTimerRef.current) {
         clearTimeout(pickFeedbackTimerRef.current);
@@ -801,6 +819,13 @@ export function AddFoodClient({
     rememberFoodPick(row);
     setRecentPicks(loadRecentFoodPicks());
     setPickPressedDiary(true);
+    emitMealLoggedFeedback(
+      gf(
+        gender,
+        `«${row.name.trim()}» נוסף ליומן`,
+        `«${row.name.trim()}» נוסף ליומן`
+      )
+    );
     showPickModalNotice(
       gf(
         gender,
@@ -847,6 +872,13 @@ export function AddFoodClient({
     setPickPressedDiary(true);
     setPickPressedDictionary(true);
     setPickPressedBothShortcut(true);
+    emitMealLoggedFeedback(
+      gf(
+        gender,
+        `«${row.name.trim()}» נוסף ליומן ולמילון`,
+        `«${row.name.trim()}» נוסף ליומן ולמילון`
+      )
+    );
     showPickModalNotice(
       gf(
         gender,
@@ -988,6 +1020,9 @@ export function AddFoodClient({
       setRecentPicks(loadRecentFoodPicks());
       setManualOpen(false);
       resetManualForm();
+      emitMealLoggedFeedback(
+        gf(gender, `«${name}» נוסף ליומן`, `«${name}» נוסף ליומן`)
+      );
       router.push(`/?date=${encodeURIComponent(dateKey)}`);
     } finally {
       setManLoading(false);
@@ -1317,23 +1352,6 @@ export function AddFoodClient({
         )}
       </div>
 
-      <AnimatePresence>
-        {aiToast && (
-          <motion.div
-            initial={{ opacity: 0, y: 18 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: 18 }}
-            transition={{ duration: 0.18 }}
-            className="fixed inset-x-0 bottom-4 z-[520] flex justify-center px-4"
-            role="status"
-          >
-            <div className="max-w-lg rounded-2xl border-2 border-[var(--border-cherry-soft)] bg-white/95 px-4 py-3 text-center text-sm font-extrabold text-[var(--stem)] shadow-xl backdrop-blur-sm">
-              {aiToast}
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-
       {/* AI confirm modal */}
       <AnimatePresence>
         {screen === "ai" && aiConfirmOpen && aiPending && (
@@ -1377,25 +1395,35 @@ export function AddFoodClient({
                   <p className="font-extrabold">{Math.round(aiPending.totals.fat)} ג׳</p>
                 </div>
               </div>
-              <div className="mt-4 flex gap-2">
+              <div className="mt-4 flex flex-col gap-2">
+                <div className="flex gap-2">
+                  <motion.button
+                    type="button"
+                    className="btn-stem flex-1 rounded-2xl py-3 text-center text-sm font-extrabold"
+                    whileTap={{ scale: 0.98 }}
+                    onClick={confirmAiPending}
+                  >
+                    הוסף ליומן
+                  </motion.button>
+                  <button
+                    type="button"
+                    className="flex-1 rounded-2xl border-2 border-[var(--border-cherry-soft)] bg-white py-3 text-center text-sm font-extrabold text-[var(--stem)] shadow-sm transition hover:bg-[var(--cherry-muted)]"
+                    onClick={() => {
+                      setAiConfirmOpen(false);
+                      setAiPending(null);
+                    }}
+                  >
+                    ביטול
+                  </button>
+                </div>
                 <motion.button
                   type="button"
-                  className="btn-stem flex-1 rounded-2xl py-3 text-center text-sm font-extrabold"
-                  whileTap={{ scale: 0.98 }}
-                  onClick={confirmAiPending}
+                  className="w-full rounded-2xl border-2 border-[#e6c65c] bg-[#fff9e6] py-2.5 text-center text-xs font-extrabold text-[var(--stem)] shadow-sm transition hover:bg-[#fff3cc]"
+                  whileTap={{ scale: 0.99 }}
+                  onClick={confirmAiPendingAndDictionary}
                 >
-                  הוסף ליומן
+                  {gf(gender, "הוסיפי ליומן ולמילון", "הוסף ליומן ולמילון")}
                 </motion.button>
-                <button
-                  type="button"
-                  className="flex-1 rounded-2xl border-2 border-[var(--border-cherry-soft)] bg-white py-3 text-center text-sm font-extrabold text-[var(--stem)] shadow-sm transition hover:bg-[var(--cherry-muted)]"
-                  onClick={() => {
-                    setAiConfirmOpen(false);
-                    setAiPending(null);
-                  }}
-                >
-                  ביטול
-                </button>
               </div>
             </motion.div>
           </motion.div>

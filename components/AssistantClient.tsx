@@ -1,11 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useRef, useState } from "react";
-import {
-  isGenericAssistantGreeting,
-  saveAssistantInsightForBubble,
-} from "@/lib/assistantInsight";
+import { useEffect, useMemo, useState } from "react";
+import { emitMealLoggedFeedback } from "@/lib/feedbackEvents";
 import {
   getAnonUid,
   loadAssistantMemory,
@@ -14,6 +11,8 @@ import {
 } from "@/lib/cloudMemory";
 import { getTodayKey } from "@/lib/dateKey";
 import { addToShopping } from "@/lib/explorerStorage";
+import { loadExerciseActivityDaySync } from "@/lib/exerciseActivity";
+import { kcalBurnedFromStepsMet35 } from "@/lib/burnOffset";
 import {
   getEntriesForDate,
   loadDictionary,
@@ -245,6 +244,14 @@ export function AssistantClient() {
   const [error, setError] = useState<string | null>(null);
   const [actions, setActions] = useState<AssistantAction[]>([]);
   const [toast, setToast] = useState<string | null>(null);
+  const [exerciseRev, setExerciseRev] = useState(0);
+
+  useEffect(() => {
+    const bump = () => setExerciseRev((x) => x + 1);
+    window.addEventListener("cj-exercise-activity-updated", bump);
+    return () =>
+      window.removeEventListener("cj-exercise-activity-updated", bump);
+  }, []);
 
   useEffect(() => {
     let alive = true;
@@ -306,16 +313,8 @@ export function AssistantClient() {
     }
   }, [messages]);
 
-  const prevBubbleRef = useRef<string | null>(null);
-  useEffect(() => {
-    const last = [...messages].reverse().find((m) => m.role === "assistant");
-    if (!last?.text || isGenericAssistantGreeting(last.text)) return;
-    if (last.text === prevBubbleRef.current) return;
-    prevBubbleRef.current = last.text;
-    saveAssistantInsightForBubble(last.text);
-  }, [messages]);
-
   const snapshot = useMemo(() => {
+    void exerciseRev;
     const today = getTodayKey();
     const entries = getEntriesForDate(today);
     const totals = entries.reduce(
@@ -341,6 +340,16 @@ export function AssistantClient() {
       dailyCalorieTargetKcal > 0
         ? Math.max(0, Math.round(caloriesConsumed - dailyCalorieTargetKcal))
         : 0;
+    const ex = loadExerciseActivityDaySync(today);
+    const reportedSteps = ex?.reportedSteps ?? 0;
+    const walkBurnKcal = kcalBurnedFromStepsMet35(
+      reportedSteps,
+      profile.weightKg
+    );
+    const caloriesOverGoalAfterWalk = Math.max(
+      0,
+      caloriesOverGoal - walkBurnKcal
+    );
     return {
       now: new Date().toISOString(),
       profile: {
@@ -353,6 +362,13 @@ export function AssistantClient() {
       caloriesConsumed,
       caloriesOverGoal,
       withinCalorieGoal: caloriesOverGoal <= 0,
+      exerciseActivity: {
+        reportedSteps,
+        kcalBurnedFromWalk: walkBurnKcal,
+        caloriesOverGoalAfterWalk,
+        fullyOffsetByWalk:
+          caloriesOverGoal > 0 && caloriesOverGoalAfterWalk <= 0,
+      },
       entriesCount: entries.length,
       dictionary: loadDictionary().slice(0, 120).map((d) => ({
         id: d.id,
@@ -371,6 +387,7 @@ export function AssistantClient() {
     profile.age,
     profile.deficit,
     profile.activity,
+    exerciseRev,
   ]);
 
   async function send() {
@@ -524,7 +541,7 @@ export function AssistantClient() {
     const entry = logEntryFromVerifiedPer100g(item);
     const existing = getEntriesForDate(dateKey);
     saveDayLogEntries(dateKey, [entry, ...existing]);
-    setToast(
+    emitMealLoggedFeedback(
       gf(
         gender,
         "נוסף ליומן היום (100 גרם). הגרפים בבית מתעדכנים מיד.",
