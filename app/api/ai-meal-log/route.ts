@@ -1,10 +1,59 @@
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import { NextResponse } from "next/server";
+import { loadEnvConfig } from "@next/env";
+import fs from "node:fs";
+import path from "node:path";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
 
 const UNAVAILABLE_HE = "שירות הניתוח זמנית לא זמין";
+
+// Ensure .env.local is loaded in dev/turbopack route execution context.
+// In production, hosting provider injects env vars; this is a no-op fallback.
+loadEnvConfig(process.cwd());
+
+function readDotEnvLocalValue(key: string): string {
+  // Dev-only fallback for environments where `process.env` isn't populated correctly.
+  if (process.env.NODE_ENV !== "development") return "";
+  try {
+    const p = path.join(process.cwd(), ".env.local");
+    const exists = fs.existsSync(p);
+    if (!exists) {
+      console.log("[ai-meal-log] dotenv fallback: .env.local not found", { path: p });
+      return "";
+    }
+    const raw = fs.readFileSync(p, "utf8");
+    console.log("[ai-meal-log] dotenv fallback: read .env.local", {
+      path: p,
+      bytes: Buffer.byteLength(raw, "utf8"),
+    });
+    for (const line of raw.split(/\r?\n/)) {
+      const t = line.trim();
+      if (!t || t.startsWith("#")) continue;
+      const idx = t.indexOf("=");
+      if (idx <= 0) continue;
+      const k = t.slice(0, idx).trim();
+      if (k !== key) continue;
+      let v = t.slice(idx + 1).trim();
+      if (
+        (v.startsWith("\"") && v.endsWith("\"")) ||
+        (v.startsWith("'") && v.endsWith("'"))
+      ) {
+        v = v.slice(1, -1);
+      }
+      console.log("[ai-meal-log] dotenv fallback: found key", {
+        key,
+        valueLen: v.trim().length,
+      });
+      return v.trim();
+    }
+    console.log("[ai-meal-log] dotenv fallback: key not found", { key });
+    return "";
+  } catch {
+    return "";
+  }
+}
 
 type MealBreakdownRow = {
   item: string;
@@ -112,7 +161,22 @@ function normalize(parsed: unknown, original: string): MealResult | MealQuestion
 
 export async function POST(req: Request) {
   const geminiKey = process.env.GOOGLE_GENERATIVE_AI_API_KEY?.trim() ?? "";
-  const openAiKey = process.env.OPENAI_API_KEY?.trim() ?? "";
+  const openAiKeyFromEnv = process.env.OPENAI_API_KEY?.trim() ?? "";
+  const openAiKey =
+    openAiKeyFromEnv.length > 0
+      ? openAiKeyFromEnv
+      : readDotEnvLocalValue("OPENAI_API_KEY");
+
+  // Debug env presence without leaking secrets.
+  console.log("[ai-meal-log] env check", {
+    nodeEnv: process.env.NODE_ENV,
+    hasOpenAI: Boolean(openAiKey),
+    openAiLen: openAiKey ? openAiKey.length : 0,
+    hasGemini: Boolean(geminiKey),
+    geminiLen: geminiKey ? geminiKey.length : 0,
+    model: process.env.OPENAI_MEAL_MODEL ?? "",
+  });
+
   if (!geminiKey && !openAiKey) {
     console.error(
       "[ai-meal-log] Missing AI API keys (OPENAI_API_KEY / GOOGLE_GENERATIVE_AI_API_KEY)."
@@ -150,6 +214,9 @@ export async function POST(req: Request) {
     `- If critical info is missing and can change totals by more than 20%, DO NOT guess. Return a friendly follow-up question instead.\n` +
     `- Otherwise, compute totals and a transparent breakdown.\n\n` +
     `Important rules:\n` +
+    `- Common shorthand assumptions (DO NOT ask grams for these):\n` +
+    `  - "חצי בננה" => assume ~50g edible banana.\n` +
+    `  - If user gives a clear fraction/portion for a common single item, use a reasonable standard portion instead of asking.\n` +
     `- Output ONLY valid JSON. No markdown.\n` +
     `- Units: totals are for the whole meal as eaten.\n` +
     `- If user mentions \"מסעדה\" / restaurant / takeout, include a reasonable extra oil/butter factor typical of restaurant dishes.\n` +

@@ -10,6 +10,11 @@ import {
   useRef,
   useState,
 } from "react";
+import {
+  loadAssistantInsightForBubble,
+  resolveHomeInsightBubbleText,
+} from "@/lib/assistantInsight";
+import type { AppVariant } from "@/lib/appVariant";
 import { stepsForKcal, walkMinutesForKcal } from "@/lib/burnOffset";
 import { formatWalkingMinutes } from "@/lib/formatWalkDuration";
 import { addDaysToDateKey, getTodayKey } from "@/lib/dateKey";
@@ -41,6 +46,7 @@ import { dailyCalorieTarget } from "@/lib/tdee";
 import { weeklyCalorieSavingsClosedDays } from "@/lib/weeklyCalorieSavings";
 import { InfoCard } from "./InfoCard";
 import { CelebrationConfetti } from "./Fireworks";
+import { useAppVariant } from "./useAppVariant";
 import {
   IconBookmark,
   IconDuplicate,
@@ -247,6 +253,52 @@ function CalorieHeroRing({
   );
 }
 
+function HomeAssistantInsightBubble({
+  text,
+  variant,
+  gender,
+}: {
+  text: string;
+  variant: AppVariant;
+  gender: UserProfile["gender"];
+}) {
+  const router = useRouter();
+  const cherry = variant === "cherry";
+  return (
+    <motion.button
+      type="button"
+      initial={{ opacity: 0, y: 10 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.4, ease: "easeOut" }}
+      onClick={() => router.push("/assistant")}
+      className={`relative mx-auto mt-1 w-full max-w-md rounded-2xl border-2 px-3 py-3 text-start shadow-[0_6px_22px_rgba(0,0,0,0.08)] transition hover:brightness-[1.02] active:scale-[0.99] sm:px-4 sm:py-3.5 ${
+        cherry
+          ? "border-pink-200/95 bg-gradient-to-br from-pink-50/98 via-rose-50/85 to-white/95"
+          : "border-sky-300/80 bg-gradient-to-br from-sky-50/98 via-blue-50/80 to-white/95"
+      }`}
+      aria-label="תובנה מהעוזר — פתיחת צ׳אט"
+    >
+      <span
+        className={`absolute -top-2 right-5 h-3 w-3 rotate-45 border-l-2 border-t-2 ${
+          cherry
+            ? "border-pink-200/95 bg-gradient-to-br from-pink-50 to-rose-50"
+            : "border-sky-300/80 bg-gradient-to-br from-sky-50 to-blue-50"
+        }`}
+        aria-hidden
+      />
+      <p className="text-[10px] font-extrabold uppercase tracking-wide text-[var(--stem)]/55">
+        {cherry ? "Cherry" : "Blue"} · עוזר
+      </p>
+      <p className="mt-1 text-[13px] font-semibold leading-relaxed text-[var(--stem)] sm:text-sm">
+        {text}
+      </p>
+      <p className="mt-2 text-center text-[11px] font-bold text-[var(--cherry)]">
+        {gf(gender, "לשיחה עם העוזר ←", "לשיחה עם העוזר ←")}
+      </p>
+    </motion.button>
+  );
+}
+
 const quickNavBtnClass =
   "flex min-h-[2.75rem] flex-1 min-w-0 items-center justify-center gap-2 rounded-2xl border-2 border-[var(--border-cherry-soft)] bg-white/75 px-2 py-2.5 text-xs font-semibold text-[var(--cherry)] shadow-[0_4px_14px_rgba(0,0,0,0.06)] backdrop-blur-sm transition hover:bg-[var(--cherry-muted)] active:scale-[0.99] sm:text-sm";
 
@@ -255,6 +307,7 @@ const foodToolbarBtnClass =
 
 export function HomeClient() {
   const gender = loadProfile().gender;
+  const appVariant = useAppVariant();
   const router = useRouter();
   const searchParams = useSearchParams();
   const [entries, setEntries] = useState<LogEntry[]>([]);
@@ -289,6 +342,7 @@ export function HomeClient() {
   const [editUnit, setEditUnit] = useState<FoodUnit>("גרם");
   const [editLoading, setEditLoading] = useState(false);
   const [aiExpandedId, setAiExpandedId] = useState<string | null>(null);
+  const [insightBubbleText, setInsightBubbleText] = useState<string | null>(null);
 
   const [journalClosedMap, setJournalClosedMap] = useState<
     Record<string, boolean>
@@ -341,14 +395,17 @@ export function HomeClient() {
 
   useEffect(() => {
     setProfile(loadProfile());
-    const refresh = () => setProfile(loadProfile());
+    const refresh = () => {
+      setProfile(loadProfile());
+      setEntries(getEntriesForDate(viewDateKey));
+    };
     window.addEventListener("focus", refresh);
     window.addEventListener("cj-profile-updated", refresh);
     return () => {
       window.removeEventListener("focus", refresh);
       window.removeEventListener("cj-profile-updated", refresh);
     };
-  }, []);
+  }, [viewDateKey]);
 
   const target = profile
     ? dailyCalorieTarget(
@@ -410,6 +467,24 @@ export function HomeClient() {
   /** אזהרת מעל היעד רק מעל 110% מהיעד; בין 100% ל־110% — ללא חריגה, עדיין חגיגת 100% */
   const showHarriga = target > 0 && total > target * 1.1;
   const isViewingToday = viewDateKey === getTodayKey();
+
+  useEffect(() => {
+    const sync = () => {
+      const stored = loadAssistantInsightForBubble();
+      const overKcal =
+        target > 0 && total > target ? Math.round(total - target) : 0;
+      setInsightBubbleText(
+        resolveHomeInsightBubbleText(gender, stored, isViewingToday, overKcal)
+      );
+    };
+    sync();
+    window.addEventListener("cj-assistant-insight-updated", sync);
+    window.addEventListener("cj-profile-updated", sync);
+    return () => {
+      window.removeEventListener("cj-assistant-insight-updated", sync);
+      window.removeEventListener("cj-profile-updated", sync);
+    };
+  }, [gender, isViewingToday, total, target]);
 
   const triggerCelebration = useCallback((type: "half" | "full") => {
     const message =
@@ -845,17 +920,25 @@ export function HomeClient() {
         )}
       </AnimatePresence>
 
-      <header className="mb-6 space-y-5">
-        <div className="flex flex-col items-stretch gap-3 md:flex-row md:items-center md:justify-between">
-          <p className="text-center text-xl font-extrabold leading-snug text-[var(--stem)] md:text-right md:text-2xl">
+      <header className="mb-6 space-y-4 sm:space-y-5">
+        <div className="flex flex-row items-start justify-between gap-2 sm:items-center sm:gap-4 md:justify-between">
+          <p className="min-w-0 flex-1 text-balance text-base font-extrabold leading-snug text-[var(--stem)] sm:text-lg md:text-right md:text-2xl">
             {greetingLine}
           </p>
-          <div className="shrink-0 md:max-w-[12rem]">
+          <div className="shrink-0 scale-[0.92] sm:scale-100 md:max-w-[12rem] md:scale-100">
             <LiveClock />
           </div>
         </div>
 
         <CalorieHeroRing target={target} total={total} />
+
+        {insightBubbleText ? (
+          <HomeAssistantInsightBubble
+            text={insightBubbleText}
+            variant={appVariant}
+            gender={gender}
+          />
+        ) : null}
 
         {dailyMotivationLine ? (
           <p
@@ -866,7 +949,7 @@ export function HomeClient() {
           </p>
         ) : null}
 
-        <div className="mx-auto grid max-w-xl grid-cols-1 gap-3 sm:grid-cols-3">
+        <div className="mx-auto grid max-w-xl grid-cols-3 gap-1.5 sm:gap-3">
           {(
             [
               ["חלבון", totalProteinG, macroGoals.proteinG] as const,
@@ -879,15 +962,15 @@ export function HomeClient() {
             return (
               <div
                 key={label}
-                className="flex flex-col rounded-2xl border-2 border-[var(--border-cherry-soft)] bg-white/90 px-3 py-3 shadow-sm"
+                className="flex min-w-0 flex-col rounded-xl border-2 border-[var(--border-cherry-soft)] bg-white/90 px-1.5 py-2 shadow-sm sm:rounded-2xl sm:px-3 sm:py-3"
               >
-                <p className="text-center text-sm font-semibold text-[var(--cherry)]">
+                <p className="text-center text-[9px] font-semibold leading-tight text-[var(--cherry)] sm:text-sm">
                   {label}
                 </p>
-                <p className="mt-1 text-center text-base font-bold tabular-nums text-[var(--stem)]">
-                  {Math.round(consumed)}ג / {Math.round(goal)}ג
+                <p className="mt-0.5 text-center text-[11px] font-bold tabular-nums leading-tight text-[var(--stem)] sm:mt-1 sm:text-base">
+                  {Math.round(consumed)}ג/{Math.round(goal)}ג
                 </p>
-                <div className="mt-4 h-2.5 overflow-hidden rounded-full bg-[#f0f0f0]">
+                <div className="mt-2 h-1 overflow-hidden rounded-full bg-[#f0f0f0] sm:mt-4 sm:h-2.5">
                   <div
                     className="h-full rounded-full bg-[var(--cherry)] transition-[width] duration-500 ease-out"
                     style={{ width: `${pct}%` }}

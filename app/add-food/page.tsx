@@ -1,5 +1,5 @@
 import { Suspense } from "react";
-import { AddFoodClient } from "@/components/AddFoodClient";
+import { AddFoodSearchClient } from "@/components/AddFoodSearchClient";
 
 function AddFoodFallback() {
   return (
@@ -12,7 +12,7 @@ function AddFoodFallback() {
 export default function AddFoodPage() {
   return (
     <Suspense fallback={<AddFoodFallback />}>
-      <AddFoodClient />
+      <AddFoodSearchClient />
     </Suspense>
   );
 }
