@@ -20,11 +20,16 @@ export function LiveClock() {
     );
   }
 
-  const date = now.toLocaleDateString("he-IL", {
+  const dateLong = now.toLocaleDateString("he-IL", {
     weekday: "long",
     year: "numeric",
     month: "long",
     day: "numeric",
+  });
+  const dateShort = now.toLocaleDateString("he-IL", {
+    weekday: "short",
+    day: "numeric",
+    month: "short",
   });
   const time = now.toLocaleTimeString("he-IL", {
     hour: "2-digit",
@@ -39,8 +44,13 @@ export function LiveClock() {
       animate={{ opacity: 1, y: 0 }}
       dir="rtl"
     >
-      <p className="text-xs font-medium text-[var(--text)]/80 md:text-sm">{date}</p>
-      <p className="mt-1 font-mono text-sm font-semibold tracking-wide text-[var(--cherry)] md:text-base">
+      <p className="hidden text-xs font-medium text-[var(--text)]/80 md:block md:text-sm">
+        {dateLong}
+      </p>
+      <p className="text-[10px] font-medium leading-tight text-[var(--text)]/80 md:hidden">
+        {dateShort}
+      </p>
+      <p className="mt-0.5 font-mono text-[11px] font-semibold tracking-wide text-[var(--cherry)] md:mt-1 md:text-base">
         {time}
       </p>
     </motion.div>

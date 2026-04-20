@@ -41,6 +41,7 @@ export function AppChrome({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     if (
       pathname === "/add-food" ||
+      pathname === "/add-food-ai" ||
       pathname === "/welcome" ||
       pathname === "/pick-theme"
     ) {
@@ -58,6 +59,7 @@ export function AppChrome({ children }: { children: React.ReactNode }) {
     const sync = () => {
       if (
         pathname === "/add-food" ||
+        pathname === "/add-food-ai" ||
         pathname === "/welcome" ||
         pathname === "/pick-theme"
       ) {

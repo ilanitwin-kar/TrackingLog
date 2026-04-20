@@ -139,9 +139,14 @@ export function isDevAdminOneClickAllowed(): boolean {
   return isPublicEnvTruthy("NEXT_PUBLIC_ALLOW_DEV_ADMIN_BYPASS");
 }
 
-/** @deprecated השתמשו ב־isDevAdminOneClickAllowed — הכפתור תמיד גלוי */
+/**
+ * האם להציג בממשק כפתור «כניסת מנהלת».
+ * ברירת מחדל: מוסתר בפרודקשן כדי לא להציג "מסך קוד" למשתמשי קצה.
+ * להפעלה: NEXT_PUBLIC_SHOW_DEV_ADMIN_BYPASS_UI=1
+ */
 export function isDevAdminBypassUiEnabled(): boolean {
-  return true;
+  if (process.env.NODE_ENV === "development") return true;
+  return process.env.NEXT_PUBLIC_SHOW_DEV_ADMIN_BYPASS_UI === "1";
 }
 
 /** האם הוגדר קוד בבילד לכניסה עם PIN בפרודקשן */
