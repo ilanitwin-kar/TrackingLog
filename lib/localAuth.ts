@@ -243,6 +243,22 @@ export function activateDevAdminBypass(): void {
   startSession();
 }
 
+/**
+ * נייד בפרודקשן: כשהכפתור מוצג (SHOW) ואין PIN בבילד — כניסה בלי הקלדת קוד.
+ * אם הוגדר PIN/צוות — חייבים להשתמש ב־activateDevAdminBypassWithPin.
+ */
+export function activateDevAdminBypassNoPinWhenUiEnabled(): void {
+  if (typeof window === "undefined") return;
+  if (!isDevAdminBypassUiEnabled()) return;
+  if (isDevAdminPinConfigured()) return;
+  if (isDevAdminOneClickAllowed()) {
+    activateDevAdminBypass();
+    return;
+  }
+  localStorage.setItem(DEV_ADMIN_BYPASS_KEY, "1");
+  startSession();
+}
+
 export function clearDevAdminBypass(): void {
   if (typeof window === "undefined") return;
   localStorage.removeItem(DEV_ADMIN_BYPASS_KEY);

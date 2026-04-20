@@ -251,6 +251,13 @@ input[type="checkbox"] {
     filter: none;
   }
 
+  /* ביטול כפתור הניקוי המובנה של שדות type=search ב-WebKit */
+  input[type="search"]::-webkit-search-cancel-button,
+  input[type="search"]::-webkit-search-decoration {
+    -webkit-appearance: none;
+    appearance: none;
+  }
+
   .input-luxury-search {
     width: 100%;
     border-radius: 0.875rem;

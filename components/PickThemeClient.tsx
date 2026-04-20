@@ -75,7 +75,10 @@ export function PickThemeClient() {
       >
         <motion.div
           className="absolute -translate-x-1/2 -translate-y-1/2 text-center"
-          style={{ left: selected === "blueberry" ? "50%" : "28%", top: selected === "blueberry" ? "52%" : "32%" }}
+          style={{
+            left: selected === "blueberry" ? "50%" : "34%",
+            top: selected === "blueberry" ? "50%" : "44%",
+          }}
           animate={{
             scale: selected === "blueberry" ? 1.05 : 1,
             filter: selected === "blueberry" ? "saturate(1.05)" : "saturate(1)",
@@ -116,7 +119,10 @@ export function PickThemeClient() {
       >
         <motion.div
           className="absolute -translate-x-1/2 -translate-y-1/2 text-center"
-          style={{ left: selected === "cherry" ? "50%" : "72%", top: selected === "cherry" ? "52%" : "70%" }}
+          style={{
+            left: selected === "cherry" ? "50%" : "66%",
+            top: selected === "cherry" ? "50%" : "44%",
+          }}
           animate={{
             scale: selected === "cherry" ? 1.05 : 1,
             filter: selected === "cherry" ? "saturate(1.05)" : "saturate(1)",

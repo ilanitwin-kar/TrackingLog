@@ -1,11 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useRef, useState } from "react";
-import {
-  isGenericAssistantGreeting,
-  saveAssistantInsightForBubble,
-} from "@/lib/assistantInsight";
+import { useEffect, useMemo, useState } from "react";
+import { emitMealLoggedFeedback } from "@/lib/feedbackEvents";
 import {
   getAnonUid,
   loadAssistantMemory,
@@ -14,6 +11,8 @@ import {
 } from "@/lib/cloudMemory";
 import { getTodayKey } from "@/lib/dateKey";
 import { addToShopping } from "@/lib/explorerStorage";
+import { loadExerciseActivityDaySync } from "@/lib/exerciseActivity";
+import { kcalBurnedFromStepsMet35 } from "@/lib/burnOffset";
 import {
   getEntriesForDate,
   loadDictionary,
@@ -39,12 +38,26 @@ type AssistantAction =
       };
     };
 
+type AssistantMealSummary = {
+  shortTitle: string;
+  totalCalories: number;
+  totalProtein: number;
+  totalCarbs: number;
+  totalFat: number;
+  portionLabel?: string;
+  estimatedGrams?: number | null;
+};
+
 type AssistantResult = {
   reply: string;
   actions?: AssistantAction[];
+  mealSummary?: AssistantMealSummary | null;
 };
 
-type VerifiedFoodItem = {
+const JOURNAL_AI_PREFIX = "ארוחת AI:";
+
+/** כרטיס מהעוזרת — סיכום ארוחה מאוחד או (תאימות לאחור) ערכי 100 גרם */
+type FoodSuggestionCard = {
   id: string;
   name: string;
   calories: number;
@@ -52,20 +65,57 @@ type VerifiedFoodItem = {
   carbs: number;
   fat: number;
   category: string;
+  isPortionTotals?: boolean;
+  portionLabel?: string;
+  estimatedGrams?: number | null;
+  /** שורה אחת ביומן — "ארוחת AI: …" */
+  journalFoodLabel?: string;
+  isAggregatedMeal?: boolean;
 };
+
+function normalizeMealSummaryToCard(
+  meal: AssistantMealSummary | null | undefined,
+  stamp: string
+): FoodSuggestionCard[] {
+  if (!meal || typeof meal.shortTitle !== "string") return [];
+  const shortTitle = meal.shortTitle.trim();
+  if (shortTitle.length < 1) return [];
+  const journalFoodLabel = `${JOURNAL_AI_PREFIX} ${shortTitle}`.slice(0, 140);
+  return [
+    {
+      id: `ai:meal:${stamp}`,
+      name: shortTitle,
+      journalFoodLabel,
+      isAggregatedMeal: true,
+      calories: Math.max(1, Math.round(meal.totalCalories)),
+      protein: Math.max(0, Number(meal.totalProtein) || 0),
+      carbs: Math.max(0, Number(meal.totalCarbs) || 0),
+      fat: Math.max(0, Number(meal.totalFat) || 0),
+      category: "ארוחת AI",
+      isPortionTotals: true,
+      portionLabel: meal.portionLabel?.trim() || undefined,
+      estimatedGrams:
+        meal.estimatedGrams != null &&
+        Number.isFinite(meal.estimatedGrams) &&
+        meal.estimatedGrams > 0
+          ? Math.min(8000, Math.round(meal.estimatedGrams))
+          : null,
+    },
+  ];
+}
 
 type Msg = {
   role: "user" | "assistant";
   text: string;
-  verifiedSuggestions?: VerifiedFoodItem[];
+  verifiedSuggestions?: FoodSuggestionCard[];
 };
 
 function newLogId(): string {
   return `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
 }
 
-/** מנה של 100 גרם לפי ערכי המאגר (ל־100 ג׳) */
-function logEntryFromVerifiedPer100g(item: VerifiedFoodItem): LogEntry {
+/** מנה של 100 גרם (כרטיס ישן / מאגר) */
+function logEntryFromPer100gCard(item: FoodSuggestionCard): LogEntry {
   const kcal = Math.round(item.calories);
   const proteinG = Math.round(item.protein * 10) / 10;
   const carbsG = Math.round(item.carbs * 10) / 10;
@@ -77,11 +127,44 @@ function logEntryFromVerifiedPer100g(item: VerifiedFoodItem): LogEntry {
     quantity: 100,
     unit: "גרם",
     createdAt: new Date().toISOString(),
-    verified: true,
+    verified: item.category !== "אומדן עוזרת",
     proteinG,
     carbsG,
     fatG,
   };
+}
+
+function logEntryFromAssistantPortion(item: FoodSuggestionCard): LogEntry {
+  const journalLine = item.journalFoodLabel?.trim();
+  const label = item.portionLabel?.trim();
+  const foodFromParts =
+    label && !item.name.includes(label) ? `${item.name.trim()} (${label})` : item.name.trim();
+  const food = journalLine || foodFromParts;
+  const g =
+    item.estimatedGrams != null && item.estimatedGrams > 0
+      ? Math.round(item.estimatedGrams)
+      : null;
+  const proteinG = Math.round(item.protein * 10) / 10;
+  const carbsG = Math.round(item.carbs * 10) / 10;
+  const fatG = Math.round(item.fat * 10) / 10;
+  return {
+    id: newLogId(),
+    food,
+    calories: Math.max(1, Math.round(item.calories)),
+    quantity: item.isAggregatedMeal ? 1 : g ?? 1,
+    unit: item.isAggregatedMeal ? "יחידה" : g ? "גרם" : "יחידה",
+    createdAt: new Date().toISOString(),
+    verified: false,
+    aiMeal: true,
+    proteinG,
+    carbsG,
+    fatG,
+  };
+}
+
+function logEntryFromFoodCard(item: FoodSuggestionCard): LogEntry {
+  if (item.isPortionTotals) return logEntryFromAssistantPortion(item);
+  return logEntryFromPer100gCard(item);
 }
 
 function normalizeStoredMessages(raw: unknown): Msg[] {
@@ -98,11 +181,11 @@ function normalizeStoredMessages(raw: unknown): Msg[] {
         (x) =>
           x &&
           typeof x === "object" &&
-          typeof (x as VerifiedFoodItem).id === "string" &&
-          typeof (x as VerifiedFoodItem).name === "string"
+          typeof (x as FoodSuggestionCard).id === "string" &&
+          typeof (x as FoodSuggestionCard).name === "string"
       )
     ) {
-      return { role: "assistant", text, verifiedSuggestions: vs as VerifiedFoodItem[] };
+      return { role: "assistant", text, verifiedSuggestions: vs as FoodSuggestionCard[] };
     }
     return { role, text };
   });
@@ -129,79 +212,149 @@ function VerifiedSuggestionsCards({
   onDictionary,
   onShopping,
 }: {
-  items: VerifiedFoodItem[];
+  items: FoodSuggestionCard[];
   gender: ReturnType<typeof loadProfile>["gender"];
-  onJournal: (item: VerifiedFoodItem) => void;
-  onDictionary: (item: VerifiedFoodItem) => void;
-  onShopping: (item: VerifiedFoodItem) => void;
+  onJournal: (item: FoodSuggestionCard) => void;
+  onDictionary: (item: FoodSuggestionCard) => void;
+  onShopping: (item: FoodSuggestionCard) => void;
 }) {
   return (
-    <div className="mt-3 space-y-3">
+    <div className="mt-3 space-y-2">
       {items.map((it) => (
-        <div
+        <details
           key={it.id}
-          className="rounded-2xl border-2 border-[var(--border-cherry-soft)] bg-gradient-to-br from-white/95 to-[var(--cherry-muted)]/40 p-3 shadow-[0_8px_24px_rgba(0,0,0,0.06)] backdrop-blur-sm"
+          className="group rounded-2xl border-2 border-[var(--border-cherry-soft)] bg-gradient-to-br from-white/95 to-[var(--cherry-muted)]/40 shadow-[0_8px_24px_rgba(0,0,0,0.06)] backdrop-blur-sm"
         >
-          <div className="flex items-start justify-between gap-2">
-            <div className="min-w-0 flex-1">
-              <p className="text-sm font-extrabold leading-snug text-[var(--stem)]">{it.name}</p>
-              <p className="mt-0.5 text-[10px] font-semibold text-[var(--stem)]/55">
-                {it.category} · ל־100 גרם
-              </p>
+          <summary className="flex cursor-pointer list-none items-center justify-between gap-2 px-3 py-2.5 [&::-webkit-details-marker]:hidden">
+            <div className="min-w-0 flex-1 text-start">
+              {it.isAggregatedMeal ? (
+                <>
+                  <p className="text-[10px] font-extrabold uppercase tracking-wide text-[var(--cherry)]/90">
+                    סיכום ארוחה
+                  </p>
+                  <p className="text-sm font-extrabold leading-snug text-[var(--stem)]">{it.name}</p>
+                  <p className="mt-0.5 text-[10px] font-semibold text-[var(--stem)]/55">
+                    {[
+                      it.portionLabel,
+                      it.estimatedGrams ? `~${it.estimatedGrams} ג׳ (אומדן)` : null,
+                      `${Math.round(it.calories)} קק״ל סה״כ`,
+                    ]
+                      .filter(Boolean)
+                      .join(" · ")}
+                  </p>
+                </>
+              ) : (
+                <>
+                  <p className="text-sm font-extrabold leading-snug text-[var(--stem)]">{it.name}</p>
+                  <p className="mt-0.5 text-[10px] font-semibold text-[var(--stem)]/55">
+                    {it.isPortionTotals
+                      ? [
+                          it.portionLabel,
+                          it.estimatedGrams ? `~${it.estimatedGrams} ג׳` : null,
+                          `${Math.round(it.calories)} קק״ל למנה`,
+                        ]
+                          .filter(Boolean)
+                          .join(" · ")
+                      : `${it.category} · ל־100 גרם · ${Math.round(it.calories)} קק״ל`}
+                  </p>
+                </>
+              )}
             </div>
-            <span
-              className="shrink-0 rounded-full border border-[var(--border-cherry-soft)] bg-white/90 px-2 py-0.5 text-[10px] font-bold text-[var(--cherry)]"
-              title="מאגר מאומת"
-            >
-              מאומת
+            <span className="shrink-0 text-xs font-bold text-[var(--stem)]/50 group-open:hidden">
+              פרטים ▼
             </span>
-          </div>
-          <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
-            <div className="rounded-xl border border-[var(--border-cherry-soft)] bg-white/90 px-2 py-2 text-center">
-              <p className="text-[10px] font-semibold text-[var(--stem)]/60">קק״ל</p>
-              <p className="text-lg font-extrabold tabular-nums text-[var(--cherry)]">
-                {Math.round(it.calories)}
-              </p>
+            <span className="hidden shrink-0 text-xs font-bold text-[var(--stem)]/50 group-open:inline">
+              ▲
+            </span>
+          </summary>
+          <div className="border-t border-[var(--border-cherry-soft)]/60 px-3 pb-3 pt-2">
+            <div className="mb-2 flex justify-end">
+              <span
+                className="rounded-full border border-[var(--border-cherry-soft)] bg-white/90 px-2 py-0.5 text-[10px] font-bold text-[var(--cherry)]"
+                title={
+                  it.isAggregatedMeal
+                    ? "סיכום ארוחה אחד — נשמר כשורה אחת ביומן"
+                    : it.isPortionTotals
+                      ? "אומדן מהעוזרת — לא נשמר אוטומטית בלי לחיצה"
+                      : "ערכים לפי מאגר / מילון"
+                }
+              >
+                {it.isAggregatedMeal
+                  ? "סיכום"
+                  : it.isPortionTotals
+                    ? "אומדן"
+                    : it.category === "מילון אישי"
+                      ? "מילון"
+                      : "מאומת"}
+              </span>
             </div>
-            <div className="rounded-xl border border-[var(--border-cherry-soft)] bg-white/90 px-2 py-2 text-center">
-              <p className="text-[10px] font-semibold text-[var(--stem)]/60">חלבון</p>
-              <p className="text-base font-extrabold tabular-nums text-[var(--stem)]">{it.protein}ג׳</p>
+            <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+              <div className="rounded-xl border border-[var(--border-cherry-soft)] bg-white/90 px-2 py-2 text-center">
+                <p className="text-[10px] font-semibold text-[var(--stem)]/60">
+                  {it.isAggregatedMeal ? "קק״ל (סה״כ)" : "קק״ל"}
+                </p>
+                <p className="text-lg font-extrabold tabular-nums text-[var(--cherry)]">
+                  {Math.round(it.calories)}
+                </p>
+              </div>
+              <div className="rounded-xl border border-[var(--border-cherry-soft)] bg-white/90 px-2 py-2 text-center">
+                <p className="text-[10px] font-semibold text-[var(--stem)]/60">
+                  {it.isAggregatedMeal
+                    ? "חלבון (סה״כ)"
+                    : it.isPortionTotals
+                      ? "חלבון (מנה)"
+                      : "חלבון"}
+                </p>
+                <p className="text-base font-extrabold tabular-nums text-[var(--stem)]">{it.protein}ג׳</p>
+              </div>
+              <div className="rounded-xl border border-[var(--border-cherry-soft)] bg-white/90 px-2 py-2 text-center">
+                <p className="text-[10px] font-semibold text-[var(--stem)]/60">
+                  {it.isAggregatedMeal
+                    ? "פחמימות (סה״כ)"
+                    : it.isPortionTotals
+                      ? "פחמימות (מנה)"
+                      : "פחמימות"}
+                </p>
+                <p className="text-base font-extrabold tabular-nums text-[var(--stem)]">{it.carbs}ג׳</p>
+              </div>
+              <div className="rounded-xl border border-[var(--border-cherry-soft)] bg-white/90 px-2 py-2 text-center">
+                <p className="text-[10px] font-semibold text-[var(--stem)]/60">
+                  {it.isAggregatedMeal
+                    ? "שומן (סה״כ)"
+                    : it.isPortionTotals
+                      ? "שומן (מנה)"
+                      : "שומן"}
+                </p>
+                <p className="text-base font-extrabold tabular-nums text-[var(--stem)]">{it.fat}ג׳</p>
+              </div>
             </div>
-            <div className="rounded-xl border border-[var(--border-cherry-soft)] bg-white/90 px-2 py-2 text-center">
-              <p className="text-[10px] font-semibold text-[var(--stem)]/60">פחמימות</p>
-              <p className="text-base font-extrabold tabular-nums text-[var(--stem)]">{it.carbs}ג׳</p>
-            </div>
-            <div className="rounded-xl border border-[var(--border-cherry-soft)] bg-white/90 px-2 py-2 text-center">
-              <p className="text-[10px] font-semibold text-[var(--stem)]/60">שומן</p>
-              <p className="text-base font-extrabold tabular-nums text-[var(--stem)]">{it.fat}ג׳</p>
-            </div>
-          </div>
-          <div className="mt-3 flex flex-col gap-2">
-            <div className="grid grid-cols-2 gap-2">
+            <div className="mt-3 flex flex-col gap-2">
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  type="button"
+                  className="rounded-xl bg-[var(--cherry)] px-2 py-2.5 text-center text-[11px] font-extrabold text-white shadow-sm transition hover:brightness-105 active:scale-[0.99]"
+                  onClick={() => onJournal(it)}
+                >
+                  {gf(gender, "הוסיפי ליומן", "הוסף ליומן")}
+                </button>
+                <button
+                  type="button"
+                  className="rounded-xl border-2 border-[var(--border-cherry-soft)] bg-white/95 px-2 py-2.5 text-center text-[11px] font-extrabold text-[var(--stem)] shadow-sm transition hover:bg-[var(--cherry-muted)] active:scale-[0.99]"
+                  onClick={() => onDictionary(it)}
+                >
+                  {gf(gender, "שמרי במילון", "שמור במילון")}
+                </button>
+              </div>
               <button
                 type="button"
-                className="rounded-xl bg-[var(--cherry)] px-2 py-2.5 text-center text-[11px] font-extrabold text-white shadow-sm transition hover:brightness-105 active:scale-[0.99]"
-                onClick={() => onJournal(it)}
+                className="w-full rounded-xl border-2 border-[var(--border-cherry-soft)] bg-white/90 px-2 py-2.5 text-center text-[11px] font-extrabold text-[var(--stem)] shadow-sm transition hover:bg-[var(--cherry-muted)] active:scale-[0.99]"
+                onClick={() => onShopping(it)}
               >
-                {gf(gender, "הוסיפי ליומן", "הוסף ליומן")}
-              </button>
-              <button
-                type="button"
-                className="rounded-xl border-2 border-[var(--border-cherry-soft)] bg-white/95 px-2 py-2.5 text-center text-[11px] font-extrabold text-[var(--stem)] shadow-sm transition hover:bg-[var(--cherry-muted)] active:scale-[0.99]"
-                onClick={() => onDictionary(it)}
-              >
-                {gf(gender, "שמרי במילון", "שמור במילון")}
+                {gf(gender, "הוסיפי לקניות", "הוסף לקניות")}
               </button>
             </div>
-            <button
-              type="button"
-              className="w-full rounded-xl border-2 border-[var(--border-cherry-soft)] bg-white/90 px-2 py-2.5 text-center text-[11px] font-extrabold text-[var(--stem)] shadow-sm transition hover:bg-[var(--cherry-muted)] active:scale-[0.99]"
-              onClick={() => onShopping(it)}
-            >
-              {gf(gender, "הוסיפי לקניות", "הוסף לקניות")}
-            </button>
           </div>
-        </div>
+        </details>
       ))}
     </div>
   );
@@ -245,6 +398,14 @@ export function AssistantClient() {
   const [error, setError] = useState<string | null>(null);
   const [actions, setActions] = useState<AssistantAction[]>([]);
   const [toast, setToast] = useState<string | null>(null);
+  const [exerciseRev, setExerciseRev] = useState(0);
+
+  useEffect(() => {
+    const bump = () => setExerciseRev((x) => x + 1);
+    window.addEventListener("cj-exercise-activity-updated", bump);
+    return () =>
+      window.removeEventListener("cj-exercise-activity-updated", bump);
+  }, []);
 
   useEffect(() => {
     let alive = true;
@@ -290,8 +451,8 @@ export function AssistantClient() {
         role: "assistant",
         text: gf(
           gender,
-          "היי! אני כאן כדי לעזור לך לנווט באפליקציה ולהציע רעיונות לפי מה שנשאר לך היום. מה בא לך?",
-          "אהלן! אני כאן כדי לעזור לך לנווט באפליקציה ולהציע רעיונות לפי מה שנשאר לך היום. מה בא לך?"
+          "היי! אני כאן עם סיכום ארוחה אחד (קלוריות ומאקרו), טיפים אישיים לפי המילון, וניווט. ספרי מה אכלת — הפירוט יכול להופיע בטקסט, ובכרטיס למטה סיכום אחד ליומן.",
+          "אהלן! אני כאן עם סיכום ארוחה אחד (קלוריות ומאקרו), טיפים אישיים לפי המילון, וניווט. ספר מה אכלת — הפירוט יכול להופיע בטקסט, ובכרטיס למטה סיכום אחד ליומן."
         ),
       },
     ]);
@@ -306,16 +467,8 @@ export function AssistantClient() {
     }
   }, [messages]);
 
-  const prevBubbleRef = useRef<string | null>(null);
-  useEffect(() => {
-    const last = [...messages].reverse().find((m) => m.role === "assistant");
-    if (!last?.text || isGenericAssistantGreeting(last.text)) return;
-    if (last.text === prevBubbleRef.current) return;
-    prevBubbleRef.current = last.text;
-    saveAssistantInsightForBubble(last.text);
-  }, [messages]);
-
   const snapshot = useMemo(() => {
+    void exerciseRev;
     const today = getTodayKey();
     const entries = getEntriesForDate(today);
     const totals = entries.reduce(
@@ -341,6 +494,16 @@ export function AssistantClient() {
       dailyCalorieTargetKcal > 0
         ? Math.max(0, Math.round(caloriesConsumed - dailyCalorieTargetKcal))
         : 0;
+    const ex = loadExerciseActivityDaySync(today);
+    const reportedSteps = ex?.reportedSteps ?? 0;
+    const walkBurnKcal = kcalBurnedFromStepsMet35(
+      reportedSteps,
+      profile.weightKg
+    );
+    const caloriesOverGoalAfterWalk = Math.max(
+      0,
+      caloriesOverGoal - walkBurnKcal
+    );
     return {
       now: new Date().toISOString(),
       profile: {
@@ -353,8 +516,15 @@ export function AssistantClient() {
       caloriesConsumed,
       caloriesOverGoal,
       withinCalorieGoal: caloriesOverGoal <= 0,
+      exerciseActivity: {
+        reportedSteps,
+        kcalBurnedFromWalk: walkBurnKcal,
+        caloriesOverGoalAfterWalk,
+        fullyOffsetByWalk:
+          caloriesOverGoal > 0 && caloriesOverGoalAfterWalk <= 0,
+      },
       entriesCount: entries.length,
-      dictionary: loadDictionary().slice(0, 120).map((d) => ({
+      dictionary: loadDictionary().slice(0, 280).map((d) => ({
         id: d.id,
         food: d.food,
         caloriesPer100g: d.caloriesPer100g,
@@ -371,6 +541,7 @@ export function AssistantClient() {
     profile.age,
     profile.deficit,
     profile.activity,
+    exerciseRev,
   ]);
 
   async function send() {
@@ -424,85 +595,24 @@ export function AssistantClient() {
         setError(data.error ?? "שירות העוזר זמנית לא זמין");
         return;
       }
-      setMessages((m) => [...m, { role: "assistant", text: data.result!.reply }]);
-      const nextActions = data.result.actions ?? [];
+      const nextActions = (data.result.actions ?? []).filter(
+        (a) => a.type !== "search_verified_foods"
+      );
+      const cards = normalizeMealSummaryToCard(
+        data.result.mealSummary,
+        `${Date.now()}`
+      );
+
       setActions(nextActions);
 
-      // Execute internal search action (verified DB) on the client.
-      const search = nextActions.find((a) => a.type === "search_verified_foods") as
-        | Extract<AssistantAction, { type: "search_verified_foods" }>
-        | undefined;
-      if (search) {
-        try {
-          const params = new URLSearchParams({
-            q: (search.payload.q ?? "").trim(),
-            sort: search.payload.sort ?? "caloriesAsc",
-            category: search.payload.category ?? "הכל",
-            page: "1",
-            pageSize: "12",
-          });
-          const rr = await fetch(`/api/food-explorer?${params}`);
-          if (!rr.ok) throw new Error("search failed");
-          const j = (await rr.json()) as {
-            items?: Array<{
-              id: string;
-              name: string;
-              calories: number;
-              protein: number;
-              carbs: number;
-              fat: number;
-              category: string;
-            }>;
-          };
-          const items = j.items ?? [];
-          if (items.length === 0) {
-            setMessages((m) => [
-              ...m,
-              { role: "assistant", text: "לא מצאתי במאגר המאומת משהו שמתאים לזה. רוצה לנסות מילה אחרת?" },
-            ]);
-          } else {
-            const slice = items.slice(0, 6).map((row) => ({
-              id: row.id,
-              name: row.name,
-              calories: row.calories,
-              protein: row.protein,
-              carbs: row.carbs,
-              fat: row.fat,
-              category: row.category,
-            }));
-            setMessages((m) => [
-              ...m,
-              {
-                role: "assistant",
-                text: gf(
-                  gender,
-                  "הנה כמה הצעות מהמאגר המאומת — הערכים ל־100 גרם. אפשר להוסיף ליומן היום, לשמור במילון, או לשלוח לרשימת הקניות:",
-                  "הנה כמה הצעות מהמאגר המאומת — הערכים ל־100 גרם. אפשר להוסיף ליומן היום, לשמור במילון, או לשלוח לרשימת הקניות:"
-                ),
-                verifiedSuggestions: slice,
-              },
-            ]);
-            setActions((prev) => [
-              ...prev.filter((a) => a.type !== "open"),
-              {
-                type: "open",
-                label: "פתח מגלה המזונות",
-                payload: {
-                  href: `/explorer`,
-                },
-              },
-            ]);
-          }
-        } catch {
-          setMessages((m) => [
-            ...m,
-            {
-              role: "assistant",
-              text: "לא הצלחתי למשוך תוצאות מהמאגר המאומת כרגע. נסי שוב בעוד רגע.",
-            },
-          ]);
-        }
-      }
+      setMessages((m) => [
+        ...m,
+        {
+          role: "assistant",
+          text: data.result!.reply,
+          ...(cards.length > 0 ? { verifiedSuggestions: cards } : {}),
+        },
+      ]);
       // Save lightweight memory hint: last topic.
       try {
         await saveAssistantMemory({ notes: `last: ${text.slice(0, 120)}` });
@@ -519,41 +629,102 @@ export function AssistantClient() {
     }
   }
 
-  function onVerifiedJournal(item: VerifiedFoodItem) {
+  function per100FromPortion(item: FoodSuggestionCard): {
+    calories: number;
+    protein: number;
+    carbs: number;
+    fat: number;
+    displayName: string;
+  } {
+    if (item.journalFoodLabel?.trim()) {
+      const base = item.journalFoodLabel.trim();
+      const g = item.estimatedGrams;
+      if (item.isPortionTotals && g != null && g > 0) {
+        const f = 100 / g;
+        return {
+          calories: Math.max(1, Math.round(item.calories * f)),
+          protein: Math.round(item.protein * f * 10) / 10,
+          carbs: Math.round(item.carbs * f * 10) / 10,
+          fat: Math.round(item.fat * f * 10) / 10,
+          displayName: base,
+        };
+      }
+      return {
+        calories: Math.max(1, Math.round(item.calories)),
+        protein: Math.round(item.protein * 10) / 10,
+        carbs: Math.round(item.carbs * 10) / 10,
+        fat: Math.round(item.fat * 10) / 10,
+        displayName: base,
+      };
+    }
+    const label = item.portionLabel?.trim();
+    const displayName =
+      label && !item.name.includes(label) ? `${item.name.trim()} (${label})` : item.name.trim();
+    const g = item.estimatedGrams;
+    if (item.isPortionTotals && g != null && g > 0) {
+      const f = 100 / g;
+      return {
+        calories: Math.max(1, Math.round(item.calories * f)),
+        protein: Math.round(item.protein * f * 10) / 10,
+        carbs: Math.round(item.carbs * f * 10) / 10,
+        fat: Math.round(item.fat * f * 10) / 10,
+        displayName,
+      };
+    }
+    return {
+      calories: Math.max(1, Math.round(item.calories)),
+      protein: Math.round(item.protein * 10) / 10,
+      carbs: Math.round(item.carbs * 10) / 10,
+      fat: Math.round(item.fat * 10) / 10,
+      displayName,
+    };
+  }
+
+  function onCardJournal(item: FoodSuggestionCard) {
     const dateKey = getTodayKey();
-    const entry = logEntryFromVerifiedPer100g(item);
+    const entry = logEntryFromFoodCard(item);
     const existing = getEntriesForDate(dateKey);
     saveDayLogEntries(dateKey, [entry, ...existing]);
-    setToast(
+    emitMealLoggedFeedback(
       gf(
         gender,
-        "נוסף ליומן היום (100 גרם). הגרפים בבית מתעדכנים מיד.",
-        "נוסף ליומן היום (100 גרם). הגרפים בבית מתעדכנים מיד."
+        item.isAggregatedMeal
+          ? "נוספה ארוחה אחת ליומן (סיכום). הגרפים בבית מתעדכנים מיד."
+          : item.isPortionTotals
+            ? "נוסף ליומן היום לפי אומדן המנה. הגרפים בבית מתעדכנים מיד."
+            : "נוסף ליומן היום (100 גרם). הגרפים בבית מתעדכנים מיד.",
+        item.isAggregatedMeal
+          ? "נוספה ארוחה אחת ליומן (סיכום). הגרפים בבית מתעדכנים מיד."
+          : item.isPortionTotals
+            ? "נוסף ליומן היום לפי אומדן המנה. הגרפים בבית מתעדכנים מיד."
+            : "נוסף ליומן היום (100 גרם). הגרפים בבית מתעדכנים מיד."
       )
     );
   }
 
-  function onVerifiedDictionary(item: VerifiedFoodItem) {
+  function onCardDictionary(item: FoodSuggestionCard) {
+    const p = per100FromPortion(item);
     upsertExplorerFoodInDictionary({
       id: item.id,
-      name: item.name,
-      calories: item.calories,
-      protein: item.protein,
-      fat: item.fat,
-      carbs: item.carbs,
+      name: p.displayName,
+      calories: p.calories,
+      protein: p.protein,
+      fat: p.fat,
+      carbs: p.carbs,
     });
     setToast(gf(gender, "נשמר במילון האישי.", "נשמר במילון האישי."));
   }
 
-  function onVerifiedShopping(item: VerifiedFoodItem) {
+  function onCardShopping(item: FoodSuggestionCard) {
+    const p = per100FromPortion(item);
     const added = addToShopping({
       foodId: item.id,
-      name: item.name,
+      name: p.displayName,
       category: item.category,
-      calories: item.calories,
-      protein: item.protein,
-      carbs: item.carbs,
-      fat: item.fat,
+      calories: p.calories,
+      protein: p.protein,
+      carbs: p.carbs,
+      fat: p.fat,
     });
     setToast(
       added
@@ -617,9 +788,9 @@ export function AssistantClient() {
                   <VerifiedSuggestionsCards
                     items={m.verifiedSuggestions}
                     gender={gender}
-                    onJournal={onVerifiedJournal}
-                    onDictionary={onVerifiedDictionary}
-                    onShopping={onVerifiedShopping}
+                    onJournal={onCardJournal}
+                    onDictionary={onCardDictionary}
+                    onShopping={onCardShopping}
                   />
                 )}
             </div>
@@ -636,9 +807,20 @@ export function AssistantClient() {
                   type="button"
                   className="rounded-full border-2 border-[var(--border-cherry-soft)] bg-white px-3 py-2 text-xs font-bold text-[var(--stem)] shadow-sm transition hover:bg-[var(--cherry-muted)] active:scale-[0.99]"
                   onClick={() => {
-                    if (a.type === "open") window.location.assign(a.payload.href);
-                    else if (a.type === "log_ai_meal") window.location.assign(`/add-food-ai?date=${encodeURIComponent(getTodayKey())}`);
-                    else window.location.assign(`/add-food?date=${encodeURIComponent(getTodayKey())}`);
+                    const dk = encodeURIComponent(getTodayKey());
+                    if (a.type === "open") {
+                      window.location.assign(a.payload.href);
+                    } else if (a.type === "log_ai_meal") {
+                      const t = encodeURIComponent(
+                        (a as Extract<AssistantAction, { type: "log_ai_meal" }>).payload
+                          ?.text ?? ""
+                      );
+                      window.location.assign(
+                        `/add-food-ai?date=${dk}${t ? `&meal=${t}` : ""}`
+                      );
+                    } else {
+                      window.location.assign(`/add-food?date=${dk}`);
+                    }
                   }}
                 >
                   {a.label}
@@ -677,6 +859,21 @@ export function AssistantClient() {
           >
             {busy ? "…" : "שלח"}
           </button>
+        </div>
+
+        <div className="mt-3 flex flex-wrap justify-center gap-x-4 gap-y-1 text-center text-xs font-semibold text-[var(--cherry)]">
+          <Link
+            href={`/add-food?date=${encodeURIComponent(getTodayKey())}`}
+            className="underline-offset-2 hover:underline"
+          >
+            {gf(gender, "מעבר להוספת מזון ליומן", "מעבר להוספת מזון ליומן")}
+          </Link>
+          <Link
+            href={`/add-food-ai?date=${encodeURIComponent(getTodayKey())}`}
+            className="underline-offset-2 hover:underline"
+          >
+            {gf(gender, "רישום ארוחה במסך ה-AI", "רישום ארוחה במסך ה-AI")}
+          </Link>
         </div>
       </div>
     </div>

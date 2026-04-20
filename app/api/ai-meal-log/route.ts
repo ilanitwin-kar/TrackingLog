@@ -67,6 +67,8 @@ type MealBreakdownRow = {
 type MealResult = {
   kind: "result";
   original: string;
+  /** שם נקי ליומן/מילון — רק המנה, בלי הקשר חברתי */
+  displayName: string;
   totals: {
     calories: number;
     protein: number;
@@ -118,6 +120,10 @@ function normalize(parsed: unknown, original: string): MealResult | MealQuestion
   }
   if (kind !== "result") return null;
 
+  const displayRaw = String(
+    o.display_name ?? o.product_name ?? o.meal_title ?? ""
+  ).trim();
+
   const totalsRaw = o.totals;
   const totalsObj =
     totalsRaw && typeof totalsRaw === "object" ? (totalsRaw as Record<string, unknown>) : {};
@@ -145,9 +151,18 @@ function normalize(parsed: unknown, original: string): MealResult | MealQuestion
     });
   }
 
+  let displayName = displayRaw.replace(/^["']|["']$/g, "").trim();
+  if (!displayName && breakdown.length > 0) {
+    displayName = breakdown[0]!.item.trim();
+  }
+  if (!displayName) {
+    displayName = "ארוחה";
+  }
+
   return {
     kind: "result",
     original,
+    displayName,
     totals: {
       calories: Math.round(calories),
       protein: Math.round(protein * 10) / 10,
@@ -214,13 +229,18 @@ export async function POST(req: Request) {
     `- If critical info is missing and can change totals by more than 20%, DO NOT guess. Return a friendly follow-up question instead.\n` +
     `- Otherwise, compute totals and a transparent breakdown.\n\n` +
     `Important rules:\n` +
+    `- If the user already stated a concrete amount (numbers + unit such as גרם/יחידה/כוס/מנה/פרוסה/כף/חצי/שליש/רבע/כפות/יחידות, or "100ג", "2 יחידות"), treat it as authoritative. Do NOT ask again "how much" for that same item unless the text is contradictory.\n` +
+    `- Ask at most ONE follow-up question per round, targeting the single biggest uncertainty (e.g. cooking method, oil, brand size) — not a questionnaire.\n` +
+    `- In breakdown[].qty, echo the assumed or stated portion in short Hebrew (e.g. "100 גרם", "1 יחידה").\n` +
     `- Common shorthand assumptions (DO NOT ask grams for these):\n` +
     `  - "חצי בננה" => assume ~50g edible banana.\n` +
     `  - If user gives a clear fraction/portion for a common single item, use a reasonable standard portion instead of asking.\n` +
     `- Output ONLY valid JSON. No markdown.\n` +
     `- Units: totals are for the whole meal as eaten.\n` +
     `- If user mentions \"מסעדה\" / restaurant / takeout, include a reasonable extra oil/butter factor typical of restaurant dishes.\n` +
-    `- If user mentions vague quantities (\"ביס\", \"חופן\", \"קצת\", \"מעט\"), ask clarification unless the impact is clearly <20%.\n\n` +
+    `- If user mentions vague quantities (\"ביס\", \"חופן\", \"קצת\", \"מעט\"), ask clarification unless the impact is clearly <20%.\n` +
+    `- CRITICAL — display_name (Hebrew): In final results you MUST include \"display_name\": a SHORT label with ONLY the dish/product name for the journal (e.g. \"רביולי מוקרם עם פטריות\", \"סלט קיסר\"). Do NOT put user chatter in display_name (no \"אני במסעדה\", \"אכלתי צלחת שלמה\", \"מתה מרעב\", etc.). That extra text is context for calculation only; it must NOT appear in display_name.\n` +
+    `- breakdown[].item should also name foods only (no narrative).\n\n` +
     `Conversation:\n` +
     `- If mode is \"start\": analyze the meal text.\n` +
     `- If mode is \"answer\": you already asked a question; incorporate the answer and finalize.\n\n` +
@@ -228,7 +248,7 @@ export async function POST(req: Request) {
     `1) Follow-up needed:\n` +
     `{ \"kind\": \"question\", \"question\": \"...Hebrew question...\" }\n\n` +
     `2) Final result:\n` +
-    `{ \"kind\": \"result\", \"totals\": { \"calories\": 0, \"protein\": 0, \"carbs\": 0, \"fat\": 0 }, \"breakdown\": [ { \"item\": \"\", \"qty\": \"\", \"calories\": 0, \"protein\": 0, \"carbs\": 0, \"fat\": 0 } ], \"notes\": \"optional\" }\n`;
+    `{ \"kind\": \"result\", \"display_name\": \"שם המנה בלבד\", \"totals\": { \"calories\": 0, \"protein\": 0, \"carbs\": 0, \"fat\": 0 }, \"breakdown\": [ { \"item\": \"\", \"qty\": \"\", \"calories\": 0, \"protein\": 0, \"carbs\": 0, \"fat\": 0 } ], \"notes\": \"optional\" }\n`;
 
   const userPrompt =
     `User original meal text:\n` + `\"\"\"${safeOriginal}\"\"\"\n` + answerBlock;

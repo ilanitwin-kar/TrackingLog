@@ -9,15 +9,20 @@ import {
   useMemo,
   useRef,
   useState,
+  type KeyboardEvent,
+  type ReactNode,
 } from "react";
-import {
-  loadAssistantInsightForBubble,
-  resolveHomeInsightBubbleText,
-} from "@/lib/assistantInsight";
+import { resolveHomeInsightBubbleText } from "@/lib/assistantInsight";
+import { emitEntryDeletedFeedback } from "@/lib/feedbackEvents";
 import type { AppVariant } from "@/lib/appVariant";
-import { stepsForKcal, walkMinutesForKcal } from "@/lib/burnOffset";
+import { kcalBurnedFromStepsMet35, met35OffsetWalkPlan } from "@/lib/burnOffset";
 import { formatWalkingMinutes } from "@/lib/formatWalkDuration";
 import { addDaysToDateKey, getTodayKey } from "@/lib/dateKey";
+import {
+  loadExerciseActivityDay,
+  saveExerciseActivityDay,
+  type ExerciseActivityDay,
+} from "@/lib/exerciseActivity";
 import {
   type FoodUnit,
   type LogEntry,
@@ -167,18 +172,28 @@ function formatDateKeyHe(dateKey: string): string {
 function CalorieHeroRing({
   target,
   total,
+  walkBurnKcal = 0,
+  gender,
 }: {
   target: number;
   total: number;
+  walkBurnKcal?: number;
+  gender: UserProfile["gender"];
 }) {
   const remaining = target > 0 ? Math.max(0, target - total) : 0;
-  const over = target > 0 && total > target ? total - target : 0;
+  const grossOver = target > 0 && total > target ? total - target : 0;
+  const netOver = Math.max(0, grossOver - walkBurnKcal);
+  const clearedByWalk = grossOver > 0 && netOver <= 0;
   const pct = target > 0 ? Math.min(100, (total / target) * 100) : 0;
   const size = 200;
   const stroke = 12;
   const r = (size - stroke) / 2;
   const c = 2 * Math.PI * r;
   const offset = c - (pct / 100) * c;
+  const ringTone =
+    grossOver <= 0 || clearedByWalk
+      ? "text-[var(--cherry)]"
+      : "text-[#b91c1c]";
   return (
     <div className="flex flex-col items-center py-2">
       <div className="relative mx-auto" style={{ width: size, height: size }}>
@@ -201,20 +216,20 @@ function CalorieHeroRing({
             cy={size / 2}
             r={r}
             fill="none"
-            className="text-[var(--cherry)]"
+            className={ringTone}
             stroke="currentColor"
             strokeWidth={stroke}
             strokeDasharray={c}
             strokeDashoffset={offset}
             strokeLinecap="round"
-            style={{ transition: "stroke-dashoffset 0.6s ease" }}
+            style={{ transition: "stroke-dashoffset 0.6s ease, color 0.35s ease" }}
           />
         </svg>
         <div
           className="absolute inset-0 flex flex-col items-center justify-center px-3 text-center"
           dir="rtl"
         >
-          {over <= 0 ? (
+          {grossOver <= 0 ? (
             <>
               <p className="text-[11px] font-bold uppercase tracking-wide text-[var(--stem)]/75">
                 נותרו בתקציב
@@ -224,13 +239,26 @@ function CalorieHeroRing({
               </p>
               <p className="text-sm font-semibold text-[var(--stem)]">קק״ל</p>
             </>
+          ) : clearedByWalk ? (
+            <>
+              <p className="text-[11px] font-bold text-[var(--cherry)]">
+                קיזוז הליכה
+              </p>
+              <p className="mt-1 px-1 text-[12px] font-bold leading-snug text-[var(--stem)] sm:text-sm">
+                {gf(
+                  gender,
+                  "כל הכבוד! החריגה קוזזה במלואה. את שוב במסלול! 🍒",
+                  "כל הכבוד! החריגה קוזזה במלואה. אתה שוב במסלול! 🫐"
+                )}
+              </p>
+            </>
           ) : (
             <>
               <p className="text-[11px] font-bold text-[var(--stem)]/75">
-                מעל היעד
+                מעל היעד (אחרי קיזוז)
               </p>
               <p className="text-3xl font-black tabular-nums leading-tight text-[#b91c1c] md:text-4xl">
-                +{Math.round(over)}
+                +{Math.round(netOver)}
               </p>
               <p className="text-sm font-semibold text-[var(--stem)]">קק״ל</p>
             </>
@@ -244,6 +272,11 @@ function CalorieHeroRing({
               </span>
             ) : null}
           </p>
+          {walkBurnKcal > 0 && grossOver > 0 ? (
+            <p className="mt-1 text-[10px] font-semibold text-[var(--stem)]/70">
+              קיזוז הליכה: −{walkBurnKcal} קק״ל
+            </p>
+          ) : null}
         </div>
       </div>
       <p className="mt-2 text-center text-sm font-semibold text-[var(--ui-home-daily-line)]">
@@ -257,21 +290,44 @@ function HomeAssistantInsightBubble({
   text,
   variant,
   gender,
+  offsetPlan,
+  children,
 }: {
   text: string;
   variant: AppVariant;
   gender: UserProfile["gender"];
+  offsetPlan: { steps: number; minutes: number } | null;
+  children?: ReactNode;
 }) {
   const router = useRouter();
   const cherry = variant === "cherry";
+  const [walkAck, setWalkAck] = useState(false);
+
+  useEffect(() => {
+    setWalkAck(false);
+  }, [offsetPlan?.steps, offsetPlan?.minutes]);
+
+  function goAssistant() {
+    router.push("/assistant");
+  }
+
+  function onCardKeyDown(e: KeyboardEvent<HTMLDivElement>) {
+    if (e.key === "Enter" || e.key === " ") {
+      e.preventDefault();
+      goAssistant();
+    }
+  }
+
   return (
-    <motion.button
-      type="button"
+    <motion.div
+      role="button"
+      tabIndex={0}
       initial={{ opacity: 0, y: 10 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.4, ease: "easeOut" }}
-      onClick={() => router.push("/assistant")}
-      className={`relative mx-auto mt-1 w-full max-w-md rounded-2xl border-2 px-3 py-3 text-start shadow-[0_6px_22px_rgba(0,0,0,0.08)] transition hover:brightness-[1.02] active:scale-[0.99] sm:px-4 sm:py-3.5 ${
+      onClick={goAssistant}
+      onKeyDown={onCardKeyDown}
+      className={`relative mx-auto mt-1 w-full max-w-md cursor-pointer rounded-2xl border-2 px-3 py-3 text-start shadow-[0_6px_22px_rgba(0,0,0,0.08)] transition hover:brightness-[1.02] active:scale-[0.99] sm:px-4 sm:py-3.5 ${
         cherry
           ? "border-pink-200/95 bg-gradient-to-br from-pink-50/98 via-rose-50/85 to-white/95"
           : "border-sky-300/80 bg-gradient-to-br from-sky-50/98 via-blue-50/80 to-white/95"
@@ -292,18 +348,50 @@ function HomeAssistantInsightBubble({
       <p className="mt-1 text-[13px] font-semibold leading-relaxed text-[var(--stem)] sm:text-sm">
         {text}
       </p>
+      {offsetPlan ? (
+        <div
+          className="mt-2 border-t border-[var(--border-cherry-soft)]/60 pt-2"
+          onClick={(e) => e.stopPropagation()}
+          onKeyDown={(e) => e.stopPropagation()}
+        >
+          <p className="text-[11px] font-semibold leading-snug text-[var(--stem)] sm:text-xs">
+            <span aria-hidden>👟 </span>
+            כדי לאזן את החריגה היום, נדרשת הליכה של כ־
+            {offsetPlan.steps.toLocaleString("he-IL")} צעדים (בערך{" "}
+            {formatWalkingMinutes(offsetPlan.minutes)} בקצב בינוני).
+          </p>
+          <button
+            type="button"
+            className="mt-2 w-full rounded-xl border border-[var(--border-cherry-soft)] bg-white/90 py-1.5 text-center text-[10px] font-extrabold text-[var(--stem)] shadow-sm transition hover:bg-[var(--cherry-muted)] sm:py-2 sm:text-[11px]"
+            onClick={(e) => {
+              e.stopPropagation();
+              setWalkAck(true);
+            }}
+          >
+            {walkAck
+              ? gf(gender, "מעולה, בהצלחה בדרך! ✨", "מעולה, בהצלחה! ✨")
+              : gf(
+                  gender,
+                  "נשמע טוב, אני יוצאת לדרך! 🚶‍♀️",
+                  "נשמע טוב, אני יוצא לדרך! 🚶‍♂️"
+                )}
+          </button>
+        </div>
+      ) : null}
+      {children}
       <p className="mt-2 text-center text-[11px] font-bold text-[var(--cherry)]">
         {gf(gender, "לשיחה עם העוזר ←", "לשיחה עם העוזר ←")}
       </p>
-    </motion.button>
+    </motion.div>
   );
 }
 
 const quickNavBtnClass =
   "flex min-h-[2.75rem] flex-1 min-w-0 items-center justify-center gap-2 rounded-2xl border-2 border-[var(--border-cherry-soft)] bg-white/75 px-2 py-2.5 text-xs font-semibold text-[var(--cherry)] shadow-[0_4px_14px_rgba(0,0,0,0.06)] backdrop-blur-sm transition hover:bg-[var(--cherry-muted)] active:scale-[0.99] sm:text-sm";
 
+/** כפתורי שורת הפעולות — שורה אופקית; לא לצמצם רוחב כדי שלא יידחפו כותרות */
 const foodToolbarBtnClass =
-  "inline-flex min-w-[2.65rem] flex-col items-center justify-center gap-0.5 rounded-xl border border-[var(--border-cherry-soft)] bg-white/95 px-1.5 py-1.5 text-[var(--stem)] shadow-sm transition hover:bg-[var(--cherry-muted)] disabled:cursor-not-allowed disabled:opacity-40";
+  "inline-flex min-h-[2.75rem] min-w-[2.75rem] flex-col items-center justify-center gap-0.5 rounded-xl border border-[var(--border-cherry-soft)] bg-white/95 px-2 py-1.5 text-[var(--stem)] shadow-sm transition hover:bg-[var(--cherry-muted)] disabled:cursor-not-allowed disabled:opacity-40";
 
 export function HomeClient() {
   const gender = loadProfile().gender;
@@ -342,7 +430,11 @@ export function HomeClient() {
   const [editUnit, setEditUnit] = useState<FoodUnit>("גרם");
   const [editLoading, setEditLoading] = useState(false);
   const [aiExpandedId, setAiExpandedId] = useState<string | null>(null);
-  const [insightBubbleText, setInsightBubbleText] = useState<string | null>(null);
+  const [exerciseDay, setExerciseDay] = useState<ExerciseActivityDay | null>(
+    null
+  );
+  const [stepsDraft, setStepsDraft] = useState("");
+  const [exerciseSaving, setExerciseSaving] = useState(false);
 
   const [journalClosedMap, setJournalClosedMap] = useState<
     Record<string, boolean>
@@ -461,30 +553,88 @@ export function HomeClient() {
     [gender, target, total]
   );
 
-  /** מעל 100% מהיעד (לטקסט חריגה / צעדים) — רק כשמוצגת אזהרת מעל 110% */
+  /** חריגה גולמית מהיעד (לפני קיזוז הליכה) */
   const overGoalKcal =
     target > 0 && total > target ? total - target : 0;
-  /** אזהרת מעל היעד רק מעל 110% מהיעד; בין 100% ל־110% — ללא חריגה, עדיין חגיגת 100% */
-  const showHarriga = target > 0 && total > target * 1.1;
   const isViewingToday = viewDateKey === getTodayKey();
 
+  const walkBurnKcal = useMemo(() => {
+    if (!profile || !exerciseDay) return 0;
+    return kcalBurnedFromStepsMet35(
+      exerciseDay.reportedSteps,
+      profile.weightKg
+    );
+  }, [profile, exerciseDay]);
+
+  const netOverKcal = useMemo(
+    () => Math.max(0, Math.round(overGoalKcal) - walkBurnKcal),
+    [overGoalKcal, walkBurnKcal]
+  );
+
+  const insightBubbleText = useMemo(
+    () => resolveHomeInsightBubbleText(gender, isViewingToday, netOverKcal),
+    [gender, isViewingToday, netOverKcal]
+  );
+
+  const calorieOffsetPlan = useMemo(() => {
+    if (!profile || !isViewingToday) return null;
+    const kcal = netOverKcal;
+    if (kcal <= 0) return null;
+    return met35OffsetWalkPlan(kcal, profile.weightKg);
+  }, [profile, isViewingToday, netOverKcal]);
+
   useEffect(() => {
-    const sync = () => {
-      const stored = loadAssistantInsightForBubble();
-      const overKcal =
-        target > 0 && total > target ? Math.round(total - target) : 0;
-      setInsightBubbleText(
-        resolveHomeInsightBubbleText(gender, stored, isViewingToday, overKcal)
-      );
-    };
-    sync();
-    window.addEventListener("cj-assistant-insight-updated", sync);
-    window.addEventListener("cj-profile-updated", sync);
+    if (!isViewingToday) {
+      setExerciseDay(null);
+      setStepsDraft("");
+      return;
+    }
+    let alive = true;
+    void (async () => {
+      const row = await loadExerciseActivityDay(getTodayKey());
+      if (!alive) return;
+      if (row && row.reportedSteps > 0) {
+        setExerciseDay(row);
+        setStepsDraft(String(row.reportedSteps));
+      } else {
+        setExerciseDay(row);
+        setStepsDraft(row ? String(row.reportedSteps) : "");
+      }
+    })();
     return () => {
-      window.removeEventListener("cj-assistant-insight-updated", sync);
-      window.removeEventListener("cj-profile-updated", sync);
+      alive = false;
     };
-  }, [gender, isViewingToday, total, target]);
+  }, [isViewingToday, viewDateKey]);
+
+  useEffect(() => {
+    if (!isViewingToday) return;
+    const onEx = () => {
+      void loadExerciseActivityDay(getTodayKey()).then((row) => {
+        setExerciseDay(row);
+        if (row) setStepsDraft(String(row.reportedSteps));
+      });
+    };
+    window.addEventListener("cj-exercise-activity-updated", onEx);
+    return () =>
+      window.removeEventListener("cj-exercise-activity-updated", onEx);
+  }, [isViewingToday]);
+
+  async function submitReportedSteps() {
+    if (!profile || !isViewingToday) return;
+    const raw = stepsDraft.replace(/[^\d]/g, "");
+    const n = parseInt(raw, 10);
+    if (!Number.isFinite(n) || n < 0) return;
+    setExerciseSaving(true);
+    try {
+      await saveExerciseActivityDay(getTodayKey(), n);
+      setExerciseDay({
+        reportedSteps: n,
+        updatedAt: new Date().toISOString(),
+      });
+    } finally {
+      setExerciseSaving(false);
+    }
+  }
 
   const triggerCelebration = useCallback((type: "half" | "full") => {
     const message =
@@ -586,6 +736,7 @@ export function HomeClient() {
   function removeEntry(id: string) {
     if (isDayClosed) return;
     persistEntries(entries.filter((x) => x.id !== id));
+    emitEntryDeletedFeedback();
   }
 
   function duplicateEntry(item: LogEntry) {
@@ -707,6 +858,20 @@ export function HomeClient() {
       </div>
     );
   }
+
+  const showAssistantBubble =
+    isViewingToday &&
+    (insightBubbleText != null ||
+      Math.round(overGoalKcal) > 0 ||
+      (exerciseDay?.reportedSteps ?? 0) > 0);
+
+  const bubbleMainText =
+    insightBubbleText ??
+    gf(
+      gender,
+      "דיווח צעדים למטה מחשב קיזוז לפי MET 3.5 ומעדכן את הגרף.",
+      "דיווח צעדים למטה מחשב קיזוז לפי MET 3.5 ומעדכן את הגרף."
+    );
 
   return (
     <div className="mx-auto max-w-lg px-4 pb-32 pt-6 md:pt-10" dir="rtl">
@@ -930,14 +1095,63 @@ export function HomeClient() {
           </div>
         </div>
 
-        <CalorieHeroRing target={target} total={total} />
+        <CalorieHeroRing
+          target={target}
+          total={total}
+          walkBurnKcal={walkBurnKcal}
+          gender={gender}
+        />
 
-        {insightBubbleText ? (
+        {showAssistantBubble ? (
           <HomeAssistantInsightBubble
-            text={insightBubbleText}
+            text={bubbleMainText}
             variant={appVariant}
             gender={gender}
-          />
+            offsetPlan={calorieOffsetPlan}
+          >
+            {Math.round(overGoalKcal) > 0 ||
+            (exerciseDay?.reportedSteps ?? 0) > 0 ? (
+              <div
+                className="mt-2 border-t border-[var(--border-cherry-soft)]/60 pt-2"
+                onClick={(e) => e.stopPropagation()}
+                onKeyDown={(e) => e.stopPropagation()}
+              >
+                <p className="text-[10px] font-extrabold text-[var(--stem)]/65">
+                  דיווח צעדים 👟
+                </p>
+                <div className="mt-1 flex flex-wrap items-stretch gap-1.5">
+                  <input
+                    type="text"
+                    inputMode="numeric"
+                    value={stepsDraft}
+                    onChange={(e) =>
+                      setStepsDraft(e.target.value.replace(/[^\d]/g, ""))
+                    }
+                    placeholder="0"
+                    className="min-w-0 flex-1 rounded-lg border border-[var(--border-cherry-soft)] bg-white/95 px-2 py-1.5 text-sm tabular-nums"
+                    aria-label="מספר צעדים שבוצעו"
+                  />
+                  <button
+                    type="button"
+                    disabled={exerciseSaving}
+                    className="shrink-0 rounded-lg bg-[var(--cherry)] px-3 py-1.5 text-[11px] font-extrabold text-white shadow-sm transition hover:brightness-105 disabled:opacity-50"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      void submitReportedSteps();
+                    }}
+                  >
+                    {exerciseSaving ? "…" : "עדכן"}
+                  </button>
+                </div>
+                {(exerciseDay?.reportedSteps ?? 0) > 0 ? (
+                  <p className="mt-1 text-[10px] font-semibold leading-snug text-[var(--stem)]/85">
+                    {exerciseDay!.reportedSteps.toLocaleString("he-IL")} צעדים ≈{" "}
+                    {walkBurnKcal} קק״ל קיזוז
+                  </p>
+                ) : null}
+              </div>
+            ) : null}
+          </HomeAssistantInsightBubble>
         ) : null}
 
         {dailyMotivationLine ? (
@@ -964,10 +1178,10 @@ export function HomeClient() {
                 key={label}
                 className="flex min-w-0 flex-col rounded-xl border-2 border-[var(--border-cherry-soft)] bg-white/90 px-1.5 py-2 shadow-sm sm:rounded-2xl sm:px-3 sm:py-3"
               >
-                <p className="text-center text-[9px] font-semibold leading-tight text-[var(--cherry)] sm:text-sm">
+                <p className="text-center text-[13px] font-semibold leading-tight text-[var(--cherry)] sm:text-sm">
                   {label}
                 </p>
-                <p className="mt-0.5 text-center text-[11px] font-bold tabular-nums leading-tight text-[var(--stem)] sm:mt-1 sm:text-base">
+                <p className="mt-0.5 text-center text-[13px] font-bold tabular-nums leading-tight text-[var(--stem)] sm:mt-1 sm:text-base">
                   {Math.round(consumed)}ג/{Math.round(goal)}ג
                 </p>
                 <div className="mt-2 h-1 overflow-hidden rounded-full bg-[#f0f0f0] sm:mt-4 sm:h-2.5">
@@ -1035,39 +1249,6 @@ export function HomeClient() {
           אינטליגנציה קלורית
         </h1>
       </motion.div>
-
-      {showHarriga && (
-        <motion.section
-          className="glass-panel mb-6 p-4"
-          initial={{ opacity: 0, y: 8 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.05 }}
-        >
-          <motion.div
-            className="rounded-xl border-[3px] border-[#d4848c] bg-[#fff0f1] p-4 shadow-sm md:p-5"
-            initial={{ opacity: 0, height: 0 }}
-            animate={{ opacity: 1, height: "auto" }}
-          >
-            <h3 className="text-center text-3xl font-extrabold leading-snug tracking-tight text-[var(--ui-home-over-budget-h3)] md:text-4xl">
-              מעל היעד – זה מצב זמני
-            </h3>
-            <p
-              className="mt-5 text-[15px] font-medium leading-[1.75] tracking-[0.01em] text-[var(--text)] antialiased md:text-base md:leading-[1.8]"
-              style={{ fontFeatureSettings: '"kern" 1, "liga" 1' }}
-            >
-              חריגה של {Math.round(overGoalKcal)} קק״ל.{" "}
-              <strong className="font-semibold text-[#1f1f1f]">
-                יום אחד לא מגדיר אותך
-              </strong>
-              . אפשר לאזן את החריגה על ידי פריסה של הקלוריות במהלך השבוע הקרוב,
-              או בפעילות ממוקדת של כ־
-              {stepsForKcal(overGoalKcal).toLocaleString("he-IL")} צעדים (שהם
-              כ־{formatWalkingMinutes(walkMinutesForKcal(overGoalKcal))} הליכה
-              בקצב בינוני).
-            </p>
-          </motion.div>
-        </motion.section>
-      )}
 
       {starredForMealCount >= 2 && !isDayClosed && (
         <motion.div
@@ -1212,23 +1393,19 @@ export function HomeClient() {
                   transition={{
                     layout: { type: "spring", damping: 28, stiffness: 400 },
                   }}
-                  className={`flex flex-wrap items-center gap-2 rounded-xl border-2 border-[var(--border-cherry-soft)] bg-white px-3 py-3 ${isDayClosed ? "opacity-85" : ""}`}
+                  className={`flex flex-col rounded-xl border-2 border-[var(--border-cherry-soft)] bg-white px-3 py-3 ${isDayClosed ? "opacity-85" : ""}`}
                 >
-                  <div className="min-w-0 flex-1">
-                    <button
-                      type="button"
-                      className="w-full text-start"
-                      onClick={() => {
-                        if (!isAiMeal || !aiRows) return;
-                        setAiExpandedId((x) => (x === item.id ? null : item.id));
-                      }}
-                    >
-                      <p className="flex flex-wrap items-center gap-1 font-semibold text-[var(--text)]">
-                        {isAiMeal && (
-                          <span className="inline-flex items-center gap-1 rounded-md border border-[var(--border-cherry-soft)] bg-white px-2 py-0.5 text-[10px] font-extrabold text-[var(--cherry)]">
-                            🤖 ארוחת AI
-                          </span>
-                        )}
+                  {/*
+                    LOCKED journal meal card layout (do not revert to side toolbar):
+                    flex-col — כותרת ומאקרו ברוחב מלא; פס פעולות אופקי למטה בלבד.
+                  */}
+                  <div className="flex min-w-0 w-full flex-col gap-2">
+                    <div className="flex flex-wrap items-center gap-1.5">
+                      {isAiMeal && (
+                        <span className="inline-flex items-center gap-1 rounded-md border border-[var(--border-cherry-soft)] bg-white px-2 py-0.5 text-[10px] font-extrabold text-[var(--cherry)]">
+                          🤖 ארוחת AI
+                        </span>
+                      )}
                       {item.verified && (
                         <span
                           className="inline-flex shrink-0 items-center gap-1"
@@ -1240,15 +1417,32 @@ export function HomeClient() {
                           </span>
                         </span>
                       )}
-                        <span className="min-w-0">{item.food}</span>
-                        {isAiMeal && aiRows ? (
-                          <span className="ms-auto text-xs font-bold text-[var(--stem)]/55">
+                    </div>
+
+                    {isAiMeal && aiRows ? (
+                      <button
+                        type="button"
+                        className="w-full max-w-full text-start"
+                        onClick={() => {
+                          setAiExpandedId((x) => (x === item.id ? null : item.id));
+                        }}
+                      >
+                        <span className="flex w-full max-w-full items-start justify-between gap-2">
+                          <span className="min-w-0 flex-1 break-words text-base font-semibold leading-snug text-[var(--text)]">
+                            {item.food}
+                          </span>
+                          <span className="shrink-0 pt-0.5 text-xs font-bold text-[var(--stem)]/55">
                             {aiExpandedId === item.id ? "▲" : "▼"}
                           </span>
-                        ) : null}
+                        </span>
+                      </button>
+                    ) : (
+                      <p className="w-full max-w-full break-words text-base font-semibold leading-snug text-[var(--text)]">
+                        {item.food}
                       </p>
-                    </button>
-                    <p className="text-sm text-[var(--text)]/80">
+                    )}
+
+                    <p className="w-full text-sm text-[var(--text)]/80">
                       {formatEntryTime(item.createdAt) ? (
                         <>
                           <span className="tabular-nums font-medium text-[var(--text)]">
@@ -1260,13 +1454,13 @@ export function HomeClient() {
                       {formatQtyLabel(item.quantity, item.unit)} {item.unit} ·{" "}
                       {item.calories} קק״ל
                     </p>
-                    <p className="text-xs text-[var(--text)]/65">
+                    <p className="w-full text-xs text-[var(--text)]/65">
                       חלבון {formatMacroCell(item.proteinG)} · פחמימות{" "}
                       {formatMacroCell(item.carbsG)} · שומן{" "}
                       {formatMacroCell(item.fatG)}
                     </p>
                     {isAiMeal && aiRows && aiExpandedId === item.id && (
-                      <div className="mt-3 rounded-xl border border-[var(--border-cherry-soft)] bg-white/80 p-3 text-sm">
+                      <div className="mt-1 w-full rounded-xl border border-[var(--border-cherry-soft)] bg-white/80 p-3 text-sm">
                         <p className="mb-2 text-xs font-extrabold text-[var(--cherry)]">
                           פירוט חישוב ה-AI
                         </p>
@@ -1289,7 +1483,12 @@ export function HomeClient() {
                       </div>
                     )}
                   </div>
-                  <div className="flex max-w-full shrink-0 flex-wrap items-start justify-end gap-1.5">
+
+                  <div
+                    role="toolbar"
+                    aria-label="פעולות על המנה"
+                    className="mt-3 flex w-full max-w-full flex-wrap items-center justify-center gap-2 border-t border-[var(--border-cherry-soft)]/60 bg-gradient-to-b from-[var(--cherry-muted)]/35 to-transparent px-1 py-2.5 sm:gap-3"
+                  >
                     <button
                       type="button"
                       className={foodToolbarBtnClass}

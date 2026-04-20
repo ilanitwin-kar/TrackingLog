@@ -2,6 +2,9 @@
   "name": "calorie-journal-he",
   "version": "0.1.0",
   "private": true,
+  "engines": {
+    "node": ">=20.0.0"
+  },
   "scripts": {
     "free-port": "node scripts/free-port.js",
     "dev": "node scripts/free-port.js 3000 && next dev --turbopack -H 127.0.0.1 -p 3000",
@@ -22,9 +25,11 @@
     "next": "^15.1.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
-    "recharts": "^3.8.1"
+    "recharts": "^3.8.1",
+    "use-sound": "^4.0.3"
   },
   "devDependencies": {
+    "@netlify/plugin-nextjs": "^5.14.5",
     "@tailwindcss/postcss": "^4.0.0",
     "@types/iconv-lite": "^0.0.1",
     "@types/node": "^22.10.0",

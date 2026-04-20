@@ -6,7 +6,7 @@ export const APP_KNOWLEDGE_HE = `
 - הוספת מזון (חיפוש רגיל): "/add-food" — חיפוש במאגר המאומת + OpenFoodFacts, הוספה ליומן/מילון.
 - הוספת מזון (AI ארוחה): "/add-food-ai" — רישום ארוחה חופשי ב-AI.
 - מגלה המזונות: "/explorer" — חיפוש/סינון במאגר המאומת של העסק ("אינטליגנציה קלורית").
-- מילון אישי: "/dictionary" — קבועים/מועדפים.
+- מילון אישי: "/dictionary" — חיפוש אחד מסנן את המילון האישי ומציג למטה תוצאות מהמאגר הפנימי ("/api/food-explorer") ומ־Open Food Facts ("/api/openfoodfacts-search"), כמו החיפוש המאוחד בבית.
 - רשימת קניות: "/shopping" וגם "/shopping-list" — סל קניות.
 - סיכום יומי: "/daily-summary".
 - העוזר: "/assistant".

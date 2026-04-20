@@ -20,9 +20,35 @@ type AssistantAction =
       };
     };
 
+type NutritionCardJson = {
+  id?: string;
+  name?: string;
+  portionLabel?: string;
+  estimatedGrams?: number | null;
+  calories?: number;
+  protein?: number;
+  carbs?: number;
+  fat?: number;
+};
+
+/** סיכום ארוחה אחד — סה״כ לארוחה שלמה (לא רכיב-רכיב) */
+type MealSummaryJson = {
+  shortTitle: string;
+  totalCalories: number;
+  totalProtein: number;
+  totalCarbs: number;
+  totalFat: number;
+  portionLabel?: string;
+  estimatedGrams?: number | null;
+};
+
 type AssistantResponse = {
   reply: string;
   actions?: AssistantAction[];
+  /** @deprecated — רק גיבוי; העדף mealSummary */
+  nutritionCards?: NutritionCardJson[];
+  /** סיכום מאוחד יחיד לארוחה */
+  mealSummary?: MealSummaryJson | null;
 };
 
 type ChatTurn = { role: "user" | "assistant"; text: string };
@@ -33,6 +59,117 @@ function safeJson<T>(raw: string): T | null {
   } catch {
     return null;
   }
+}
+
+function clamp(n: number, lo: number, hi: number): number {
+  if (!Number.isFinite(n)) return lo;
+  return Math.min(hi, Math.max(lo, n));
+}
+
+function sanitizeNutritionCards(raw: unknown): NutritionCardJson[] {
+  if (!Array.isArray(raw)) return [];
+  const out: NutritionCardJson[] = [];
+  for (const x of raw) {
+    if (out.length >= 6) break;
+    if (!x || typeof x !== "object") continue;
+    const o = x as Record<string, unknown>;
+    const name = typeof o.name === "string" ? o.name.trim() : "";
+    if (name.length < 1 || name.length > 120) continue;
+    const portionLabel =
+      typeof o.portionLabel === "string" ? o.portionLabel.trim().slice(0, 80) : undefined;
+    let g: number | null = null;
+    if (typeof o.estimatedGrams === "number" && Number.isFinite(o.estimatedGrams)) {
+      g = clamp(Math.round(o.estimatedGrams), 1, 5000);
+    }
+    const calories = clamp(Math.round(Number(o.calories) || 0), 1, 12000);
+    const protein = clamp(Number(o.protein) || 0, 0, 500);
+    const carbs = clamp(Number(o.carbs) || 0, 0, 500);
+    const fat = clamp(Number(o.fat) || 0, 0, 500);
+    const id =
+      typeof o.id === "string" && o.id.trim().length > 0
+        ? o.id.trim().slice(0, 64)
+        : `card-${out.length}`;
+    out.push({
+      id,
+      name,
+      portionLabel: portionLabel || undefined,
+      estimatedGrams: g,
+      calories,
+      protein,
+      carbs,
+      fat,
+    });
+  }
+  return out;
+}
+
+function sanitizeMealSummary(raw: unknown): MealSummaryJson | null {
+  if (!raw || typeof raw !== "object") return null;
+  const o = raw as Record<string, unknown>;
+  const shortTitle = String(o.shortTitle ?? o.name ?? "")
+    .trim()
+    .slice(0, 80);
+  if (shortTitle.length < 1) return null;
+  const tc = clamp(Math.round(Number(o.totalCalories ?? o.calories) || 0), 1, 25000);
+  const tp = clamp(Number(o.totalProtein ?? o.protein) || 0, 0, 800);
+  const tcb = clamp(Number(o.totalCarbs ?? o.carbs) || 0, 0, 800);
+  const tf = clamp(Number(o.totalFat ?? o.fat) || 0, 0, 800);
+  const portionLabel =
+    typeof o.portionLabel === "string" ? o.portionLabel.trim().slice(0, 80) : undefined;
+  let g: number | null = null;
+  if (typeof o.estimatedGrams === "number" && Number.isFinite(o.estimatedGrams)) {
+    g = clamp(Math.round(o.estimatedGrams), 1, 8000);
+  }
+  return {
+    shortTitle,
+    totalCalories: tc,
+    totalProtein: tp,
+    totalCarbs: tcb,
+    totalFat: tf,
+    portionLabel: portionLabel || undefined,
+    estimatedGrams: g,
+  };
+}
+
+/** גיבוי: אם המודל עדיין מחזיר מערך רכיבים — ממזגים לסיכום אחד */
+function aggregateCardsToMealSummary(cards: NutritionCardJson[]): MealSummaryJson | null {
+  if (cards.length === 0) return null;
+  let tc = 0;
+  let tp = 0;
+  let tcb = 0;
+  let tf = 0;
+  let tg = 0;
+  const names: string[] = [];
+  for (const c of cards) {
+    tc += Number(c.calories) || 0;
+    tp += Number(c.protein) || 0;
+    tcb += Number(c.carbs) || 0;
+    tf += Number(c.fat) || 0;
+    if (c.estimatedGrams != null) tg += c.estimatedGrams;
+    if (c.name) names.push(c.name);
+  }
+  const joined = names.slice(0, 4).join(" · ");
+  const shortTitle =
+    names.length <= 1
+      ? (names[0] ?? "ארוחה").slice(0, 80)
+      : `${joined}${names.length > 4 ? "…" : ""}`.slice(0, 80);
+  return {
+    shortTitle: shortTitle || "ארוחה",
+    totalCalories: clamp(Math.round(tc), 1, 25000),
+    totalProtein: clamp(tp, 0, 800),
+    totalCarbs: clamp(tcb, 0, 800),
+    totalFat: clamp(tf, 0, 800),
+    estimatedGrams: tg > 0 ? clamp(Math.round(tg), 1, 8000) : null,
+  };
+}
+
+function resolveMealSummary(
+  parsed: AssistantResponse,
+  legacyCards: NutritionCardJson[]
+): MealSummaryJson | null {
+  const direct = sanitizeMealSummary(parsed.mealSummary);
+  if (direct) return direct;
+  return aggregateCardsToMealSummary(legacyCards);
 }
 
 export async function POST(req: Request) {
@@ -48,7 +185,12 @@ export async function POST(req: Request) {
     memory?: unknown;
   };
   try {
-    body = (await req.json()) as { message?: string; history?: ChatTurn[]; snapshot?: unknown; memory?: unknown };
+    body = (await req.json()) as {
+      message?: string;
+      history?: ChatTurn[];
+      snapshot?: unknown;
+      memory?: unknown;
+    };
   } catch {
     return NextResponse.json({ error: "Invalid JSON" }, { status: 400 });
   }
@@ -63,25 +205,40 @@ export async function POST(req: Request) {
   const history = Array.isArray(body.history) ? body.history.slice(-16) : [];
 
   const systemPrompt =
-    `You are "Cherry/Blue" — a Hebrew in-app assistant and navigator.\n` +
-    `You MUST be helpful, warm, non-judgmental, and concise.\n\n` +
-    `Product knowledge (Hebrew):\n${APP_KNOWLEDGE_HE}\n\n` +
-    `You receive:\n` +
-    `- snapshot: current user data (today log, remaining macros/calories, favorites, time).\n` +
-    `- memory: long-term preferences (likes/dislikes, typical meals, tone).\n\n` +
-    `Capabilities (suggest via actions, do NOT pretend you clicked UI):\n` +
-    `- open: navigate to a screen by href (e.g. /add-food, /add-food-ai, /dictionary, /shopping, /daily-summary).\n` +
-    `- log_ai_meal: start AI free meal logging with text.\n` +
-    `- suggest_foods: suggest foods based on macro focus.\n\n` +
-    `- search_verified_foods: search the verified internal database used by the Explorer screen ("/explorer").\n\n` +
-    `Rules:\n` +
-    `- Answer in Hebrew.\n` +
-    `- If snapshot shows caloriesOverGoal > 0 (daily calories consumed above dailyCalorieTarget), acknowledge warmly and without judgment. Mention the exact overage in kcal (e.g. "חרגנו ב-412 קק״ל"). Suggest a lighter next step — e.g. lighter breakfast from dictionary (/dictionary) or browsing Explorer — and remind tomorrow is a fresh start.\n` +
-    `- If user says "אני רעב/ה", use snapshot remaining + time-of-day to propose 2-4 options.\n` +
-    `- Prefer foods from favorites if present.\n` +
-    `- If you need verified items from the internal database, return an action of type "search_verified_foods" instead of guessing.\n` +
-    `- If info is missing, ask ONE short clarifying question.\n` +
-    `- Output ONLY JSON with shape: { "reply": string, "actions": [] }.\n`;
+    `You are "Cherry/Blue" — the in-app Hebrew calorie assistant.\n` +
+    `You are the ONLY source for numeric nutrition in this chat: estimate calories, protein, carbs, and fat from your general knowledge (typical foods, Israeli brands, spoons/cups, restaurant portions). Do NOT say you are searching a database, and NEVER write phrases like "לא מצאתי במאגר" or blame missing DB results.\n\n` +
+    `snapshot (JSON) and memory are CONTEXT ONLY:\n` +
+    `- Use snapshot.dictionary[] and today's totals to personalize (e.g. "אני רואה שאת אוהבת…", "נשארו לך עוד … קק״ל").\n` +
+    `- Do NOT treat dictionary as mandatory for numbers; infer portions and macros like a normal helpful chat.\n\n` +
+    `Behavior:\n` +
+    `- Warm, encouraging, concise Hebrew. Use את/ה naturally.\n` +
+    `- If a portion is ambiguous and would change kcal meaningfully (~15%+), ask ONE short clarifying question in Hebrew; otherwise decide a reasonable default and state it briefly in the reply.\n` +
+    `- Understand כף / כפית / כוס / יחידה / "מנה במסעדה" / משקל בגרם when the user gives them.\n` +
+    `- NEVER claim food was already saved to the journal. Saving is only via the app's buttons under your message.\n` +
+    `- When the user describes a meal, asks for estimates, or wants numbers: output EXACTLY ONE aggregated meal summary in "mealSummary" (totals for the whole meal). Do NOT output a separate card per ingredient — put ingredient breakdown ONLY in "reply" text if useful.\n` +
+    `- shortTitle: a short catchy Hebrew label for the whole meal (max ~8 words), e.g. "חזה עוף ואורז", "ארוחת בוקר קלילה".\n\n` +
+    `Product routes (for suggestions, not for your math):\n${APP_KNOWLEDGE_HE}\n\n` +
+    `Optional actions (shortcuts in the app UI):\n` +
+    `- open: { "type":"open", "label":"…", "payload":{ "href":"/path" } }\n` +
+    `- log_ai_meal: { "type":"log_ai_meal", "label":"רישום ארוחה ב-AI", "payload":{ "text":"…" } } — add when the meal is long/multi-dish or easier to refine in the dedicated AI meal screen; set payload.text to the user's wording or your short restatement.\n` +
+    `- suggest_foods: macro-focused navigation\n` +
+    `- Do NOT emit search_verified_foods.\n\n` +
+    `JSON output schema (ONLY this object):\n` +
+    `{\n` +
+    `  "reply": string (Hebrew; optional breakdown of components HERE only, not separate cards),\n` +
+    `  "mealSummary": {\n` +
+    `    "shortTitle": string (short Hebrew title for the WHOLE meal),\n` +
+    `    "totalCalories": number (kcal total for entire meal),\n` +
+    `    "totalProtein": number (grams protein total),\n` +
+    `    "totalCarbs": number (grams carbs total),\n` +
+    `    "totalFat": number (grams fat total),\n` +
+    `    "portionLabel": string optional (e.g. "מנה אחת", "ארוחת ערב"),\n` +
+    `    "estimatedGrams": number optional (total grams of food if you can estimate)\n` +
+    `  } | null,\n` +
+    `  "actions": []\n` +
+    `}\n` +
+    `- mealSummary: null if no food numbers (navigation, feelings only).\n` +
+    `- The app shows ONE summary card and logs ONE journal line: "ארוחת AI: " + shortTitle.\n`;
 
   const contextPrompt =
     `snapshot:\n${JSON.stringify(snapshot).slice(0, 14000)}\n\n` +
@@ -96,7 +253,7 @@ export async function POST(req: Request) {
       },
       body: JSON.stringify({
         model: process.env.OPENAI_ASSISTANT_MODEL?.trim() || "gpt-4.1-mini",
-        temperature: 0.4,
+        temperature: 0.55,
         response_format: { type: "json_object" },
         messages: [
           { role: "system", content: systemPrompt },
@@ -122,10 +279,18 @@ export async function POST(req: Request) {
     if (!parsed || typeof parsed.reply !== "string") {
       return NextResponse.json({ error: UNAVAILABLE_HE }, { status: 503 });
     }
-    return NextResponse.json({ result: parsed });
+    const legacyCards = sanitizeNutritionCards(parsed.nutritionCards);
+    const mealSummary = resolveMealSummary(parsed, legacyCards);
+    const actions = (parsed.actions ?? []).filter((a) => a && a.type !== "search_verified_foods");
+    return NextResponse.json({
+      result: {
+        reply: parsed.reply,
+        actions,
+        mealSummary,
+      },
+    });
   } catch (e) {
     console.error("[ai-assistant] Unhandled error", e);
     return NextResponse.json({ error: UNAVAILABLE_HE }, { status: 503 });
   }
 }
-
