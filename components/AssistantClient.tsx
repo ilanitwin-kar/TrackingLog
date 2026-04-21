@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { emitMealLoggedFeedback } from "@/lib/feedbackEvents";
 import {
   getAnonUid,
@@ -393,12 +393,14 @@ export function AssistantClient() {
   const [cloudMsg, setCloudMsg] = useState<string | null>(null);
 
   const [messages, setMessages] = useState<Msg[]>([]);
+  const [showFullChat, setShowFullChat] = useState(false);
   const [input, setInput] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [actions, setActions] = useState<AssistantAction[]>([]);
   const [toast, setToast] = useState<string | null>(null);
   const [exerciseRev, setExerciseRev] = useState(0);
+  const endRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     const bump = () => setExerciseRev((x) => x + 1);
@@ -466,6 +468,35 @@ export function AssistantClient() {
       // ignore
     }
   }, [messages]);
+
+  useEffect(() => {
+    // Always keep the newest message visible.
+    endRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
+  }, [messages.length]);
+
+  const visibleMessages = useMemo(() => {
+    if (showFullChat) return messages;
+    return messages.slice(-20);
+  }, [messages, showFullChat]);
+
+  function clearChat() {
+    try {
+      localStorage.removeItem("cj_assistant_chat_v1");
+    } catch {
+      // ignore
+    }
+    setShowFullChat(false);
+    setMessages([
+      {
+        role: "assistant",
+        text: gf(
+          gender,
+          "ניקיתי את השיחה. ספרי מה אכלת או מה תרצי לדעת — ואשאל שאלת דיוק אחת אם חסר פרט קריטי.",
+          "ניקיתי את השיחה. ספר מה אכלת או מה תרצה לדעת — ואשאל שאלת דיוק אחת אם חסר פרט קריטי."
+        ),
+      },
+    ]);
+  }
 
   const snapshot = useMemo(() => {
     void exerciseRev;
@@ -818,10 +849,36 @@ export function AssistantClient() {
           )}
         </div>
 
-        <div className="mt-4 space-y-2">
-          {messages.map((m, i) => (
+        <div className="mt-4 flex items-center justify-between gap-2 rounded-2xl border border-[var(--border-cherry-soft)] bg-white/70 px-3 py-2 text-xs font-semibold text-[var(--stem)]/70">
+          <span>
+            {showFullChat
+              ? `מציגים את כל השיחה (${messages.length})`
+              : `מציגים 20 אחרונות (${Math.min(20, messages.length)}/${messages.length})`}
+          </span>
+          <div className="flex items-center gap-2">
+            {messages.length > 20 && (
+              <button
+                type="button"
+                className="rounded-full border border-[var(--border-cherry-soft)] bg-white px-3 py-1.5 text-xs font-extrabold text-[var(--cherry)] shadow-sm transition hover:bg-[var(--cherry-muted)]"
+                onClick={() => setShowFullChat((x) => !x)}
+              >
+                {showFullChat ? "הצג פחות" : "הצג עוד"}
+              </button>
+            )}
+            <button
+              type="button"
+              className="rounded-full border border-red-300/70 bg-white px-3 py-1.5 text-xs font-extrabold text-red-800 shadow-sm transition hover:bg-red-50"
+              onClick={clearChat}
+            >
+              נקה שיחה
+            </button>
+          </div>
+        </div>
+
+        <div className="mt-3 space-y-2">
+          {visibleMessages.map((m, i) => (
             <div
-              key={i}
+              key={`${m.role}-${i}-${m.text.slice(0, 24)}`}
               className={`rounded-2xl border px-3 py-2 text-sm shadow-sm ${
                 m.role === "assistant"
                   ? "border-[var(--border-cherry-soft)] bg-white"
@@ -842,6 +899,7 @@ export function AssistantClient() {
                 )}
             </div>
           ))}
+          <div ref={endRef} />
         </div>
 
         {actions.length > 0 && (
