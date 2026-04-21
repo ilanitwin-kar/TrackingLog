@@ -12,6 +12,7 @@ import {
 import {
   type DictionaryItem,
   type FoodUnit,
+  type LogEntry,
   type MealPreset,
   type MealPresetComponent,
   applyMealPresetToToday,
@@ -115,6 +116,11 @@ function kcalPer100FromMealComponent(c: MealPresetComponent): number {
     return Math.round((c.calories / c.quantity) * 100);
   }
   return 0;
+}
+
+function clampJournalQty(q: number, unit: FoodUnit): number {
+  if (unit === "גרם") return clampGramQty(q);
+  return clampOtherQty(q);
 }
 
 function sortSavedByQuery(items: DictionaryItem[], query: string): DictionaryItem[] {
@@ -382,6 +388,58 @@ export default function DictionaryPage() {
     );
   }
 
+  function onSavedJournal(d: DictionaryItem) {
+    const dateKey = getTodayKey();
+    const existing = getEntriesForDate(dateKey);
+
+    const k100Raw =
+      d.caloriesPer100g != null && Number.isFinite(d.caloriesPer100g)
+        ? d.caloriesPer100g
+        : d.lastCalories != null && Number.isFinite(d.lastCalories)
+          ? d.lastCalories
+          : null;
+    const k100 = k100Raw != null ? Math.max(0, k100Raw) : null;
+
+    const p100 =
+      d.proteinPer100g != null && Number.isFinite(d.proteinPer100g)
+        ? Math.max(0, d.proteinPer100g)
+        : null;
+    const c100 =
+      d.carbsPer100g != null && Number.isFinite(d.carbsPer100g)
+        ? Math.max(0, d.carbsPer100g)
+        : null;
+    const f100 =
+      d.fatPer100g != null && Number.isFinite(d.fatPer100g)
+        ? Math.max(0, d.fatPer100g)
+        : null;
+
+    // Default behavior: add a predictable 100g to today's journal.
+    // If the saved item is already in grams, respect its saved gram portion.
+    const qtyG =
+      d.unit === "גרם" && Number.isFinite(d.quantity) && d.quantity > 0
+        ? clampJournalQty(d.quantity, d.unit)
+        : 100;
+
+    const factor = qtyG / 100;
+    const calories = k100 != null ? Math.max(1, Math.round(k100 * factor)) : 1;
+
+    const entry: LogEntry = {
+      id: `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
+      food: d.food,
+      calories,
+      quantity: qtyG,
+      unit: "גרם",
+      createdAt: new Date().toISOString(),
+      verified: false,
+      ...(p100 != null ? { proteinG: Math.round(p100 * factor * 10) / 10 } : {}),
+      ...(c100 != null ? { carbsG: Math.round(c100 * factor * 10) / 10 } : {}),
+      ...(f100 != null ? { fatG: Math.round(f100 * factor * 10) / 10 } : {}),
+    };
+
+    saveDayLogEntries(dateKey, [entry, ...existing]);
+    emitMealLoggedFeedback(gf(gender, "נוסף ליומן היום.", "נוסף ליומן היום."));
+  }
+
   function onExplorerCart(row: ExplorerFoodRow) {
     const added = addToShopping({
       foodId: row.id,
@@ -628,6 +686,19 @@ export default function DictionaryPage() {
                       )}
                     </div>
                     <div className="flex shrink-0 flex-wrap items-start justify-end gap-1">
+                      {!isMeal && (
+                        <button
+                          type="button"
+                          className="btn-icon-luxury flex min-w-[3.1rem] flex-col justify-center gap-0 py-1.5"
+                          title="הוספה ליומן היום (100 גרם)"
+                          aria-label="יומן — הוספה ליומן היום"
+                          onClick={() => onSavedJournal(d)}
+                        >
+                          <IconCaption label="יומן">
+                            <IconPlusCircle className="h-5 w-5 sm:h-6 sm:w-6 text-[var(--stem)]" />
+                          </IconCaption>
+                        </button>
+                      )}
                       {!isMeal && (
                         <button
                           type="button"
