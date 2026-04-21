@@ -40,6 +40,7 @@ export function BottomNav() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [sheetOpen, setSheetOpen] = useState(false);
+  const [fabOpen, setFabOpen] = useState(false);
   const titleId = useId();
   const subtitleId = useId();
   const gender = loadProfile().gender;
@@ -64,7 +65,20 @@ export function BottomNav() {
 
   function goAddFood() {
     setSheetOpen(false);
+    setFabOpen(false);
     router.push(`/add-food?date=${encodeURIComponent(addFoodDateKey)}`);
+  }
+
+  function goAddFoodAi() {
+    setSheetOpen(false);
+    setFabOpen(false);
+    router.push(`/add-food-ai?date=${encodeURIComponent(addFoodDateKey)}`);
+  }
+
+  function goAssistant() {
+    setSheetOpen(false);
+    setFabOpen(false);
+    router.push("/assistant");
   }
 
   function openJournalDayAndGoAddFood() {
@@ -74,6 +88,12 @@ export function BottomNav() {
     window.dispatchEvent(new Event("cj-journal-closed-changed"));
     goAddFood();
   }
+
+  useEffect(() => {
+    // Close menus on navigation.
+    setFabOpen(false);
+    setSheetOpen(false);
+  }, [pathname]);
 
   return (
     <>
@@ -88,7 +108,7 @@ export function BottomNav() {
               <li key={href} className="flex min-w-0 justify-center">
                 <Link
                   href={href}
-                  className={`relative flex min-h-[2.75rem] min-w-0 max-w-full flex-row items-center justify-center gap-1 rounded-xl py-1 pe-1 ps-1 text-[9px] font-bold leading-tight transition-colors sm:min-h-0 sm:gap-1.5 sm:py-1.5 sm:text-[10px] sm:font-semibold ${
+                  className={`relative flex min-h-[2.75rem] min-w-0 max-w-full flex-row items-center justify-center gap-1 rounded-xl py-1 pe-1 ps-1 text-[9px] font-medium leading-tight transition-colors sm:min-h-0 sm:gap-1.5 sm:py-1.5 sm:text-[10px] sm:font-medium ${
                     active
                       ? "text-[var(--cherry)]"
                       : "text-[var(--stem)]/85 hover:text-[var(--cherry)]"
@@ -108,29 +128,94 @@ export function BottomNav() {
                   <span className="max-w-[3.2rem] text-end leading-[1.15] sm:max-w-[4rem]">
                     {label}
                   </span>
-                  <Icon
-                    className={`h-5 w-5 shrink-0 sm:h-6 sm:w-6 ${active ? "text-[var(--cherry)]" : "text-[var(--stem)]"}`}
-                  />
+                  <motion.span
+                    aria-hidden
+                    animate={active ? { y: -1, scale: 1.08 } : { y: 0, scale: 1 }}
+                    transition={{ type: "spring", stiffness: 520, damping: 26 }}
+                  >
+                    <Icon
+                      className={`h-5 w-5 shrink-0 sm:h-6 sm:w-6 ${
+                        active ? "text-[var(--cherry)]" : "text-[var(--stem)]"
+                      }`}
+                    />
+                  </motion.span>
                 </Link>
               </li>
             );
           })}
 
           <li className="flex min-w-0 justify-center">
-            <button
-              type="button"
-              className="flex min-h-[2.75rem] min-w-0 max-w-full flex-row items-center justify-center gap-1 rounded-full border-[2px] border-white bg-gradient-to-b from-[var(--stem-mid)] to-[var(--stem)] px-2 py-1.5 text-white shadow-[0_4px_16px_var(--stem-shadow)] transition hover:brightness-105 active:scale-[0.97] sm:min-h-0 sm:px-3 sm:py-2"
-              aria-haspopup="dialog"
-              aria-expanded={sheetOpen}
-              aria-controls={sheetOpen ? "add-food-sheet" : undefined}
-              aria-label="הוספת מזון ליומן"
-              onClick={() => setSheetOpen(true)}
-            >
-              <span className="max-w-[3rem] text-end text-[9px] font-extrabold leading-[1.15] sm:max-w-none sm:text-[10px]">
-                הוספה
-              </span>
-              <IconPlusCircle className="h-6 w-6 shrink-0 sm:h-7 sm:w-7" />
-            </button>
+            <div className="relative flex items-center justify-center">
+              <AnimatePresence>
+                {fabOpen && (
+                  <motion.div
+                    initial={{ opacity: 0, y: 10, scale: 0.98 }}
+                    animate={{ opacity: 1, y: 0, scale: 1 }}
+                    exit={{ opacity: 0, y: 10, scale: 0.98 }}
+                    transition={{ duration: 0.16 }}
+                    className="absolute bottom-[3.6rem] z-[140] flex flex-col items-center gap-2"
+                    role="menu"
+                    aria-label="אפשרויות הוספה"
+                  >
+                    <motion.button
+                      type="button"
+                      whileTap={{ scale: 0.98 }}
+                      className="flex items-center gap-2 rounded-2xl border-2 border-[var(--border-cherry-soft)] bg-white/95 px-4 py-2.5 text-sm font-semibold text-[var(--stem)] shadow-lg backdrop-blur-sm transition hover:bg-[var(--cherry-muted)]"
+                      onClick={goAddFood}
+                      role="menuitem"
+                      aria-label="חיפוש רגיל"
+                      title="חיפוש רגיל"
+                    >
+                      <span className="text-lg" aria-hidden>
+                        🔍
+                      </span>
+                      <span className="text-[12px] font-extrabold">חיפוש רגיל</span>
+                    </motion.button>
+                    <motion.button
+                      type="button"
+                      whileTap={{ scale: 0.98 }}
+                      className="flex items-center gap-2 rounded-2xl border-2 border-[var(--border-cherry-soft)] bg-white/95 px-4 py-2.5 text-sm font-semibold text-[var(--stem)] shadow-lg backdrop-blur-sm transition hover:bg-[var(--cherry-muted)]"
+                      onClick={goAddFoodAi}
+                      role="menuitem"
+                      aria-label="רישום חופשי ב-AI"
+                      title="רישום חופשי ב-AI"
+                    >
+                      <span className="text-lg" aria-hidden>
+                        🪄
+                      </span>
+                      <span className="text-[12px] font-extrabold">AI ארוחה</span>
+                    </motion.button>
+                    <motion.button
+                      type="button"
+                      whileTap={{ scale: 0.98 }}
+                      className="flex items-center gap-2 rounded-2xl border-2 border-[var(--border-cherry-soft)] bg-white/95 px-4 py-2.5 text-sm font-semibold text-[var(--stem)] shadow-lg backdrop-blur-sm transition hover:bg-[var(--cherry-muted)]"
+                      onClick={goAssistant}
+                      role="menuitem"
+                      aria-label="עוזר AI"
+                      title="עוזר AI"
+                    >
+                      <span className="text-lg" aria-hidden>
+                        🤖
+                      </span>
+                      <span className="text-[12px] font-extrabold">עוזר</span>
+                    </motion.button>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+
+              <motion.button
+                type="button"
+                whileTap={{ scale: 0.97 }}
+                animate={fabOpen ? { y: -10 } : { y: -10 }}
+                className="relative -mt-3 flex min-h-[3.15rem] min-w-[3.15rem] items-center justify-center rounded-full border-2 border-white bg-[var(--cherry)] text-white shadow-[0_10px_28px_rgba(0,0,0,0.28)] transition hover:brightness-105"
+                aria-haspopup="menu"
+                aria-expanded={fabOpen}
+                aria-label="הוספה"
+                onClick={() => setFabOpen((v) => !v)}
+              >
+                <IconPlusCircle className="h-7 w-7" />
+              </motion.button>
+            </div>
           </li>
 
           {(() => {
@@ -140,7 +225,7 @@ export function BottomNav() {
               <li key={href} className="flex min-w-0 justify-center">
                 <Link
                   href={href}
-                  className={`relative flex min-h-[2.75rem] min-w-0 max-w-full flex-row items-center justify-center gap-1 rounded-xl py-1 pe-1 ps-1 text-[9px] font-bold leading-tight transition-colors sm:min-h-0 sm:gap-1.5 sm:py-1.5 sm:text-[10px] sm:font-semibold ${
+                  className={`relative flex min-h-[2.75rem] min-w-0 max-w-full flex-row items-center justify-center gap-1 rounded-xl py-1 pe-1 ps-1 text-[9px] font-medium leading-tight transition-colors sm:min-h-0 sm:gap-1.5 sm:py-1.5 sm:text-[10px] sm:font-medium ${
                     active
                       ? "text-[var(--cherry)]"
                       : "text-[var(--stem)]/85 hover:text-[var(--cherry)]"
@@ -160,9 +245,17 @@ export function BottomNav() {
                   <span className="max-w-[3.2rem] text-end leading-[1.15] sm:max-w-[4rem]">
                     {label}
                   </span>
-                  <Icon
-                    className={`h-5 w-5 shrink-0 sm:h-6 sm:w-6 ${active ? "text-[var(--cherry)]" : "text-[var(--stem)]"}`}
-                  />
+                  <motion.span
+                    aria-hidden
+                    animate={active ? { y: -1, scale: 1.08 } : { y: 0, scale: 1 }}
+                    transition={{ type: "spring", stiffness: 520, damping: 26 }}
+                  >
+                    <Icon
+                      className={`h-5 w-5 shrink-0 sm:h-6 sm:w-6 ${
+                        active ? "text-[var(--cherry)]" : "text-[var(--stem)]"
+                      }`}
+                    />
+                  </motion.span>
                 </Link>
               </li>
             );

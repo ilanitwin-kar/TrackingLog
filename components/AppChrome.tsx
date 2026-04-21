@@ -3,7 +3,9 @@
 import { usePathname } from "next/navigation";
 import { Suspense, useEffect, useState } from "react";
 import { AppBrandMark } from "@/components/AppBrandMark";
+import { AppToastHost } from "@/components/AppToastHost";
 import { BottomNav } from "@/components/BottomNav";
+import { SoundFeedbackHost } from "@/components/SoundFeedbackHost";
 import {
   hasAuthRecord,
   isInternalAuthBypassActive,
@@ -41,6 +43,7 @@ export function AppChrome({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     if (
       pathname === "/add-food" ||
+      pathname === "/add-food-ai" ||
       pathname === "/welcome" ||
       pathname === "/pick-theme"
     ) {
@@ -58,6 +61,7 @@ export function AppChrome({ children }: { children: React.ReactNode }) {
     const sync = () => {
       if (
         pathname === "/add-food" ||
+        pathname === "/add-food-ai" ||
         pathname === "/welcome" ||
         pathname === "/pick-theme"
       ) {
@@ -162,6 +166,8 @@ export function AppChrome({ children }: { children: React.ReactNode }) {
     >
       <AppBrandMark />
       {children}
+      <AppToastHost />
+      <SoundFeedbackHost />
       {!hideNav && (
         <Suspense
           fallback={

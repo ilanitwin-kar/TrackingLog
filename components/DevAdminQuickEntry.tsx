@@ -4,7 +4,9 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 import {
   activateDevAdminBypass,
+  activateDevAdminBypassNoPinWhenUiEnabled,
   activateDevAdminBypassWithPin,
+  isDevAdminBypassUiEnabled,
   isDevAdminOneClickAllowed,
   isDevAdminPinConfigured,
   seedDevAdminProfileIfNeeded,
@@ -40,6 +42,8 @@ export function DevAdminQuickEntry({
   const [pin, setPin] = useState("");
   const [err, setErr] = useState<string | null>(null);
 
+  if (!isDevAdminBypassUiEnabled()) return null;
+
   function finishEntry() {
     seedDevAdminProfileIfNeeded();
     if (variant === "pickDark" && !hasChosenAppVariant()) {
@@ -62,12 +66,14 @@ export function DevAdminQuickEntry({
       setPinOpen(true);
       return;
     }
-    window.alert(
-      gf(
-        loadProfile().gender,
-        "לא הוגדר קוד בשרת. ב-Netlify → Environment variables הוסיפי אחד מהבאים (לפחות 4 תווים), שמרי ופרסמו מחדש:\n• NEXT_PUBLIC_DEV_ADMIN_PIN\n• או NEXT_PUBLIC_STAFF_UNLOCK (קיים אצלך)\n\nאפשר גם להגדיר NEXT_PUBLIC_ALLOW_DEV_ADMIN_BYPASS=1 לכניסה בלחיצה אחת בלי קוד.",
-        "לא הוגדר קוד בשרת. ב-Netlify → Environment variables הוסף אחד מהבאים (לפחות 4 תווים), שמור ופרסם מחדש:\n• NEXT_PUBLIC_DEV_ADMIN_PIN\n• או NEXT_PUBLIC_STAFF_UNLOCK (קיים אצלך)\n\nאפשר גם להגדיר NEXT_PUBLIC_ALLOW_DEV_ADMIN_BYPASS=1 לכניסה בלחיצה אחת בלי קוד."
-      )
+    if (isDevAdminBypassUiEnabled()) {
+      seedDevAdminProfileIfNeeded();
+      activateDevAdminBypassNoPinWhenUiEnabled();
+      finishEntry();
+      return;
+    }
+    setErr(
+      gf(loadProfile().gender, "הגישה המנהלתית לא זמינה כרגע.", "הגישה המנהלתית לא זמינה כרגע.")
     );
   }
 
@@ -92,6 +98,11 @@ export function DevAdminQuickEntry({
       <button type="button" onClick={handleMainClick} className={btnClass}>
         {buttonLabel}
       </button>
+      {err && (
+        <p className="mt-2 text-center text-[11px] font-semibold text-white/80" dir="rtl">
+          {err}
+        </p>
+      )}
 
       {pinOpen && (
         <div
@@ -112,19 +123,7 @@ export function DevAdminQuickEntry({
               כניסת מנהלת
             </h2>
             <p className="mt-2 text-sm text-[var(--stem)]/90">
-              {gf(
-                loadProfile().gender,
-                "הזיני את הקוד שהוגדר ב-Netlify (אותו ערך כמו ",
-                "הזן את הקוד שהוגדר ב-Netlify (אותו ערך כמו "
-              )}
-              <code className="rounded bg-[var(--cherry-muted)] px-1 text-xs">
-                DEV_ADMIN_PIN
-              </code>{" "}
-              או{" "}
-              <code className="rounded bg-[var(--cherry-muted)] px-1 text-xs">
-                STAFF_UNLOCK
-              </code>
-              ).
+              {gf(loadProfile().gender, "הזיני קוד גישה.", "הזן קוד גישה.")}
             </p>
             <label className="mt-4 block">
               <span className="mb-1 block text-xs font-semibold text-[var(--cherry)]">

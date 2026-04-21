@@ -60,6 +60,15 @@ export default function ExplorerPage() {
   }, [toast]);
 
   useEffect(() => {
+    try {
+      const qq = new URL(window.location.href).searchParams.get("q")?.trim();
+      if (qq) setQ(qq);
+    } catch {
+      // ignore
+    }
+  }, []);
+
+  useEffect(() => {
     const trimmed = q.trim();
     if (trimmed.length < 2) {
       setDebouncedQ("");

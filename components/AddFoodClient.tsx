@@ -23,8 +23,10 @@ import {
   loadProfile,
   saveDayLogEntries,
   saveFoodMemoryKey,
+  upsertDictionaryFromAiMeal,
   upsertDictionaryFromScan,
 } from "@/lib/storage";
+import { emitMealLoggedFeedback } from "@/lib/feedbackEvents";
 import { gf } from "@/lib/hebrewGenderUi";
 
 function clampGrams(q: number): number {
@@ -95,7 +97,11 @@ function resolveDateKey(raw: string | null): string {
   return raw;
 }
 
-export function AddFoodClient() {
+export function AddFoodClient({
+  screen = "search",
+}: {
+  screen?: "search" | "ai";
+}) {
   const gender = loadProfile().gender;
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -117,6 +123,20 @@ export function AddFoodClient() {
   const [aiListening, setAiListening] = useState(false);
   const [aiGreeting, setAiGreeting] = useState("");
   const [aiPlaceholder, setAiPlaceholder] = useState("");
+  const [aiPending, setAiPending] = useState<null | {
+    original: string;
+    displayName: string;
+    totals: { calories: number; protein: number; carbs: number; fat: number };
+    breakdown: Array<{
+      item: string;
+      qty: string;
+      calories: number;
+      protein: number;
+      carbs: number;
+      fat: number;
+    }>;
+  }>(null);
+  const [aiConfirmOpen, setAiConfirmOpen] = useState(false);
 
   const [scanModalOpen, setScanModalOpen] = useState(false);
   const [manualOpen, setManualOpen] = useState(false);
@@ -146,6 +166,8 @@ export function AddFoodClient() {
   const pickFeedbackTimerRef = useRef<number | null>(null);
   const pickTitleId = useId();
   const searchInputRef = useRef<HTMLInputElement>(null);
+  const aiSectionRef = useRef<HTMLDivElement>(null);
+  const aiTextareaRef = useRef<HTMLTextAreaElement>(null);
   const [recentPicks, setRecentPicks] = useState<HomeSuggestRow[]>([]);
 
   const speechRecRef = useRef<SpeechRecognition | null>(null);
@@ -160,6 +182,17 @@ export function AddFoodClient() {
       setAiPlaceholder(pickRandom(AI_CHERRY_PLACEHOLDERS));
     }
   }, [gender]);
+
+  const mealPrefilledRef = useRef(false);
+  useEffect(() => {
+    if (screen !== "ai" || mealPrefilledRef.current) return;
+    const raw = searchParams.get("meal") ?? searchParams.get("text") ?? "";
+    const t = raw.trim();
+    if (t) {
+      setAiMealText(t);
+      mealPrefilledRef.current = true;
+    }
+  }, [screen, searchParams]);
 
   function stopAiDictation() {
     const r = speechRecRef.current;
@@ -231,6 +264,7 @@ export function AddFoodClient() {
     if (mode === "answer" && input.length < 1) return;
 
     setAiMealError(null);
+    setAiPending(null);
     setAiMealLoading(true);
     try {
       const res = await fetch("/api/ai-meal-log", {
@@ -260,6 +294,7 @@ export function AddFoodClient() {
         | {
             kind: "result";
             original: string;
+            displayName?: string;
             totals: { calories: number; protein: number; carbs: number; fat: number };
             breakdown: Array<{
               item: string;
@@ -282,33 +317,70 @@ export function AddFoodClient() {
         return;
       }
 
-      // Final: add one entry to diary (AI Meal)
-      const entry: LogEntry = {
-        id: uid(),
-        food: r.original.trim(),
-        calories: Math.max(0, Math.round(r.totals.calories)),
-        quantity: 1,
-        unit: "יחידה",
-        createdAt: new Date().toISOString(),
-        mealStarred: false,
-        verified: false,
-        aiMeal: true,
-        aiBreakdownJson: JSON.stringify(r.breakdown ?? []),
-        proteinG: r.totals.protein,
-        carbsG: r.totals.carbs,
-        fatG: r.totals.fat,
-      };
-      const existing = getEntriesForDate(dateKey);
-      saveDayLogEntries(dateKey, [entry, ...existing]);
-      setAiMealText("");
-      setAiMealQuestion(null);
-      setAiMealOriginal(null);
-      setDictFeedback("ארוחת AI נוספה ליומן.");
+      // Final: show summary card first (validation step), only save on explicit confirm.
+      const displayName = (r.displayName ?? "").trim() || r.original.trim();
+      setAiPending({
+        original: r.original.trim(),
+        displayName,
+        totals: r.totals,
+        breakdown: r.breakdown ?? [],
+      });
+      setAiConfirmOpen(true);
     } catch {
       setAiMealError("שירות הניתוח זמנית לא זמין");
     } finally {
       setAiMealLoading(false);
     }
+  }
+
+  function commitAiJournal(includeDictionary: boolean) {
+    if (!aiPending) return;
+    const r = aiPending;
+    const cleanName = r.displayName.trim();
+    if (includeDictionary) {
+      upsertDictionaryFromAiMeal(cleanName, r.totals);
+    }
+    const entry: LogEntry = {
+      id: uid(),
+      food: cleanName,
+      calories: Math.max(0, Math.round(r.totals.calories)),
+      quantity: 1,
+      unit: "יחידה",
+      createdAt: new Date().toISOString(),
+      mealStarred: false,
+      verified: false,
+      aiMeal: true,
+      aiBreakdownJson: JSON.stringify(r.breakdown ?? []),
+      proteinG: r.totals.protein,
+      carbsG: r.totals.carbs,
+      fatG: r.totals.fat,
+    };
+    const existing = getEntriesForDate(dateKey);
+    saveDayLogEntries(dateKey, [entry, ...existing]);
+    setAiPending(null);
+    setAiConfirmOpen(false);
+    setAiMealText("");
+    setAiMealQuestion(null);
+    setAiMealOriginal(null);
+    setAiMealError(null);
+    stopAiDictation();
+    emitMealLoggedFeedback(
+      includeDictionary
+        ? gf(
+            gender,
+            `«${cleanName}» נוסף ליומן ולמילון`,
+            `«${cleanName}» נוסף ליומן ולמילון`
+          )
+        : gf(gender, `«${cleanName}» נוסף ליומן`, `«${cleanName}» נוסף ליומן`)
+    );
+  }
+
+  function confirmAiPending() {
+    commitAiJournal(false);
+  }
+
+  function confirmAiPendingAndDictionary() {
+    commitAiJournal(true);
   }
 
   const pickCubeBaseClass =
@@ -758,6 +830,13 @@ export function AddFoodClient() {
     rememberFoodPick(row);
     setRecentPicks(loadRecentFoodPicks());
     setPickPressedDiary(true);
+    emitMealLoggedFeedback(
+      gf(
+        gender,
+        `«${row.name.trim()}» נוסף ליומן`,
+        `«${row.name.trim()}» נוסף ליומן`
+      )
+    );
     showPickModalNotice(
       gf(
         gender,
@@ -804,6 +883,13 @@ export function AddFoodClient() {
     setPickPressedDiary(true);
     setPickPressedDictionary(true);
     setPickPressedBothShortcut(true);
+    emitMealLoggedFeedback(
+      gf(
+        gender,
+        `«${row.name.trim()}» נוסף ליומן ולמילון`,
+        `«${row.name.trim()}» נוסף ליומן ולמילון`
+      )
+    );
     showPickModalNotice(
       gf(
         gender,
@@ -945,6 +1031,9 @@ export function AddFoodClient() {
       setRecentPicks(loadRecentFoodPicks());
       setManualOpen(false);
       resetManualForm();
+      emitMealLoggedFeedback(
+        gf(gender, `«${name}» נוסף ליומן`, `«${name}» נוסף ליומן`)
+      );
       router.push(`/?date=${encodeURIComponent(dateKey)}`);
     } finally {
       setManLoading(false);
@@ -960,7 +1049,7 @@ export function AddFoodClient() {
 
   return (
     <div
-      className="flex h-[100dvh] min-h-0 flex-col overflow-hidden bg-gradient-to-b from-[#fff8fa] via-white to-[#f6faf3]"
+      className="min-h-[100dvh] bg-gradient-to-b from-[#fff8fa] via-white to-[#f6faf3] pb-[calc(5.25rem+env(safe-area-inset-bottom))]"
       dir="rtl"
     >
       <header className="shrink-0 border-b-2 border-[var(--border-cherry-soft)] bg-white/95 px-3 py-3 shadow-sm backdrop-blur-sm">
@@ -1012,97 +1101,91 @@ export function AddFoodClient() {
         </div>
       </header>
 
-      <div className="mx-auto flex min-h-0 w-full max-w-lg flex-1 flex-col overflow-hidden px-3 pt-3">
-        <label className="shrink-0">
-          <span className="mb-1.5 flex flex-wrap items-center justify-between gap-2 text-sm font-semibold text-[var(--stem)]">
-            <span>חיפוש</span>
-            <button
-              type="button"
-              className="shrink-0 rounded-lg border-2 border-[var(--border-cherry-soft)] bg-white px-2.5 py-1 text-xs font-bold text-[var(--stem)] shadow-sm transition hover:bg-[var(--cherry-muted)]"
-              onClick={openManualModal}
-            >
-              הוספה ידנית
-            </button>
-          </span>
-          <p className="mb-2 text-[11px] font-medium text-[var(--cherry)]/65">
-            {gender === "male" ? (
-              <>
-                לחץ <span className="font-bold">+</span> ליד מוצר כדי להוסיף ליומן{" "}
-              </>
-            ) : (
-              <>
-                לחצי <span className="font-bold">+</span> ליד מוצר כדי להוסיף ליומן{" "}
-              </>
-            )}
-            (בחירת משקל בגרם).
-          </p>
-          <div className="relative">
-            <input
-              ref={searchInputRef}
-              type="search"
-              inputMode="search"
-              enterKeyHint="search"
-              value={food}
-              onChange={(e) => setFood(e.target.value)}
-              onFocus={(e) => {
-                if (e.currentTarget.value) e.currentTarget.select();
-              }}
-              autoComplete="off"
-              autoCorrect="off"
-              autoCapitalize="none"
-              spellCheck={false}
-              placeholder={gf(gender, "חפשי מזון…", "חפש מזון…")}
-              className="input-luxury-search w-full ps-4 pe-[5.25rem] sm:pe-24"
-            />
-            <button
-              type="button"
-              className="absolute end-1.5 top-1/2 z-[11] flex min-h-[2.65rem] min-w-[4.25rem] -translate-y-1/2 flex-col items-center justify-center gap-0 rounded-xl border-2 border-[var(--border-cherry-soft)] bg-white px-1 py-0.5 text-[var(--stem)] shadow-sm transition hover:bg-[var(--cherry-muted)]"
-              aria-label="סריקת ברקוד — פתיחת מצלמה לסריקת מוצר"
-              title="סריקת ברקוד — מעבר למסך סריקה"
-              onClick={() => {
-                searchInputRef.current?.blur();
-                setScanModalOpen(true);
-              }}
-            >
-              <IconCaption label="ברקוד">
-                <IconScanBarcode className="h-5 w-5 sm:h-6 sm:w-6" />
-              </IconCaption>
-            </button>
-          </div>
-        </label>
+      <div className="mx-auto w-full max-w-lg px-3 pt-3">
+        {screen === "search" && (
+          <>
+            <div>
+              <label className="shrink-0">
+                <span className="mb-1.5 flex flex-wrap items-center justify-between gap-2 text-sm font-semibold text-[var(--stem)]">
+                  <span>חיפוש</span>
+                  <button
+                    type="button"
+                    className="shrink-0 rounded-lg border-2 border-[var(--border-cherry-soft)] bg-white px-2.5 py-1 text-xs font-bold text-[var(--stem)] shadow-sm transition hover:bg-[var(--cherry-muted)]"
+                    onClick={openManualModal}
+                  >
+                    הוספה ידנית
+                  </button>
+                </span>
+                <p className="mb-2 text-[11px] font-medium text-[var(--cherry)]/65">
+                  {gender === "male" ? (
+                    <>
+                      לחץ <span className="font-bold">+</span> ליד מוצר כדי להוסיף ליומן{" "}
+                    </>
+                  ) : (
+                    <>
+                      לחצי <span className="font-bold">+</span> ליד מוצר כדי להוסיף ליומן{" "}
+                    </>
+                  )}
+                  (בחירת משקל בגרם).
+                </p>
+                <div className="relative">
+                  <input
+                    ref={searchInputRef}
+                    type="text"
+                    inputMode="search"
+                    enterKeyHint="search"
+                    value={food}
+                    onChange={(e) => setFood(e.target.value)}
+                    onFocus={(e) => {
+                      if (e.currentTarget.value) e.currentTarget.select();
+                    }}
+                    autoComplete="off"
+                    autoCorrect="off"
+                    autoCapitalize="none"
+                    spellCheck={false}
+                    placeholder={gf(gender, "חפשי מזון…", "חפש מזון…")}
+                    className="input-luxury-search w-full ps-4 pe-[5.25rem] sm:pe-24"
+                  />
+                  <button
+                    type="button"
+                    className="absolute end-1.5 top-1/2 z-[70] flex min-h-[2.65rem] min-w-[4.25rem] -translate-y-1/2 flex-col items-center justify-center gap-0 rounded-xl border-2 border-[var(--border-cherry-soft)] bg-white px-1 py-0.5 text-[var(--stem)] shadow-sm transition hover:bg-[var(--cherry-muted)]"
+                    aria-label="סריקת ברקוד — פתיחת מצלמה לסריקת מוצר"
+                    title="סריקת ברקוד — מעבר למסך סריקה"
+                    onClick={() => {
+                      searchInputRef.current?.blur();
+                      setScanModalOpen(true);
+                    }}
+                  >
+                    <IconCaption label="ברקוד">
+                      <IconScanBarcode className="h-5 w-5 sm:h-6 sm:w-6" />
+                    </IconCaption>
+                  </button>
+                </div>
+              </label>
 
-        {recentPicks.length > 0 && (
-          <div className="mt-3 shrink-0">
-            <p className="mb-1.5 text-xs font-bold text-[var(--cherry)]">
-              נבחרו לאחרונה
-            </p>
-            <div className="flex gap-2 overflow-x-auto pb-1 [-webkit-overflow-scrolling:touch]">
-              {recentPicks.map((r) => (
-                <button
-                  key={`${r.id}-${r.name}`}
-                  type="button"
-                  className="max-w-[11rem] shrink-0 truncate rounded-xl border-2 border-[var(--border-cherry-soft)] bg-white px-3 py-2 text-start text-xs font-semibold text-[var(--stem)] shadow-sm transition hover:bg-[var(--cherry-muted)] active:scale-[0.99]"
-                  title={r.name}
-                  onClick={() => openPickModalFromRow(r)}
-                >
-                  {r.name}
-                </button>
-              ))}
-            </div>
-          </div>
-        )}
-
-        <div className="mt-3 min-h-0 flex-1 overflow-y-auto overscroll-y-contain pb-6 [-webkit-overflow-scrolling:touch]">
-          {!showResultsPanel ? (
-            <p className="py-8 text-center text-sm text-[var(--cherry)]/70">
-              {gf(
-                gender,
-                "הקלידי לפחות שתי אותיות כדי לראות תוצאות.",
-                "הקלד לפחות שתי אותיות כדי לראות תוצאות."
+              {recentPicks.length > 0 && (
+                <div className="mt-3">
+                  <p className="mb-1.5 text-xs font-bold text-[var(--cherry)]">
+                    נבחרו לאחרונה
+                  </p>
+                  <div className="flex gap-2 overflow-x-auto pb-1 [-webkit-overflow-scrolling:touch]">
+                    {recentPicks.map((r) => (
+                      <button
+                        key={`${r.id}-${r.name}`}
+                        type="button"
+                        className="max-w-[11rem] shrink-0 truncate rounded-xl border-2 border-[var(--border-cherry-soft)] bg-white px-3 py-2 text-start text-xs font-semibold text-[var(--stem)] shadow-sm transition hover:bg-[var(--cherry-muted)] active:scale-[0.99]"
+                        title={r.name}
+                        onClick={() => openPickModalFromRow(r)}
+                      >
+                        {r.name}
+                      </button>
+                    ))}
+                  </div>
+                </div>
               )}
-            </p>
-          ) : (
-            <div className="space-y-3 rounded-xl border border-[var(--border-cherry-soft)] bg-white/90 p-2 shadow-sm">
+            </div>
+
+            <div className="mt-3 rounded-xl border border-[var(--border-cherry-soft)] bg-white/90 p-2 shadow-sm">
               {dictFeedback && (
                 <p
                   className="rounded-lg border border-[var(--border-cherry-soft)] bg-[#fff9e6] px-2 py-2 text-center text-xs font-semibold text-[var(--stem)]"
@@ -1117,28 +1200,22 @@ export function AddFoodClient() {
                 </p>
               )}
 
-              {searchPanelSync && (
+              {showResultsPanel ? (
                 <div>
                   <p className="px-2 pb-2 text-sm font-bold text-[var(--cherry)]">
                     תוצאות חיפוש (מאוחד)
                   </p>
 
-                  {(homeSearchLoading || worldSearchLoading) &&
-                  mergedSuggestRows.length === 0 ? (
-                    <div
-                      className="flex items-center gap-2 px-2 py-2 text-sm text-[var(--stem)]"
-                      role="status"
-                    >
+                  {searchPanelSync && (homeSearchLoading || worldSearchLoading) && mergedSuggestRows.length === 0 ? (
+                    <div className="flex items-center gap-2 px-2 py-2 text-sm text-[var(--stem)]" role="status">
                       <span
                         className="inline-block size-4 animate-spin rounded-full border-2 border-[var(--border-cherry-soft)] border-t-[var(--cherry)]"
                         aria-hidden
                       />
                       טוען…
                     </div>
-                  ) : mergedSuggestRows.length === 0 ? (
-                    <p className="px-2 py-1 text-xs text-[var(--cherry)]/65">
-                      לא נמצאו תוצאות.
-                    </p>
+                  ) : searchPanelSync && mergedSuggestRows.length === 0 ? (
+                    <p className="px-2 py-1 text-xs text-[var(--cherry)]/65">לא נמצאו תוצאות.</p>
                   ) : (
                     <ul className="space-y-1">
                       {mergedSuggestRows.map((s) => {
@@ -1177,18 +1254,13 @@ export function AddFoodClient() {
                                 </span>
                               </span>
                               {s.category != null ? (
-                                <span className="text-[11px] text-[var(--cherry)]/65">
-                                  {s.category}
-                                </span>
+                                <span className="text-[11px] text-[var(--cherry)]/65">{s.category}</span>
                               ) : null}
                               {s.calories != null ? (
                                 <span className="text-[11px] text-[var(--cherry)]/75">
-                                  קלוריות: {Math.round(s.calories)} · חלבון:{" "}
-                                  {s.protein ?? "—"} · פחמימות:{" "}
+                                  קלוריות: {Math.round(s.calories)} · חלבון: {s.protein ?? "—"} · פחמימות:{" "}
                                   {s.carbs ?? "—"} · שומן: {s.fat ?? "—"}{" "}
-                                  <span className="text-[var(--cherry)]/55">
-                                    (ל־100 ג׳)
-                                  </span>
+                                  <span className="text-[var(--cherry)]/55">(ל־100 ג׳)</span>
                                 </span>
                               ) : null}
                             </button>
@@ -1208,77 +1280,166 @@ export function AddFoodClient() {
                       })}
                     </ul>
                   )}
-
-                  {/* AI moved to separate free-form section below */}
                 </div>
+              ) : (
+                <p className="py-8 text-center text-sm text-[var(--cherry)]/70">
+                  {gf(gender, "הקלידי לפחות שתי אותיות כדי לראות תוצאות.", "הקלד לפחות שתי אותיות כדי לראות תוצאות.")}
+                </p>
               )}
             </div>
-          )}
-        </div>
+          </>
+        )}
 
-        {/* רישום ארוחה חופשי ב-AI */}
-        <div className="mt-4 rounded-2xl border-2 border-[var(--border-cherry-soft)] bg-white/90 p-3 shadow-sm">
-          <p className="px-1 pb-2 text-sm font-extrabold text-[var(--cherry)]">
-            רישום ארוחה חופשי ב-AI
-          </p>
-          <p className="px-1 pb-2 text-sm font-semibold leading-relaxed text-[var(--stem)]/90">
-            {aiGreeting}
-          </p>
-          <p className="px-1 pb-2 text-xs text-[var(--stem)]/75">
-            אם חסר מידע משמעותי — נשאל שאלה קצרה ואז נסכם לשורה אחת ביומן.
-          </p>
-
-          {aiMealQuestion && aiMealOriginal && (
-            <div className="mb-3 rounded-xl border border-[var(--border-cherry-soft)] bg-[var(--cherry-muted)] px-3 py-2 text-sm text-[var(--stem)]">
-              <p className="font-bold text-[var(--cherry)]">שאלה מה-AI</p>
-              <p className="mt-1 leading-relaxed">{aiMealQuestion}</p>
-              <p className="mt-2 text-xs text-[var(--stem)]/75">
-                כתבי את התשובה בתיבה למטה ולחצי על &quot;סיכום&quot;.
-              </p>
-            </div>
-          )}
-
-          <textarea
-            value={aiMealText}
-            onChange={(e) => setAiMealText(e.target.value)}
-            placeholder={
-              aiMealQuestion
-                ? "התשובה שלך…"
-                : aiPlaceholder
-            }
-            rows={4}
-            className="w-full resize-none rounded-2xl border-2 border-[var(--border-cherry-soft)] bg-white px-3 py-3 text-sm text-[var(--stem)] shadow-sm outline-none focus:border-[var(--cherry)]"
-          />
-
-          {aiMealError && (
-            <p className="mt-2 text-sm font-semibold text-[#a94444]">
-              {aiMealError}
+        {screen === "ai" && (
+          <>
+            <p className="px-1 pb-2 text-xs font-extrabold tracking-wide text-[var(--stem)]/80">
+              ניתוח ארוחה חכם 🪄
             </p>
-          )}
+            <div
+              ref={aiSectionRef}
+              className="rounded-2xl border-2 border-[var(--border-cherry-soft)] bg-[rgba(255,255,255,0.92)] p-3 shadow-sm"
+            >
+              <p className="px-1 pb-2 text-sm font-semibold leading-relaxed text-[var(--stem)]/90">
+                {aiGreeting}
+              </p>
+              <p className="px-1 pb-2 text-xs text-[var(--stem)]/75">
+                אם חסר מידע משמעותי — נשאל שאלה קצרה ואז נציג סיכום לאישור לפני שמירה ליומן.
+              </p>
 
-          <div className="mt-3 flex gap-2">
-            <button
-              type="button"
-              className={`flex min-w-[3.25rem] items-center justify-center rounded-2xl border-2 border-[var(--border-cherry-soft)] bg-white px-3 py-2.5 text-sm font-bold text-[var(--stem)] shadow-sm transition hover:bg-[var(--cherry-muted)] ${
-                aiListening ? "ring-2 ring-[var(--cherry)]" : ""
-              }`}
-              onClick={toggleAiDictation}
-              aria-label={aiListening ? "עצירת הכתבה" : "הפעלת הכתבה"}
-              title={aiListening ? "עצירת הכתבה" : "הפעלת הכתבה"}
-            >
-              {gender === "male" ? "🫐" : "🍒"}
-            </button>
-            <button
-              type="button"
-              disabled={aiMealLoading || aiMealText.trim().length < 1}
-              className="btn-stem flex-1 rounded-2xl py-3 text-center text-sm font-extrabold disabled:opacity-50"
-              onClick={() => void runAiMeal(aiMealQuestion ? "answer" : "start")}
-            >
-              {aiMealLoading ? "מחשב…" : aiMealQuestion ? "סיכום" : "חשב וסכם"}
-            </button>
-          </div>
-        </div>
+              {aiMealQuestion && aiMealOriginal && (
+                <div className="mb-3 rounded-xl border border-[var(--border-cherry-soft)] bg-[var(--cherry-muted)] px-3 py-2 text-sm text-[var(--stem)]">
+                  <p className="font-bold text-[var(--cherry)]">שאלה מה-AI</p>
+                  <p className="mt-1 leading-relaxed">{aiMealQuestion}</p>
+                  <p className="mt-2 text-xs text-[var(--stem)]/75">
+                    {gf(gender, "כתבי תשובה ואז לחצי על “סיכום”.", "כתוב תשובה ואז לחץ על “סיכום”.")}
+                  </p>
+                </div>
+              )}
+
+              {/* Summary is shown in a dedicated modal after calculation */}
+
+              <textarea
+                ref={aiTextareaRef}
+                value={aiMealText}
+                onChange={(e) => setAiMealText(e.target.value)}
+                placeholder={aiMealQuestion ? "התשובה שלך…" : aiPlaceholder}
+                rows={4}
+                className="w-full resize-none rounded-2xl border-2 border-[var(--border-cherry-soft)] bg-white px-3 py-3 text-sm text-[var(--stem)] shadow-sm outline-none focus:border-[var(--cherry)]"
+              />
+
+              {aiMealError && (
+                <p className="mt-2 text-sm font-semibold text-[#a94444]">
+                  {aiMealError}
+                </p>
+              )}
+
+              <div className="mt-3 flex gap-2">
+                <button
+                  type="button"
+                  className={`flex min-w-[3.25rem] items-center justify-center rounded-2xl border-2 border-[var(--border-cherry-soft)] bg-white px-3 py-2.5 text-sm font-bold text-[var(--stem)] shadow-sm transition hover:bg-[var(--cherry-muted)] ${
+                    aiListening ? "ring-2 ring-[var(--cherry)]" : ""
+                  }`}
+                  onClick={toggleAiDictation}
+                  aria-label={aiListening ? "עצירת הכתבה" : "הפעלת הכתבה"}
+                  title={aiListening ? "עצירת הכתבה" : "הפעלת הכתבה"}
+                >
+                  {gender === "male" ? "🫐" : "🍒"}
+                </button>
+                <button
+                  type="button"
+                  disabled={
+                    aiMealLoading ||
+                    aiConfirmOpen ||
+                    aiMealText.trim().length < 1
+                  }
+                  className="btn-stem flex-1 rounded-2xl py-3 text-center text-sm font-extrabold disabled:opacity-50"
+                  onClick={() => void runAiMeal(aiMealQuestion ? "answer" : "start")}
+                >
+                  {aiMealLoading ? "מחשב…" : aiMealQuestion ? "סיכום" : "חשב וסכם"}
+                </button>
+              </div>
+            </div>
+          </>
+        )}
       </div>
+
+      {/* AI confirm modal */}
+      <AnimatePresence>
+        {screen === "ai" && aiConfirmOpen && aiPending && (
+          <motion.div
+            role="presentation"
+            className="fixed inset-0 z-[320] flex items-center justify-center bg-black/40 p-4 backdrop-blur-[2px]"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            onClick={(e) => {
+              if (e.target === e.currentTarget) setAiConfirmOpen(false);
+            }}
+          >
+            <motion.div
+              role="dialog"
+              aria-modal
+              className="glass-panel w-full max-w-md border-2 border-[var(--border-cherry-soft)] p-5 shadow-2xl"
+              initial={{ scale: 0.96, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.97, opacity: 0 }}
+              transition={{ type: "spring", damping: 26, stiffness: 320 }}
+              onClick={(e) => e.stopPropagation()}
+            >
+              <p className="text-center text-sm font-extrabold text-[var(--cherry)]">סיכום ארוחה (AI)</p>
+              <p className="mt-2 text-center text-base font-semibold text-[var(--stem)]">{aiPending.original}</p>
+              <div className="mt-4 grid grid-cols-2 gap-2 rounded-xl border border-[var(--border-cherry-soft)] bg-white/90 px-3 py-3 text-sm text-[var(--stem)]">
+                <div>
+                  <span className="text-[var(--stem)]/70">קלוריות</span>
+                  <p className="font-extrabold">{Math.round(aiPending.totals.calories)} קק״ל</p>
+                </div>
+                <div>
+                  <span className="text-[var(--stem)]/70">חלבון</span>
+                  <p className="font-extrabold">{Math.round(aiPending.totals.protein)} ג׳</p>
+                </div>
+                <div>
+                  <span className="text-[var(--stem)]/70">פחמימות</span>
+                  <p className="font-extrabold">{Math.round(aiPending.totals.carbs)} ג׳</p>
+                </div>
+                <div>
+                  <span className="text-[var(--stem)]/70">שומן</span>
+                  <p className="font-extrabold">{Math.round(aiPending.totals.fat)} ג׳</p>
+                </div>
+              </div>
+              <div className="mt-4 flex flex-col gap-2">
+                <div className="flex gap-2">
+                  <motion.button
+                    type="button"
+                    className="btn-stem flex-1 rounded-2xl py-3 text-center text-sm font-extrabold"
+                    whileTap={{ scale: 0.98 }}
+                    onClick={confirmAiPending}
+                  >
+                    הוסף ליומן
+                  </motion.button>
+                  <button
+                    type="button"
+                    className="flex-1 rounded-2xl border-2 border-[var(--border-cherry-soft)] bg-white py-3 text-center text-sm font-extrabold text-[var(--stem)] shadow-sm transition hover:bg-[var(--cherry-muted)]"
+                    onClick={() => {
+                      setAiConfirmOpen(false);
+                      setAiPending(null);
+                    }}
+                  >
+                    ביטול
+                  </button>
+                </div>
+                <motion.button
+                  type="button"
+                  className="w-full rounded-2xl border-2 border-[#e6c65c] bg-[#fff9e6] py-2.5 text-center text-xs font-extrabold text-[var(--stem)] shadow-sm transition hover:bg-[#fff3cc]"
+                  whileTap={{ scale: 0.99 }}
+                  onClick={confirmAiPendingAndDictionary}
+                >
+                  {gf(gender, "הוסיפי ליומן ולמילון", "הוסף ליומן ולמילון")}
+                </motion.button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       <BarcodeScanModal
         open={scanModalOpen}

@@ -139,9 +139,14 @@ export function isDevAdminOneClickAllowed(): boolean {
   return isPublicEnvTruthy("NEXT_PUBLIC_ALLOW_DEV_ADMIN_BYPASS");
 }
 
-/** @deprecated השתמשו ב־isDevAdminOneClickAllowed — הכפתור תמיד גלוי */
+/**
+ * האם להציג בממשק כפתור «כניסת מנהלת».
+ * ברירת מחדל: מוסתר בפרודקשן כדי לא להציג "מסך קוד" למשתמשי קצה.
+ * להפעלה: NEXT_PUBLIC_SHOW_DEV_ADMIN_BYPASS_UI=1
+ */
 export function isDevAdminBypassUiEnabled(): boolean {
-  return true;
+  if (process.env.NODE_ENV === "development") return true;
+  return process.env.NEXT_PUBLIC_SHOW_DEV_ADMIN_BYPASS_UI === "1";
 }
 
 /** האם הוגדר קוד בבילד לכניסה עם PIN בפרודקשן */
@@ -234,6 +239,22 @@ export function clearStaffBypass(): void {
 export function activateDevAdminBypass(): void {
   if (typeof window === "undefined") return;
   if (!isDevAdminOneClickAllowed()) return;
+  localStorage.setItem(DEV_ADMIN_BYPASS_KEY, "1");
+  startSession();
+}
+
+/**
+ * נייד בפרודקשן: כשהכפתור מוצג (SHOW) ואין PIN בבילד — כניסה בלי הקלדת קוד.
+ * אם הוגדר PIN/צוות — חייבים להשתמש ב־activateDevAdminBypassWithPin.
+ */
+export function activateDevAdminBypassNoPinWhenUiEnabled(): void {
+  if (typeof window === "undefined") return;
+  if (!isDevAdminBypassUiEnabled()) return;
+  if (isDevAdminPinConfigured()) return;
+  if (isDevAdminOneClickAllowed()) {
+    activateDevAdminBypass();
+    return;
+  }
   localStorage.setItem(DEV_ADMIN_BYPASS_KEY, "1");
   startSession();
 }

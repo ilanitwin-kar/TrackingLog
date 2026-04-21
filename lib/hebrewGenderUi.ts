@@ -206,7 +206,11 @@ export function dictionarySavedFilterLabel(gender: Gender): string {
 }
 
 export function dictionarySavedFilterPlaceholder(gender: Gender): string {
-  return gf(gender, "הקלידי לסינון הרשימה…", "הקלד לסינון הרשימה…");
+  return gf(
+    gender,
+    "חיפוש במילון, במאגר הפנימי וב־Open Food Facts (לפחות 2 אותיות)…",
+    "חיפוש במילון, במאגר הפנימי וב־Open Food Facts (לפחות 2 אותיות)…"
+  );
 }
 
 export function dictionaryEditFoodError(gender: Gender): string {
