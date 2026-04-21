@@ -15,12 +15,14 @@ import {
   type MealPreset,
   type MealPresetComponent,
   applyMealPresetToToday,
+  getEntriesForDate,
   isExplorerFoodInDictionary,
   loadDictionary,
   loadMealPresets,
   loadProfile,
   patchDictionaryItemById,
   removeDictionaryItem,
+  saveDayLogEntries,
   toggleExplorerFoodInDictionary,
 } from "@/lib/storage";
 import {
@@ -33,6 +35,7 @@ import {
   IconCart,
   IconPencil,
   IconTrash,
+  IconPlusCircle,
   IconVerified,
 } from "@/components/Icons";
 import { InfoCard } from "@/components/InfoCard";
@@ -47,6 +50,7 @@ import {
 } from "@/lib/hebrewGenderUi";
 import Link from "next/link";
 import { rankedFuzzySearchByText, type MatchRange } from "@/lib/rankedSearch";
+import { getTodayKey } from "@/lib/dateKey";
 
 const fontFood =
   "font-[Calibri,'Segoe_UI','Helvetica_Neue',system-ui,sans-serif]";
@@ -355,6 +359,27 @@ export default function DictionaryPage() {
     });
     setExplorerUiTick((x) => x + 1);
     refresh();
+  }
+
+  function onExplorerJournal(row: ExplorerFoodRow) {
+    const dateKey = getTodayKey();
+    const existing = getEntriesForDate(dateKey);
+    const entry = {
+      id: `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
+      food: row.name,
+      calories: Math.max(1, Math.round(row.calories)),
+      quantity: 100,
+      unit: "גרם" as const,
+      createdAt: new Date().toISOString(),
+      verified: true,
+      proteinG: Math.round(row.protein * 10) / 10,
+      carbsG: Math.round(row.carbs * 10) / 10,
+      fatG: Math.round(row.fat * 10) / 10,
+    };
+    saveDayLogEntries(dateKey, [entry, ...existing]);
+    emitMealLoggedFeedback(
+      gf(gender, "נוסף ליומן היום.", "נוסף ליומן היום.")
+    );
   }
 
   function onExplorerCart(row: ExplorerFoodRow) {
@@ -777,23 +802,13 @@ export default function DictionaryPage() {
                         <div className="flex shrink-0 gap-2">
                           <button
                             type="button"
-                            className={`btn-icon-luxury min-w-[3.25rem] flex-col justify-center gap-0.5 py-2 transition-colors ${
-                              inDict
-                                ? "bg-[var(--cherry-muted)] ring-2 ring-[var(--border-cherry-soft)]"
-                                : ""
-                            }`}
-                            title="הוספה או הסרה מהמילון האישי"
-                            aria-label="מילון — הוספה או הסרה מהמילון האישי"
-                            aria-pressed={inDict}
-                            onClick={() => onExplorerDictionary(row)}
+                            className="btn-icon-luxury min-w-[3.25rem] flex-col justify-center gap-0.5 py-2 transition-colors"
+                            title="הוספה ליומן היום (100 גרם)"
+                            aria-label="יומן — הוספה ליומן היום"
+                            onClick={() => onExplorerJournal(row)}
                           >
-                            <IconCaption label="מילון">
-                              <IconBookmark
-                                filled={inDict}
-                                className={`h-5 w-5 ${
-                                  inDict ? "text-[var(--cherry)]" : "text-[var(--stem)]"
-                                }`}
-                              />
+                            <IconCaption label="יומן">
+                              <IconPlusCircle className="h-5 w-5 text-[var(--stem)]" />
                             </IconCaption>
                           </button>
                           <button
@@ -866,23 +881,13 @@ export default function DictionaryPage() {
                         <div className="flex shrink-0 gap-2">
                           <button
                             type="button"
-                            className={`btn-icon-luxury min-w-[3.25rem] flex-col justify-center gap-0.5 py-2 transition-colors ${
-                              inDict
-                                ? "bg-[var(--cherry-muted)] ring-2 ring-[var(--border-cherry-soft)]"
-                                : ""
-                            }`}
-                            title="הוספה או הסרה מהמילון האישי"
-                            aria-label="מילון — הוספה או הסרה מהמילון האישי"
-                            aria-pressed={inDict}
-                            onClick={() => onExplorerDictionary(row)}
+                            className="btn-icon-luxury min-w-[3.25rem] flex-col justify-center gap-0.5 py-2 transition-colors"
+                            title="הוספה ליומן היום (100 גרם)"
+                            aria-label="יומן — הוספה ליומן היום"
+                            onClick={() => onExplorerJournal(row)}
                           >
-                            <IconCaption label="מילון">
-                              <IconBookmark
-                                filled={inDict}
-                                className={`h-5 w-5 ${
-                                  inDict ? "text-[var(--cherry)]" : "text-[var(--stem)]"
-                                }`}
-                              />
+                            <IconCaption label="יומן">
+                              <IconPlusCircle className="h-5 w-5 text-[var(--stem)]" />
                             </IconCaption>
                           </button>
                           <button

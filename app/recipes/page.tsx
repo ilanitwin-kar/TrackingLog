@@ -228,7 +228,7 @@ export default function RecipesPage() {
             items?: Array<{ id: string; name: string; calories: number; protein: number; carbs: number; fat: number }>;
           };
           setExplorerRows(
-            (ex.items ?? []).slice(0, 10).map((r) => ({
+            (ex.items ?? []).slice(0, 18).map((r) => ({
               id: `explorer:${r.id}`,
               name: r.name,
               source: "explorer",
@@ -292,8 +292,8 @@ export default function RecipesPage() {
       if (!dedup.has(key)) dedup.set(key, r);
     }
     const list = Array.from(dedup.values());
-    const fuzzy = fuzzySearch(list, t, { keys: ["name"], limit: 14 });
-    const bySource = (src: SearchRow["source"]) => fuzzy.filter((x) => x.source === src);
+    // Don't pre-trim here — ranking+fuzzy happens in rankedFuzzySearchByText.
+    const bySource = (src: SearchRow["source"]) => list.filter((x) => x.source === src);
     return [
       ...bySource("dictionary"),
       ...bySource("explorer"),
