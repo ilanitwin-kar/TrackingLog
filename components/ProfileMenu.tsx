@@ -279,6 +279,14 @@ export function ProfileMenu() {
               רשימת קניות
             </Link>
             <Link
+              href="/settings"
+              role="menuitem"
+              className="block px-4 py-3 text-sm font-semibold text-[var(--stem)] hover:bg-[var(--cherry-muted)]"
+              onClick={() => setOpen(false)}
+            >
+              הגדרות
+            </Link>
+            <Link
               href="/calorie-board"
               role="menuitem"
               className="block px-4 py-3 text-sm font-semibold text-[var(--stem)] hover:bg-[var(--cherry-muted)]"

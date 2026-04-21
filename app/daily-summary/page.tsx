@@ -255,8 +255,8 @@ export default function DailySummaryPage() {
             }
             if (hour >= 18 && remaining > 0) {
               return gender === "male"
-                ? `נשארו לך עוד ${remaining} קלוריות כדי לסגור את היום חזק 🫐`
-                : `נשאר לך עוד ${remaining} קלוריות כדי לסגור את היום בטוב 🍒`;
+                ? `נשארו לך עוד ${remaining} קלוריות — ואתה מנהל את היום כמו מקצוען. 🫐`
+                : `נשאר לך עוד ${remaining} קלוריות — ואת מנהלת את היום כמו מקצוענית. 🍒`;
             }
             if (dayPct >= 80) {
               return gender === "male"
