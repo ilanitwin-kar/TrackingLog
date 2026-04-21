@@ -392,13 +392,10 @@ export default function DictionaryPage() {
     const dateKey = getTodayKey();
     const existing = getEntriesForDate(dateKey);
 
-    const k100Raw =
+    const k100 =
       d.caloriesPer100g != null && Number.isFinite(d.caloriesPer100g)
-        ? d.caloriesPer100g
-        : d.lastCalories != null && Number.isFinite(d.lastCalories)
-          ? d.lastCalories
-          : null;
-    const k100 = k100Raw != null ? Math.max(0, k100Raw) : null;
+        ? Math.max(0, d.caloriesPer100g)
+        : null;
 
     const p100 =
       d.proteinPer100g != null && Number.isFinite(d.proteinPer100g)
@@ -413,27 +410,54 @@ export default function DictionaryPage() {
         ? Math.max(0, d.fatPer100g)
         : null;
 
-    // Default behavior: add a predictable 100g to today's journal.
-    // If the saved item is already in grams, respect its saved gram portion.
-    const qtyG =
-      d.unit === "גרם" && Number.isFinite(d.quantity) && d.quantity > 0
-        ? clampJournalQty(d.quantity, d.unit)
-        : 100;
+    const gPerU =
+      d.gramsPerUnit != null && Number.isFinite(d.gramsPerUnit) && d.gramsPerUnit > 0
+        ? d.gramsPerUnit
+        : null;
+    const totalG = servingTotalGrams(d.quantity, d.unit, gPerU);
+    const qty = clampJournalQty(d.quantity, d.unit);
 
-    const factor = qtyG / 100;
-    const calories = k100 != null ? Math.max(1, Math.round(k100 * factor)) : 1;
+    let calories: number;
+    let proteinG: number | undefined;
+    let carbsG: number | undefined;
+    let fatG: number | undefined;
+    let unit: FoodUnit = d.unit;
+    let quantity = qty;
+
+    if (k100 != null && totalG != null && totalG > 0) {
+      const factor = totalG / 100;
+      calories = Math.max(1, Math.round(k100 * factor));
+      if (p100 != null) proteinG = Math.round(p100 * factor * 10) / 10;
+      if (c100 != null) carbsG = Math.round(c100 * factor * 10) / 10;
+      if (f100 != null) fatG = Math.round(f100 * factor * 10) / 10;
+    } else if (
+      d.lastCalories != null &&
+      Number.isFinite(d.lastCalories) &&
+      d.lastCalories > 0
+    ) {
+      calories = Math.max(1, Math.round(d.lastCalories));
+    } else if (k100 != null) {
+      calories = Math.max(1, Math.round(k100));
+      if (p100 != null) proteinG = Math.round(p100 * 10) / 10;
+      if (c100 != null) carbsG = Math.round(c100 * 10) / 10;
+      if (f100 != null) fatG = Math.round(f100 * 10) / 10;
+      unit = "גרם";
+      quantity = 100;
+    } else {
+      calories = 1;
+    }
 
     const entry: LogEntry = {
       id: `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
       food: d.food,
       calories,
-      quantity: qtyG,
-      unit: "גרם",
+      quantity,
+      unit,
       createdAt: new Date().toISOString(),
       verified: false,
-      ...(p100 != null ? { proteinG: Math.round(p100 * factor * 10) / 10 } : {}),
-      ...(c100 != null ? { carbsG: Math.round(c100 * factor * 10) / 10 } : {}),
-      ...(f100 != null ? { fatG: Math.round(f100 * factor * 10) / 10 } : {}),
+      ...(proteinG != null ? { proteinG } : {}),
+      ...(carbsG != null ? { carbsG } : {}),
+      ...(fatG != null ? { fatG } : {}),
     };
 
     saveDayLogEntries(dateKey, [entry, ...existing]);
@@ -690,7 +714,7 @@ export default function DictionaryPage() {
                         <button
                           type="button"
                           className="btn-icon-luxury flex min-w-[3.1rem] flex-col justify-center gap-0 py-1.5"
-                          title="הוספה ליומן היום (100 גרם)"
+                          title="הוספה ליומן היום לפי מה ששמור במילון (כמות ויחידה)"
                           aria-label="יומן — הוספה ליומן היום"
                           onClick={() => onSavedJournal(d)}
                         >

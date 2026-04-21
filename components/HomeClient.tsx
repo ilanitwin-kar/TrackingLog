@@ -1353,16 +1353,17 @@ export function HomeClient({ mode = "dashboard" }: { mode?: "dashboard" | "journ
 
       {isJournalMode ? (
       <section className="glass-panel p-4">
-        <InfoCard
-          gender={gender}
-          icon="📔"
-          title={homeJournalIntroTitle()}
-          body={homeJournalIntroBody(gender)}
-          className="mb-5"
-        />
-
-        <div className="mb-4 flex flex-col gap-3">
+        <div className="mb-5 flex flex-col gap-3">
           <div className="flex flex-wrap items-center justify-center gap-2">
+            <Link
+              href={`/add-food?date=${encodeURIComponent(viewDateKey)}`}
+              className={`${quickNavBtnClass} min-h-[3rem] px-4 py-3 text-sm font-extrabold sm:min-h-[3.25rem] sm:text-base`}
+            >
+              <span className="text-xl" aria-hidden>
+                ➕
+              </span>
+              <span>הוספת מזון</span>
+            </Link>
             <input
               ref={datePickerRef}
               type="date"
@@ -1373,7 +1374,7 @@ export function HomeClient({ mode = "dashboard" }: { mode?: "dashboard" | "journ
               tabIndex={-1}
               onChange={(e) => {
                 const dk = e.target.value;
-                if (dk && /^\\d{4}-\\d{2}-\\d{2}$/.test(dk) && dk <= todayKey) {
+                if (dk && /^\d{4}-\d{2}-\d{2}$/.test(dk) && dk <= todayKey) {
                   navigateToDate(dk);
                 }
               }}
@@ -1399,6 +1400,14 @@ export function HomeClient({ mode = "dashboard" }: { mode?: "dashboard" | "journ
             אפשר גם להחליק ימינה/שמאלה כדי לעבור ימים
           </p>
         </div>
+
+        <InfoCard
+          gender={gender}
+          icon="📔"
+          title={homeJournalIntroTitle()}
+          body={homeJournalIntroBody(gender)}
+          className="mb-5"
+        />
         {isDayClosed && (
           <div
             className="mb-4 space-y-3 rounded-xl border-2 border-[var(--border-cherry-soft)] bg-cherry-faint px-3 py-3 text-center"
@@ -1428,8 +1437,8 @@ export function HomeClient({ mode = "dashboard" }: { mode?: "dashboard" | "journ
           <p className="text-[var(--text)]/85">
             {gf(
               gender,
-              "עדיין אין רשומות — לחצי על הכפתור המרכזי ״הוספה״ בתפריט התחתון,",
-              "עדיין אין רשומות — לחץ על הכפתור המרכזי ״הוספה״ בתפריט התחתון,"
+              "עדיין אין רשומות — לחצי על ״הוספת מזון״ למעלה או על הכפתור המרכזי ״הוספה״ בתפריט התחתון,",
+              "עדיין אין רשומות — לחץ על ״הוספת מזון״ למעלה או על הכפתור המרכזי ״הוספה״ בתפריט התחתון,"
             )}{" "}
             ואז על ״פתיחת מסך הוספת מזון״ (המקלדת לא מסתירה את תוצאות החיפוש).
           </p>
