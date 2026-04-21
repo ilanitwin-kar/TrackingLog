@@ -308,6 +308,8 @@ export async function POST(req: Request) {
     `  - Rice/pasta ("אורז", "פסטה"): ask cooked vs dry and grams/cups.\n` +
     `  - Meat/chicken/fish ("עוף", "בשר", "דג"): ask cut + cooking method + grams.\n` +
     `  - Oils/nut butters ("שמן", "טחינה", "חמאת בוטנים"): ask teaspoons/tablespoons/grams.\n` +
+    `  - Eggs ("ביצה", "ביצים", "ביצת עין", "חביתה"): ask egg size (S/M/L או גרם/\"ביצה גדולה\") AND frying fat (oil/butter and how much).\n` +
+    `  - Fried foods: ALWAYS ask what fat was used (oil/butter) and amount if not stated.\n` +
     `- If the user already gave the missing detail in the same message, do not ask again.\n` +
     `- Understand כף / כפית / כוס / יחידה / "מנה במסעדה" / משקל בגרם when the user gives them.\n` +
     `- NEVER claim food was already saved to the journal. Saving is only via the app's buttons under your message.\n` +
