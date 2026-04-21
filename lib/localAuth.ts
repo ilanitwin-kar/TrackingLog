@@ -116,10 +116,11 @@ export async function registerAccount(
   password: string,
 ): Promise<RegisterResult> {
   const n = normalizeEmail(email);
+  const pw = password.trim();
   if (!EMAIL_RE.test(n)) return { ok: false, error: "email" };
-  if (password.length < 6) return { ok: false, error: "short" };
+  if (pw.length < 6) return { ok: false, error: "short" };
   if (loadAuthRecord()) return { ok: false, error: "exists" };
-  const passwordHash = await hashPasswordV2(password);
+  const passwordHash = await hashPasswordV2(pw);
   saveAuthRecord({ email: n, passwordHash, pwHashVersion: 2 });
   const p = loadProfile();
   const wasComplete = isRegistrationComplete({ ...p, email: n });
@@ -135,17 +136,18 @@ export async function verifyLogin(email: string, password: string): Promise<bool
   const auth = loadAuthRecord();
   if (!auth) return false;
   const n = normalizeEmail(email);
+  const pw = password.trim();
   if (auth.email !== n) return false;
 
   if (auth.pwHashVersion === 2) {
-    const h = await hashPasswordV2(password);
+    const h = await hashPasswordV2(pw);
     return h === auth.passwordHash;
   }
 
-  const legacy = await hashPasswordLegacy(auth.email, password);
+  const legacy = await hashPasswordLegacy(auth.email, pw);
   if (legacy !== auth.passwordHash) return false;
 
-  const migrated = await hashPasswordV2(password);
+  const migrated = await hashPasswordV2(pw);
   saveAuthRecord({
     email: auth.email,
     passwordHash: migrated,
@@ -165,15 +167,32 @@ export async function resetLocalPassword(
   email: string,
   newPassword: string
 ): Promise<ResetLocalPasswordResult> {
-  const auth = loadAuthRecord();
-  if (!auth) return { ok: false, error: "no_account" };
   const n = normalizeEmail(email);
+  const pw = newPassword.trim();
+  if (pw.length < 6) return { ok: false, error: "short" };
+
+  const auth = loadAuthRecord();
+  if (!auth) {
+    const p = loadProfile();
+    if (!isRegistrationComplete(p)) {
+      return { ok: false, error: "no_account" };
+    }
+    const profileEmail = normalizeEmail(p.email);
+    if (n !== profileEmail) {
+      return { ok: false, error: "email" };
+    }
+    const passwordHash = await hashPasswordV2(pw);
+    saveAuthRecord({ email: n, passwordHash, pwHashVersion: 2 });
+    saveProfile({ ...p, email: n });
+    dispatchAuthChanged();
+    return { ok: true };
+  }
+
   const profileEmail = normalizeEmail(loadProfile().email);
   if (n !== auth.email && n !== profileEmail) {
     return { ok: false, error: "email" };
   }
-  if (newPassword.length < 6) return { ok: false, error: "short" };
-  const passwordHash = await hashPasswordV2(newPassword);
+  const passwordHash = await hashPasswordV2(pw);
   saveAuthRecord({ email: n, passwordHash, pwHashVersion: 2 });
   const p = loadProfile();
   saveProfile({ ...p, email: n });
