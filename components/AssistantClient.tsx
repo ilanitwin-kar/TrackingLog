@@ -9,14 +9,16 @@ import {
   saveAssistantMemory,
   type AssistantMemory,
 } from "@/lib/cloudMemory";
-import { getTodayKey } from "@/lib/dateKey";
+import { getLastNDateKeysIncludingToday, getTodayKey } from "@/lib/dateKey";
 import { addToShopping } from "@/lib/explorerStorage";
 import { loadExerciseActivityDaySync } from "@/lib/exerciseActivity";
 import { kcalBurnedFromStepsMet35 } from "@/lib/burnOffset";
+import { getDaysRemainingToGoal } from "@/lib/goalMetrics";
 import {
   getEntriesForDate,
   loadDictionary,
   loadProfile,
+  loadWeights,
   saveDayLogEntries,
   upsertExplorerFoodInDictionary,
   type LogEntry,
@@ -471,6 +473,41 @@ function extractPreferencePatches(text: string): { likes?: string[]; dislikes?: 
   };
 }
 
+function extractNutritionDefaultsPatch(
+  text: string
+): Partial<NonNullable<AssistantMemory["nutritionDefaults"]>> {
+  const t = text.trim();
+  if (!t) return {};
+  const out: Partial<NonNullable<AssistantMemory["nutritionDefaults"]>> = {};
+
+  const pct = t.match(/(\d{1,2})\s*%/);
+  const p = pct?.[1] ? Number(pct[1]) : null;
+  const hasCheese = /(קוטג|גבינ|לבנה|צהובה)/.test(t);
+  const hasYogurt = /(יוגורט)/.test(t);
+  const hasBread = /(לחם|פיתה|טורטיה|לחמניה)/.test(t);
+
+  if (hasCheese && p != null && Number.isFinite(p) && p >= 0 && p <= 60) {
+    const label =
+      t.includes("קוטג") || t.includes("קוטג׳") || t.includes("קוטג'")
+        ? `קוטג׳ ${p}%`
+        : t.includes("לבנה")
+          ? `לבנה ${p}%`
+          : `גבינה ${p}%`;
+    out.cheese = label;
+  }
+  if (hasYogurt && p != null && Number.isFinite(p) && p >= 0 && p <= 20) {
+    const flavored = /(בטעם|פירות|וניל|תות|בננה)/.test(t) ? "בטעם" : "טבעי";
+    out.yogurt = `יוגורט ${flavored} ${p}%`;
+  }
+  if (hasBread) {
+    if (/(מלא)/.test(t)) out.bread = "לחם מלא";
+    else if (/(לבן)/.test(t)) out.bread = "לחם לבן";
+    else if (/(כוסמין)/.test(t)) out.bread = "לחם כוסמין";
+  }
+
+  return out;
+}
+
 export function AssistantClient() {
   const profile = loadProfile();
   const gender = profile.gender;
@@ -623,11 +660,47 @@ export function AssistantClient() {
       0,
       caloriesOverGoal - walkBurnKcal
     );
+    const daysToGoal = getDaysRemainingToGoal();
+    const weights = loadWeights();
+    const weightByDate = new Map<string, number>();
+    for (const w of weights) {
+      if (w && typeof w.date === "string" && typeof w.kg === "number") {
+        weightByDate.set(w.date, w.kg);
+      }
+    }
+    const historyDays = getLastNDateKeysIncludingToday(21).map((k) => {
+      const es = getEntriesForDate(k);
+      const tt = es.reduce(
+        (acc, e) => {
+          acc.calories += e.calories ?? 0;
+          acc.protein += typeof e.proteinG === "number" ? e.proteinG : 0;
+          acc.carbs += typeof e.carbsG === "number" ? e.carbsG : 0;
+          acc.fat += typeof e.fatG === "number" ? e.fatG : 0;
+          return acc;
+        },
+        { calories: 0, protein: 0, carbs: 0, fat: 0 }
+      );
+      const exDay = loadExerciseActivityDaySync(k);
+      const steps = exDay?.reportedSteps ?? 0;
+      const weightKg = weightByDate.get(k) ?? null;
+      return {
+        date: k,
+        calories: Math.round(tt.calories),
+        protein: Math.round(tt.protein * 10) / 10,
+        carbs: Math.round(tt.carbs * 10) / 10,
+        fat: Math.round(tt.fat * 10) / 10,
+        steps,
+        weightKg,
+        entriesCount: es.length,
+      };
+    });
     return {
       now: new Date().toISOString(),
       profile: {
         firstName: profile.firstName ?? "",
         gender: profile.gender ?? "female",
+        currentWeightKg: profile.weightKg,
+        goalWeightKg: profile.goalWeightKg,
       },
       today,
       totals,
@@ -635,6 +708,7 @@ export function AssistantClient() {
       caloriesConsumed,
       caloriesOverGoal,
       withinCalorieGoal: caloriesOverGoal <= 0,
+      daysToGoal,
       exerciseActivity: {
         reportedSteps,
         kcalBurnedFromWalk: walkBurnKcal,
@@ -643,6 +717,7 @@ export function AssistantClient() {
           caloriesOverGoal > 0 && caloriesOverGoalAfterWalk <= 0,
       },
       entriesCount: entries.length,
+      historyDays,
       dictionary: loadDictionary().slice(0, 280).map((d) => ({
         id: d.id,
         food: d.food,
@@ -656,6 +731,7 @@ export function AssistantClient() {
     profile.firstName,
     profile.gender,
     profile.weightKg,
+    profile.goalWeightKg,
     profile.heightCm,
     profile.age,
     profile.deficit,
@@ -743,6 +819,19 @@ export function AssistantClient() {
           setCloudStatus("blocked");
           setCloudMsg("לא הצלחתי לשמור בענן (בדקי Rules/Anonymous).");
           window.setTimeout(() => setCloudMsg(null), 2400);
+        }
+      }
+
+      // Save nutrition defaults for future precision (so we can confirm instead of re-asking).
+      const defaultsPatch = extractNutritionDefaultsPatch(text);
+      if (Object.keys(defaultsPatch).length > 0) {
+        try {
+          const current = mem ?? (await loadAssistantMemory()) ?? {};
+          const nextDefaults = { ...(current.nutritionDefaults ?? {}), ...defaultsPatch };
+          await saveAssistantMemory({ nutritionDefaults: nextDefaults });
+          setMem((prev) => ({ ...(prev ?? {}), nutritionDefaults: nextDefaults }));
+        } catch {
+          // ignore
         }
       }
 

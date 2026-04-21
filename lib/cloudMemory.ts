@@ -9,6 +9,12 @@ export type AssistantMemory = {
   likes?: string[];
   dislikes?: string[];
   notes?: string;
+  /** ברירות מחדל לדיוק תזונתי כדי לא לשאול שוב על אותם דברים */
+  nutritionDefaults?: {
+    cheese?: string; // e.g. "קוטג׳ 5%"
+    yogurt?: string; // e.g. "יוגורט טבעי 3%"
+    bread?: string; // e.g. "לחם מלא"
+  };
 };
 
 export async function ensureAnonAuth(): Promise<string | null> {
