@@ -20,14 +20,10 @@ export function getTimeOfDaySlot(hour: number): TimeOfDaySlot {
 }
 
 export function buildDashboardGreetingLine(
-  gender: Gender,
   firstName: string,
   hour: number
 ): string {
   const slot = getTimeOfDaySlot(hour);
-  const name = firstName.trim() || "שם";
-  if (gender === "male") {
-    return `${slot.salutationHe} ${name}, מוכן לכבוש את היעד? ${slot.emoji}`;
-  }
-  return `${slot.salutationHe} ${name}, מוכנה לנצח את היום? ${slot.emoji}`;
+  const name = firstName.trim();
+  return name ? `${slot.salutationHe} ${name} ${slot.emoji}` : `${slot.salutationHe} ${slot.emoji}`;
 }

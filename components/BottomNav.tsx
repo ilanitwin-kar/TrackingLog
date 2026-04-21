@@ -20,6 +20,7 @@ import { gf } from "@/lib/hebrewGenderUi";
 
 const navLinks = [
   { href: "/", label: "בית", Icon: IconNavHome },
+  { href: "/journal", label: "היומן שלי", Icon: IconNavBook },
   { href: "/dictionary", label: "מילון", Icon: IconNavBook },
   { href: "/report", label: "דוח", Icon: IconNavChart },
 ] as const;
@@ -101,7 +102,7 @@ export function BottomNav() {
         className="bottom-nav-shell fixed bottom-0 left-0 right-0 z-[100] border-t-2 border-[var(--border-cherry-soft)] bg-white/95 pb-[max(0.35rem,env(safe-area-inset-bottom))] pt-1 backdrop-blur-sm print:hidden"
         aria-label="ניווט ראשי"
       >
-        <ul className="mx-auto grid max-w-md grid-cols-4 items-center gap-0.5 px-0.5 sm:gap-1 sm:px-1">
+        <ul className="mx-auto grid max-w-md grid-cols-5 items-center gap-0.5 px-0.5 sm:gap-1 sm:px-1">
           {navLinks.slice(0, 2).map(({ href, label, Icon }) => {
             const active = pathname === href;
             return (
@@ -218,8 +219,7 @@ export function BottomNav() {
             </div>
           </li>
 
-          {(() => {
-            const { href, label, Icon } = navLinks[2];
+          {navLinks.slice(2).map(({ href, label, Icon }) => {
             const active = pathname === href;
             return (
               <li key={href} className="flex min-w-0 justify-center">
@@ -259,7 +259,7 @@ export function BottomNav() {
                 </Link>
               </li>
             );
-          })()}
+          })}
         </ul>
       </nav>
 

@@ -24,6 +24,7 @@ import {
 } from "@/lib/appVariant";
 import { DevAdminQuickEntry } from "@/components/DevAdminQuickEntry";
 import { gf } from "@/lib/hebrewGenderUi";
+import { getTimeOfDaySlot } from "@/lib/dashboardGreeting";
 
 const LANG_KEY = "cj_welcome_lang";
 
@@ -421,7 +422,16 @@ export function WelcomeScreen() {
           dir={dir}
         >
           <p className="text-balance text-center text-lg font-extrabold leading-snug text-[var(--ui-welcome-tagline)] sm:text-xl">
-            {t.taglinePrimary}
+            {lang === "he"
+              ? (() => {
+                  const p = loadProfile();
+                  const slot = getTimeOfDaySlot(new Date().getHours());
+                  const name = p.firstName?.trim();
+                  return name
+                    ? `${slot.salutationHe} ${name} ${slot.emoji}`
+                    : `${t.taglinePrimary}`;
+                })()
+              : t.taglinePrimary}
           </p>
           <p className="mt-4 text-balance text-center text-base font-bold leading-relaxed text-[var(--stem)] sm:text-lg">
             {t.taglineSecondary}

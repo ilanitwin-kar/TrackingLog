@@ -12,6 +12,7 @@ import {
 import {
   type DictionaryItem,
   type FoodUnit,
+  type LogEntry,
   type MealPreset,
   type MealPresetComponent,
   applyMealPresetToToday,
@@ -115,6 +116,11 @@ function kcalPer100FromMealComponent(c: MealPresetComponent): number {
     return Math.round((c.calories / c.quantity) * 100);
   }
   return 0;
+}
+
+function clampJournalQty(q: number, unit: FoodUnit): number {
+  if (unit === "גרם") return clampGramQty(q);
+  return clampOtherQty(q);
 }
 
 function sortSavedByQuery(items: DictionaryItem[], query: string): DictionaryItem[] {
@@ -382,6 +388,82 @@ export default function DictionaryPage() {
     );
   }
 
+  function onSavedJournal(d: DictionaryItem) {
+    const dateKey = getTodayKey();
+    const existing = getEntriesForDate(dateKey);
+
+    const k100 =
+      d.caloriesPer100g != null && Number.isFinite(d.caloriesPer100g)
+        ? Math.max(0, d.caloriesPer100g)
+        : null;
+
+    const p100 =
+      d.proteinPer100g != null && Number.isFinite(d.proteinPer100g)
+        ? Math.max(0, d.proteinPer100g)
+        : null;
+    const c100 =
+      d.carbsPer100g != null && Number.isFinite(d.carbsPer100g)
+        ? Math.max(0, d.carbsPer100g)
+        : null;
+    const f100 =
+      d.fatPer100g != null && Number.isFinite(d.fatPer100g)
+        ? Math.max(0, d.fatPer100g)
+        : null;
+
+    const gPerU =
+      d.gramsPerUnit != null && Number.isFinite(d.gramsPerUnit) && d.gramsPerUnit > 0
+        ? d.gramsPerUnit
+        : null;
+    const totalG = servingTotalGrams(d.quantity, d.unit, gPerU);
+    const qty = clampJournalQty(d.quantity, d.unit);
+
+    let calories: number;
+    let proteinG: number | undefined;
+    let carbsG: number | undefined;
+    let fatG: number | undefined;
+    let unit: FoodUnit = d.unit;
+    let quantity = qty;
+
+    if (k100 != null && totalG != null && totalG > 0) {
+      const factor = totalG / 100;
+      calories = Math.max(1, Math.round(k100 * factor));
+      if (p100 != null) proteinG = Math.round(p100 * factor * 10) / 10;
+      if (c100 != null) carbsG = Math.round(c100 * factor * 10) / 10;
+      if (f100 != null) fatG = Math.round(f100 * factor * 10) / 10;
+    } else if (
+      d.lastCalories != null &&
+      Number.isFinite(d.lastCalories) &&
+      d.lastCalories > 0
+    ) {
+      calories = Math.max(1, Math.round(d.lastCalories));
+    } else if (k100 != null) {
+      calories = Math.max(1, Math.round(k100));
+      if (p100 != null) proteinG = Math.round(p100 * 10) / 10;
+      if (c100 != null) carbsG = Math.round(c100 * 10) / 10;
+      if (f100 != null) fatG = Math.round(f100 * 10) / 10;
+      unit = "גרם";
+      quantity = 100;
+    } else {
+      calories = 1;
+    }
+
+    const entry: LogEntry = {
+      id: `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
+      food: d.food,
+      calories,
+      quantity,
+      unit,
+      createdAt: new Date().toISOString(),
+      verified: false,
+      ...(proteinG != null ? { proteinG } : {}),
+      ...(carbsG != null ? { carbsG } : {}),
+      ...(fatG != null ? { fatG } : {}),
+    };
+
+    saveDayLogEntries(dateKey, [entry, ...existing]);
+    emitMealLoggedFeedback(gf(gender, "נוסף ליומן היום.", "נוסף ליומן היום."));
+  }
+
   function onExplorerCart(row: ExplorerFoodRow) {
     const added = addToShopping({
       foodId: row.id,
@@ -628,6 +710,19 @@ export default function DictionaryPage() {
                       )}
                     </div>
                     <div className="flex shrink-0 flex-wrap items-start justify-end gap-1">
+                      {!isMeal && (
+                        <button
+                          type="button"
+                          className="btn-icon-luxury flex min-w-[3.1rem] flex-col justify-center gap-0 py-1.5"
+                          title="הוספה ליומן היום לפי מה ששמור במילון (כמות ויחידה)"
+                          aria-label="יומן — הוספה ליומן היום"
+                          onClick={() => onSavedJournal(d)}
+                        >
+                          <IconCaption label="יומן">
+                            <IconPlusCircle className="h-5 w-5 sm:h-6 sm:w-6 text-[var(--stem)]" />
+                          </IconCaption>
+                        </button>
+                      )}
                       {!isMeal && (
                         <button
                           type="button"

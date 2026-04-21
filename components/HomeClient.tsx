@@ -393,7 +393,7 @@ const quickNavBtnClass =
 const foodToolbarBtnClass =
   "inline-flex min-h-[2.75rem] min-w-[2.75rem] flex-col items-center justify-center gap-0.5 rounded-xl border border-[var(--border-cherry-soft)] bg-white/95 px-2 py-1.5 text-[var(--stem)] shadow-sm transition hover:bg-[var(--cherry-muted)] disabled:cursor-not-allowed disabled:opacity-40";
 
-export function HomeClient() {
+export function HomeClient({ mode = "dashboard" }: { mode?: "dashboard" | "journal" }) {
   const gender = loadProfile().gender;
   const appVariant = useAppVariant();
   const router = useRouter();
@@ -403,6 +403,11 @@ export function HomeClient() {
 
   const [mealModalOpen, setMealModalOpen] = useState(false);
   const [mealNameDraft, setMealNameDraft] = useState("");
+  const mealBtnRef = useRef<HTMLButtonElement | null>(null);
+  const [mealModalPos, setMealModalPos] = useState<{ top: number; left: number; width: number } | null>(null);
+
+  const datePickerRef = useRef<HTMLInputElement | null>(null);
+  const touchRef = useRef<{ x: number; y: number; t: number } | null>(null);
 
   const [celebration, setCelebration] = useState({
     show: false,
@@ -465,6 +470,18 @@ export function HomeClient() {
       router.replace("/", { scroll: false });
     } else {
       router.replace(`/?date=${encodeURIComponent(dk)}`, { scroll: false });
+    }
+  }
+
+  function openDatePicker() {
+    const el = datePickerRef.current;
+    if (!el) return;
+    try {
+      const anyEl = el as unknown as { showPicker?: () => void };
+      if (typeof anyEl.showPicker === "function") anyEl.showPicker();
+      else el.click();
+    } catch {
+      el.focus();
     }
   }
 
@@ -533,12 +550,13 @@ export function HomeClient() {
   const greetingLine = useMemo(
     () =>
       buildDashboardGreetingLine(
-        gender,
         profile?.firstName ?? "",
         greetingHour
       ),
     [gender, profile?.firstName, greetingHour]
   );
+
+  const isJournalMode = mode === "journal";
 
   const weeklySavings = useMemo(
     () =>
@@ -552,6 +570,41 @@ export function HomeClient() {
     () => dailyCalorieMotivationLine(gender, target, total),
     [gender, target, total]
   );
+
+  const [weather, setWeather] = useState<null | { tempC: number; description: string; isRain: boolean; isHot: boolean }>(null);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    try {
+      const raw = localStorage.getItem("cj_weather_v1");
+      if (!raw) return;
+      const parsed = JSON.parse(raw) as { ts?: number; data?: any };
+      const ts = Number(parsed?.ts);
+      if (!Number.isFinite(ts) || Date.now() - ts > 60 * 60 * 1000) return;
+      const d = parsed?.data;
+      if (!d || typeof d !== "object") return;
+      if (typeof d.tempC !== "number") return;
+      setWeather({
+        tempC: d.tempC,
+        description: String(d.description ?? ""),
+        isRain: Boolean(d.isRain),
+        isHot: Boolean(d.isHot),
+      });
+    } catch {
+      /* ignore */
+    }
+  }, []);
+
+  const dailyMotivationLineWithWeather = useMemo(() => {
+    if (!dailyMotivationLine) return null;
+    if (!weather) return dailyMotivationLine;
+    const extra = weather.isRain
+      ? gf(gender, " טיפ קטן: גשם בחוץ — מרק חם יכול להיות מושלם הערב.", " טיפ קטן: גשם בחוץ — מרק חם יכול להיות מושלם הערב.")
+      : weather.isHot
+        ? gf(gender, " טיפ קטן: שרב — שימי דגש על מים וארוחה קלילה.", " טיפ קטן: שרב — שים דגש על מים וארוחה קלילה.")
+        : "";
+    return `${dailyMotivationLine}${extra}`;
+  }, [dailyMotivationLine, weather, gender]);
 
   /** חריגה גולמית מהיעד (לפני קיזוז הליכה) */
   const overGoalKcal =
@@ -763,6 +816,21 @@ export function HomeClient() {
   function openMealModal() {
     if (isDayClosed) return;
     setMealNameDraft("");
+    try {
+      const rect = mealBtnRef.current?.getBoundingClientRect();
+      if (rect) {
+        const vw = window.innerWidth || 360;
+        const vh = window.innerHeight || 640;
+        const width = Math.min(420, vw - 32);
+        const left = Math.min(vw - width - 16, Math.max(16, rect.left));
+        const top = Math.min(vh - 320 - 16, Math.max(16, rect.bottom + 10));
+        setMealModalPos({ top, left, width });
+      } else {
+        setMealModalPos(null);
+      }
+    } catch {
+      setMealModalPos(null);
+    }
     setMealModalOpen(true);
   }
 
@@ -891,19 +959,31 @@ export function HomeClient() {
       <AnimatePresence>
         {mealModalOpen && (
           <motion.div
-            className="fixed inset-0 z-[400] flex items-center justify-center bg-black/25 p-4"
+            className="fixed inset-0 z-[400] bg-black/25"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             role="dialog"
             aria-modal
             aria-labelledby="meal-modal-title"
+            onClick={(e) => {
+              if (e.target === e.currentTarget) setMealModalOpen(false);
+            }}
           >
             <motion.div
-              className="glass-panel w-full max-w-md space-y-4 p-5"
+              className="glass-panel fixed space-y-4 p-5"
               initial={{ scale: 0.92, opacity: 0 }}
               animate={{ scale: 1, opacity: 1 }}
               exit={{ scale: 0.95, opacity: 0 }}
+              style={
+                mealModalPos
+                  ? {
+                      top: mealModalPos.top,
+                      left: mealModalPos.left,
+                      width: mealModalPos.width,
+                    }
+                  : { inset: 16, margin: "auto", maxWidth: 420 }
+              }
             >
               <h2
                 id="meal-modal-title"
@@ -1085,6 +1165,7 @@ export function HomeClient() {
         )}
       </AnimatePresence>
 
+      {!isJournalMode && (
       <header className="mb-6 space-y-4 sm:space-y-5">
         <div className="flex flex-row items-start justify-between gap-2 sm:items-center sm:gap-4 md:justify-between">
           <p className="min-w-0 flex-1 text-balance text-base font-extrabold leading-snug text-[var(--stem)] sm:text-lg md:text-right md:text-2xl">
@@ -1154,14 +1235,16 @@ export function HomeClient() {
           </HomeAssistantInsightBubble>
         ) : null}
 
-        {dailyMotivationLine ? (
+        {dailyMotivationLineWithWeather ? (
           <p
             className="mx-auto max-w-md text-center text-sm font-medium leading-relaxed text-[var(--stem)]/90"
             role="status"
           >
-            {dailyMotivationLine}
+            {dailyMotivationLineWithWeather}
           </p>
         ) : null}
+
+        {/* Weather permission moved to Settings */}
 
         <div className="mx-auto grid max-w-xl grid-cols-3 gap-1.5 sm:gap-3">
           {(
@@ -1203,40 +1286,30 @@ export function HomeClient() {
           className="shadow-[0_8px_24px_var(--panel-shadow-soft)]"
         />
 
-        <nav
-          className="flex w-full flex-wrap gap-2 sm:gap-3"
-          aria-label="פעולות מהירות"
-        >
+        <nav className="grid w-full grid-cols-2 gap-2 sm:gap-3" aria-label="פעולות מהירות">
           <Link
             href={`/add-food?date=${encodeURIComponent(viewDateKey)}`}
-            className={quickNavBtnClass}
+            className={`${quickNavBtnClass} min-h-[3.25rem] px-3 py-3 text-sm sm:min-h-[3.5rem] sm:text-base`}
           >
-            <span className="text-lg" aria-hidden>
+            <span className="text-xl" aria-hidden>
               ➕
             </span>
-            <span className="truncate">הוספת מזון</span>
+            <span className="font-extrabold">הוספת מזון</span>
           </Link>
-          <Link href="/explorer" className={quickNavBtnClass}>
-            <span className="text-lg" aria-hidden>
-              💎
-            </span>
-            <span className="truncate">מגלה האוצרות</span>
-          </Link>
-          <Link href="/shopping" className={quickNavBtnClass}>
-            <span className="text-lg" aria-hidden>
-              🧺
-            </span>
-            <span className="truncate">סל האוצרות</span>
-          </Link>
-          <Link href="/daily-summary" className={quickNavBtnClass}>
-            <span className="text-lg" aria-hidden>
+          <Link
+            href="/daily-summary"
+            className={`${quickNavBtnClass} min-h-[3.25rem] px-3 py-3 text-sm sm:min-h-[3.5rem] sm:text-base`}
+          >
+            <span className="text-xl" aria-hidden>
               📊
             </span>
-            <span className="truncate">סיכום יומי</span>
+            <span className="font-extrabold">סיכום יומי</span>
           </Link>
         </nav>
       </header>
+      )}
 
+      {isJournalMode ? (
       <motion.div
         className="mb-8 flex flex-wrap items-center justify-center gap-x-2 gap-y-1.5 px-3 text-center"
         initial={{ opacity: 0, y: -8 }}
@@ -1249,8 +1322,19 @@ export function HomeClient() {
           אינטליגנציה קלורית
         </h1>
       </motion.div>
+      ) : (
+        <div className="mb-8">
+          <button
+            type="button"
+            className="btn-stem w-full rounded-2xl px-4 py-4 text-base font-extrabold shadow-[0_8px_28px_rgba(74,124,35,0.35)] ring-2 ring-white/40 md:text-lg"
+            onClick={() => router.push(`/journal?date=${encodeURIComponent(viewDateKey)}`)}
+          >
+            {gf(gender, "תעדי את היום שלך", "תעד את היום שלך")}
+          </button>
+        </div>
+      )}
 
-      {starredForMealCount >= 2 && !isDayClosed && (
+      {isJournalMode && starredForMealCount >= 2 && !isDayClosed && (
         <motion.div
           className="mb-4"
           initial={{ opacity: 0, y: 6 }}
@@ -1260,45 +1344,47 @@ export function HomeClient() {
             type="button"
             className="btn-stem w-full rounded-xl py-3 text-base font-semibold"
             onClick={openMealModal}
+            ref={mealBtnRef}
           >
             שמירה במילון מהפריטים המסומנים ({starredForMealCount})
           </button>
         </motion.div>
       )}
 
+      {isJournalMode ? (
       <section className="glass-panel p-4">
-        <InfoCard
-          gender={gender}
-          icon="📔"
-          title={homeJournalIntroTitle()}
-          body={homeJournalIntroBody(gender)}
-          className="mb-5"
-        />
-
-        <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
-          <div className="flex flex-wrap items-center justify-center gap-2 sm:justify-start">
+        <div className="mb-5 flex flex-col gap-3">
+          <div className="flex flex-wrap items-center justify-center gap-2">
+            <Link
+              href={`/add-food?date=${encodeURIComponent(viewDateKey)}`}
+              className={`${quickNavBtnClass} min-h-[3rem] px-4 py-3 text-sm font-extrabold sm:min-h-[3.25rem] sm:text-base`}
+            >
+              <span className="text-xl" aria-hidden>
+                ➕
+              </span>
+              <span>הוספת מזון</span>
+            </Link>
+            <input
+              ref={datePickerRef}
+              type="date"
+              value={viewDateKey}
+              max={todayKey}
+              className="sr-only"
+              aria-hidden
+              tabIndex={-1}
+              onChange={(e) => {
+                const dk = e.target.value;
+                if (dk && /^\d{4}-\d{2}-\d{2}$/.test(dk) && dk <= todayKey) {
+                  navigateToDate(dk);
+                }
+              }}
+            />
             <button
               type="button"
               className="rounded-xl border-2 border-[var(--border-cherry-soft)] bg-white px-3 py-2 text-sm font-bold text-[var(--stem)] shadow-sm transition hover:bg-[rgba(74,124,35,0.08)]"
-              aria-label="יום קודם ביומן"
-              onClick={() =>
-                navigateToDate(addDaysToDateKey(viewDateKey, -1))
-              }
+              onClick={openDatePicker}
             >
-              ‹ יום קודם
-            </button>
-            <button
-              type="button"
-              disabled={!canGoNextDay}
-              className="rounded-xl border-2 border-[var(--border-cherry-soft)] bg-white px-3 py-2 text-sm font-bold text-[var(--stem)] shadow-sm transition hover:bg-[rgba(74,124,35,0.08)] disabled:cursor-not-allowed disabled:opacity-40"
-              aria-label="יום הבא ביומן"
-              onClick={() => {
-                if (canGoNextDay) {
-                  navigateToDate(addDaysToDateKey(viewDateKey, 1));
-                }
-              }}
-            >
-              יום הבא ›
+              בחירת תאריך
             </button>
             {!isViewingToday && (
               <button
@@ -1310,21 +1396,18 @@ export function HomeClient() {
               </button>
             )}
           </div>
+          <p className="text-center text-xs font-medium tabular-nums text-[var(--text)]/55">
+            אפשר גם להחליק ימינה/שמאלה כדי לעבור ימים
+          </p>
         </div>
 
-        <div className="mb-5">
-          <button
-            type="button"
-            className={
-              isDayClosed
-                ? "w-full rounded-2xl border-2 border-[var(--border-cherry-soft)] bg-white px-4 py-4 text-base font-bold text-[var(--cherry)] shadow-md"
-                : "btn-stem w-full rounded-2xl px-4 py-4 text-base font-extrabold shadow-[0_8px_28px_rgba(74,124,35,0.35)] ring-2 ring-white/40 md:text-lg"
-            }
-            onClick={toggleJournalClosedForViewDay}
-          >
-            {isDayClosed ? "פתיחת היום לעריכה" : "סגירת היום ביומן"}
-          </button>
-        </div>
+        <InfoCard
+          gender={gender}
+          icon="📔"
+          title={homeJournalIntroTitle()}
+          body={homeJournalIntroBody(gender)}
+          className="mb-5"
+        />
         {isDayClosed && (
           <div
             className="mb-4 space-y-3 rounded-xl border-2 border-[var(--border-cherry-soft)] bg-cherry-faint px-3 py-3 text-center"
@@ -1354,13 +1437,48 @@ export function HomeClient() {
           <p className="text-[var(--text)]/85">
             {gf(
               gender,
-              "עדיין אין רשומות — לחצי על הכפתור המרכזי ״הוספה״ בתפריט התחתון,",
-              "עדיין אין רשומות — לחץ על הכפתור המרכזי ״הוספה״ בתפריט התחתון,"
+              "עדיין אין רשומות — לחצי על ״הוספת מזון״ למעלה או על הכפתור המרכזי ״הוספה״ בתפריט התחתון,",
+              "עדיין אין רשומות — לחץ על ״הוספת מזון״ למעלה או על הכפתור המרכזי ״הוספה״ בתפריט התחתון,"
             )}{" "}
             ואז על ״פתיחת מסך הוספת מזון״ (המקלדת לא מסתירה את תוצאות החיפוש).
           </p>
         ) : (
-          <ul className="space-y-3" data-dict-rev={dictTick}>
+          <ul
+            className="space-y-3"
+            data-dict-rev={dictTick}
+            onTouchStart={(e) => {
+              const t = e.touches?.[0];
+              if (!t) return;
+              const tag =
+                (e.target as HTMLElement | null)?.tagName?.toLowerCase() ?? "";
+              if (
+                tag === "input" ||
+                tag === "textarea" ||
+                tag === "button" ||
+                tag === "select"
+              )
+                return;
+              touchRef.current = { x: t.clientX, y: t.clientY, t: Date.now() };
+            }}
+            onTouchEnd={(e) => {
+              const start = touchRef.current;
+              touchRef.current = null;
+              if (!start) return;
+              const t = e.changedTouches?.[0];
+              if (!t) return;
+              const dx = t.clientX - start.x;
+              const dy = t.clientY - start.y;
+              if (Math.abs(dx) < 60) return;
+              if (Math.abs(dx) < Math.abs(dy) * 1.4) return;
+              if (dx > 0) {
+                // ימינה: יום קודם
+                navigateToDate(addDaysToDateKey(viewDateKey, -1));
+              } else {
+                // שמאלה: יום הבא (עד היום)
+                if (canGoNextDay) navigateToDate(addDaysToDateKey(viewDateKey, 1));
+              }
+            }}
+          >
             {entries.map((item) => {
               const inDictionary = isFoodStarred(item.food);
               const mealOn = item.mealStarred === true;
@@ -1563,7 +1681,39 @@ export function HomeClient() {
             })}
           </ul>
         )}
+
+        <div className="mt-5">
+          <button
+            type="button"
+            className={
+              isDayClosed
+                ? "w-full rounded-2xl border-2 border-[var(--border-cherry-soft)] bg-white px-4 py-4 text-base font-bold text-[var(--cherry)] shadow-md"
+                : "btn-stem w-full rounded-2xl px-4 py-4 text-base font-extrabold shadow-[0_8px_28px_rgba(74,124,35,0.35)] ring-2 ring-white/40 md:text-lg"
+            }
+            onClick={toggleJournalClosedForViewDay}
+          >
+            {isDayClosed ? "פתיחת היום לעריכה" : "סגירת היום ביומן"}
+          </button>
+        </div>
+        {isDayClosed && (
+          <div
+            className="mt-4 space-y-3 rounded-xl border-2 border-[var(--border-cherry-soft)] bg-cherry-faint px-3 py-3 text-center"
+            role="status"
+          >
+            <p className="text-sm font-semibold text-[var(--cherry)]">
+              היום סגור ביומן — רק צפייה. אפשר לפתוח שוב אם שכחת להזין משהו.
+            </p>
+            <button
+              type="button"
+              className="btn-stem w-full rounded-xl py-2.5 text-sm font-bold shadow-sm"
+              onClick={toggleJournalClosedForViewDay}
+            >
+              פתיחת היום לעריכה
+            </button>
+          </div>
+        )}
       </section>
+      ) : null}
 
     </div>
   );

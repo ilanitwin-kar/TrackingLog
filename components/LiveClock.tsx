@@ -47,10 +47,10 @@ export function LiveClock() {
       <p className="hidden text-xs font-medium text-[var(--text)]/80 md:block md:text-sm">
         {dateLong}
       </p>
-      <p className="text-[10px] font-medium leading-tight text-[var(--text)]/80 md:hidden">
+      <p className="text-xs font-medium leading-tight text-[var(--text)]/80 md:hidden">
         {dateShort}
       </p>
-      <p className="mt-0.5 font-mono text-[11px] font-semibold tracking-wide text-[var(--cherry)] md:mt-1 md:text-base">
+      <p className="mt-0.5 font-mono text-sm font-bold tracking-wide text-[var(--cherry)] md:mt-1 md:text-base">
         {time}
       </p>
     </motion.div>
