@@ -76,73 +76,79 @@ export function AppChrome({ children }: { children: React.ReactNode }) {
   }, [pathname]);
 
   useEffect(() => {
-    const profile = loadProfile();
-    if (
-      !hasLeftWelcome() &&
-      (profile.onboardingComplete === true ||
-        (profile.age >= 12 && profile.weightKg > 0))
-    ) {
-      markWelcomeLeft();
-    }
-    const complete = isRegistrationComplete(profile);
-    const welcomeDone = hasLeftWelcome();
+    try {
+      const profile = loadProfile();
+      if (
+        !hasLeftWelcome() &&
+        (profile.onboardingComplete === true ||
+          (profile.age >= 12 && profile.weightKg > 0))
+      ) {
+        markWelcomeLeft();
+      }
+      const complete = isRegistrationComplete(profile);
+      const welcomeDone = hasLeftWelcome();
 
-    if (pathname === "/pick-theme") {
-      setRegOk(true);
-      setRegReady(true);
-      return;
-    }
+      if (pathname === "/pick-theme") {
+        setRegOk(true);
+        setRegReady(true);
+        return;
+      }
 
-    if (!hasChosenAppVariant()) {
-      window.location.replace("/pick-theme");
-      return;
-    }
+      if (!hasChosenAppVariant()) {
+        window.location.replace("/pick-theme");
+        return;
+      }
 
-    if (pathname === "/welcome") {
-      setRegOk(true);
-      setRegReady(true);
-      return;
-    }
+      if (pathname === "/welcome") {
+        setRegOk(true);
+        setRegReady(true);
+        return;
+      }
 
-    if (isStandalonePublicPath(pathname)) {
-      setRegOk(true);
-      setRegReady(true);
-      return;
-    }
+      if (isStandalonePublicPath(pathname)) {
+        setRegOk(true);
+        setRegReady(true);
+        return;
+      }
 
-    const internalBypass = isInternalAuthBypassActive();
-    const session = isSessionActive();
-    const authExists = hasAuthRecord();
-    const legacyUnlock = !authExists && isRegistrationComplete(profile);
+      const internalBypass = isInternalAuthBypassActive();
+      const session = isSessionActive();
+      const authExists = hasAuthRecord();
+      const legacyUnlock = !authExists && isRegistrationComplete(profile);
 
-    if (!internalBypass && !session && !legacyUnlock) {
-      window.location.replace("/welcome");
-      return;
-    }
-
-    if (pathname === "/tdee") {
-      if (!complete && !welcomeDone) {
+      if (!internalBypass && !session && !legacyUnlock) {
         window.location.replace("/welcome");
         return;
       }
+
+      if (pathname === "/tdee") {
+        if (!complete && !welcomeDone) {
+          window.location.replace("/welcome");
+          return;
+        }
+        setRegOk(true);
+        setRegReady(true);
+        return;
+      }
+
+      if (complete) {
+        setRegOk(true);
+        setRegReady(true);
+        return;
+      }
+
+      if (!welcomeDone) {
+        window.location.replace("/welcome");
+        return;
+      }
+
+      window.location.replace("/tdee");
+      return;
+    } catch (e) {
+      console.error("[AppChrome] gate", e);
       setRegOk(true);
       setRegReady(true);
-      return;
     }
-
-    if (complete) {
-      setRegOk(true);
-      setRegReady(true);
-      return;
-    }
-
-    if (!welcomeDone) {
-      window.location.replace("/welcome");
-      return;
-    }
-
-    window.location.replace("/tdee");
-    return;
   }, [pathname, authTick]);
 
   if (!regReady || !regOk) {
