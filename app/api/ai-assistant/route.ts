@@ -42,6 +42,29 @@ type MealSummaryJson = {
   estimatedGrams?: number | null;
 };
 
+type MenuDraftJson = {
+  title: string;
+  totalCalories: number;
+  totalProtein: number;
+  totalCarbs: number;
+  totalFat: number;
+  meals: Array<{
+    name: string;
+    calories: number;
+    protein: number;
+    carbs: number;
+    fat: number;
+    items: Array<{
+      name: string;
+      portionLabel: string;
+      calories: number;
+      protein: number;
+      carbs: number;
+      fat: number;
+    }>;
+  }>;
+};
+
 type AssistantResponse = {
   reply: string;
   actions?: AssistantAction[];
@@ -49,6 +72,8 @@ type AssistantResponse = {
   nutritionCards?: NutritionCardJson[];
   /** סיכום מאוחד יחיד לארוחה */
   mealSummary?: MealSummaryJson | null;
+  /** טיוטת תפריט שמורה (למסך “התפריטים שלי”) */
+  menuDraft?: MenuDraftJson | null;
 };
 
 type ChatTurn = { role: "user" | "assistant"; text: string };
@@ -172,6 +197,58 @@ function resolveMealSummary(
   return aggregateCardsToMealSummary(legacyCards);
 }
 
+function sanitizeMenuDraft(raw: unknown): MenuDraftJson | null {
+  if (!raw || typeof raw !== "object") return null;
+  const o = raw as Record<string, unknown>;
+  const title = String(o.title ?? "").trim().slice(0, 120);
+  const mealsRaw = o.meals;
+  if (!title || !Array.isArray(mealsRaw) || mealsRaw.length < 1) return null;
+
+  const meals: MenuDraftJson["meals"] = [];
+  for (const m of mealsRaw.slice(0, 10)) {
+    if (!m || typeof m !== "object") continue;
+    const mm = m as Record<string, unknown>;
+    const name = String(mm.name ?? "").trim().slice(0, 80);
+    const itemsRaw = mm.items;
+    if (!name || !Array.isArray(itemsRaw) || itemsRaw.length < 1) continue;
+    const items: MenuDraftJson["meals"][number]["items"] = [];
+    for (const it of itemsRaw.slice(0, 16)) {
+      if (!it || typeof it !== "object") continue;
+      const ii = it as Record<string, unknown>;
+      const iname = String(ii.name ?? "").trim().slice(0, 120);
+      const portionLabel = String(ii.portionLabel ?? "").trim().slice(0, 80);
+      if (!iname || !portionLabel) continue;
+      items.push({
+        name: iname,
+        portionLabel,
+        calories: clamp(Math.round(Number(ii.calories) || 0), 0, 4000),
+        protein: clamp(Number(ii.protein) || 0, 0, 300),
+        carbs: clamp(Number(ii.carbs) || 0, 0, 300),
+        fat: clamp(Number(ii.fat) || 0, 0, 300),
+      });
+    }
+    if (items.length < 1) continue;
+    meals.push({
+      name,
+      calories: clamp(Math.round(Number(mm.calories) || 0), 0, 12000),
+      protein: clamp(Number(mm.protein) || 0, 0, 800),
+      carbs: clamp(Number(mm.carbs) || 0, 0, 800),
+      fat: clamp(Number(mm.fat) || 0, 0, 800),
+      items,
+    });
+  }
+  if (meals.length < 1) return null;
+
+  return {
+    title,
+    totalCalories: clamp(Math.round(Number(o.totalCalories) || 0), 0, 25000),
+    totalProtein: clamp(Number(o.totalProtein) || 0, 0, 1200),
+    totalCarbs: clamp(Number(o.totalCarbs) || 0, 0, 1200),
+    totalFat: clamp(Number(o.totalFat) || 0, 0, 1200),
+    meals,
+  };
+}
+
 export async function POST(req: Request) {
   const openAiKey = process.env.OPENAI_API_KEY?.trim() ?? "";
   if (!openAiKey) {
@@ -246,9 +323,29 @@ export async function POST(req: Request) {
     `    "portionLabel": string optional (e.g. "מנה אחת", "ארוחת ערב"),\n` +
     `    "estimatedGrams": number optional (total grams of food if you can estimate)\n` +
     `  } | null,\n` +
+    `  "menuDraft": {\n` +
+    `    "title": string,\n` +
+    `    "totalCalories": number,\n` +
+    `    "totalProtein": number,\n` +
+    `    "totalCarbs": number,\n` +
+    `    "totalFat": number,\n` +
+    `    "meals": [\n` +
+    `      {\n` +
+    `        "name": string,\n` +
+    `        "calories": number,\n` +
+    `        "protein": number,\n` +
+    `        "carbs": number,\n` +
+    `        "fat": number,\n` +
+    `        "items": [ { \"name\": string, \"portionLabel\": string, \"calories\": number, \"protein\": number, \"carbs\": number, \"fat\": number } ]\n` +
+    `      }\n` +
+    `    ]\n` +
+    `  } | null,\n` +
     `  "actions": []\n` +
     `}\n` +
     `- mealSummary MUST be null while asking a question / when missing details.\n` +
+    `- If the user asks for "תפריט", "תפריטים", "מה לאכול היום", or meal planning: set menuDraft to a 1-day menu that fits their remaining calories and a high-protein bias, using foods similar to snapshot.dictionary[] preferences.\n` +
+    `- If a dietary restriction is unknown (vegetarian/vegan/kosher) or number of meals matters, ask ONE question and set menuDraft=null.\n` +
+    `- When menuDraft is provided, mealSummary should usually be null.\n` +
     `- The app shows ONE summary card and logs ONE journal line: "ארוחת AI: " + shortTitle.\n`;
 
   const contextPrompt =
@@ -292,12 +389,14 @@ export async function POST(req: Request) {
     }
     const legacyCards = sanitizeNutritionCards(parsed.nutritionCards);
     const mealSummary = resolveMealSummary(parsed, legacyCards);
+    const menuDraft = sanitizeMenuDraft(parsed.menuDraft);
     const actions = (parsed.actions ?? []).filter((a) => a && a.type !== "search_verified_foods");
     return NextResponse.json({
       result: {
         reply: parsed.reply,
         actions,
         mealSummary,
+        menuDraft,
       },
     });
   } catch (e) {

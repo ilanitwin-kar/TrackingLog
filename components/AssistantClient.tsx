@@ -23,6 +23,7 @@ import {
 } from "@/lib/storage";
 import { gf } from "@/lib/hebrewGenderUi";
 import { dailyCalorieTarget } from "@/lib/tdee";
+import { addSavedMenu } from "@/lib/menuStorage";
 
 type AssistantAction =
   | { type: "open"; label: string; payload: { href: string } }
@@ -52,6 +53,28 @@ type AssistantResult = {
   reply: string;
   actions?: AssistantAction[];
   mealSummary?: AssistantMealSummary | null;
+  menuDraft?: {
+    title: string;
+    totalCalories: number;
+    totalProtein: number;
+    totalCarbs: number;
+    totalFat: number;
+    meals: Array<{
+      name: string;
+      calories: number;
+      protein: number;
+      carbs: number;
+      fat: number;
+      items: Array<{
+        name: string;
+        portionLabel: string;
+        calories: number;
+        protein: number;
+        carbs: number;
+        fat: number;
+      }>;
+    }>;
+  } | null;
 };
 
 const JOURNAL_AI_PREFIX = "ארוחת AI:";
@@ -108,6 +131,7 @@ type Msg = {
   role: "user" | "assistant";
   text: string;
   verifiedSuggestions?: FoodSuggestionCard[];
+  menuDraft?: AssistantResult["menuDraft"];
 };
 
 function newLogId(): string {
@@ -165,6 +189,70 @@ function logEntryFromAssistantPortion(item: FoodSuggestionCard): LogEntry {
 function logEntryFromFoodCard(item: FoodSuggestionCard): LogEntry {
   if (item.isPortionTotals) return logEntryFromAssistantPortion(item);
   return logEntryFromPer100gCard(item);
+}
+
+function MenuDraftCard({
+  draft,
+  gender,
+  onSave,
+}: {
+  draft: NonNullable<AssistantResult["menuDraft"]>;
+  gender: ReturnType<typeof loadProfile>["gender"];
+  onSave: () => void;
+}) {
+  return (
+    <details className="mt-3 group rounded-2xl border-2 border-[var(--border-cherry-soft)] bg-gradient-to-br from-white/95 to-[var(--cherry-muted)]/40 shadow-[0_8px_24px_rgba(0,0,0,0.06)] backdrop-blur-sm">
+      <summary className="flex cursor-pointer list-none items-center justify-between gap-2 px-3 py-2.5 [&::-webkit-details-marker]:hidden">
+        <div className="min-w-0 flex-1 text-start">
+          <p className="text-[10px] font-extrabold uppercase tracking-wide text-[var(--cherry)]/90">
+            תפריט יומי מוצע
+          </p>
+          <p className="mt-0.5 break-words text-sm font-extrabold leading-snug text-[var(--stem)]">
+            {draft.title}
+          </p>
+          <p className="mt-1 text-[10px] font-semibold text-[var(--stem)]/55">
+            {Math.round(draft.totalCalories)} קק״ל · חלבון {draft.totalProtein.toFixed(0)} · פחמ׳{" "}
+            {draft.totalCarbs.toFixed(0)} · שומן {draft.totalFat.toFixed(0)}
+          </p>
+        </div>
+        <span className="shrink-0 text-xs font-bold text-[var(--stem)]/50 group-open:hidden">
+          פרטים ▼
+        </span>
+        <span className="hidden shrink-0 text-xs font-bold text-[var(--stem)]/50 group-open:inline">
+          ▲
+        </span>
+      </summary>
+      <div className="border-t border-[var(--border-cherry-soft)]/60 px-3 pb-3 pt-2">
+        <div className="space-y-3">
+          {draft.meals.map((m, idx) => (
+            <div key={`menu-meal-${idx}`} className="rounded-xl border border-[var(--border-cherry-soft)] bg-white/85 p-3">
+              <p className="text-sm font-extrabold text-[var(--stem)]">{m.name}</p>
+              <p className="mt-1 text-xs text-[var(--stem)]/70">
+                {Math.round(m.calories)} קק״ל · ח {m.protein.toFixed(0)} · פח {m.carbs.toFixed(0)} · ש {m.fat.toFixed(0)}
+              </p>
+              <ul className="mt-2 space-y-1 text-sm text-[var(--stem)]/90">
+                {m.items.map((it, j) => (
+                  <li key={`menu-meal-${idx}-it-${j}`}>
+                    <span className="font-semibold">{it.name}</span>{" "}
+                    <span className="text-xs font-semibold text-[var(--stem)]/65">
+                      ({it.portionLabel})
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ))}
+        </div>
+        <button
+          type="button"
+          className="mt-3 w-full rounded-xl bg-[var(--cherry)] px-3 py-3 text-sm font-extrabold text-white shadow-sm transition hover:brightness-105 active:scale-[0.99]"
+          onClick={onSave}
+        >
+          {gf(gender, "הוסף לתפריטים שלי", "הוסף לתפריטים שלי")}
+        </button>
+      </div>
+    </details>
+  );
 }
 
 function normalizeStoredMessages(raw: unknown): Msg[] {
@@ -673,11 +761,12 @@ export function AssistantClient() {
         setError(data.error ?? "שירות העוזר זמנית לא זמין");
         return;
       }
+      const result = data.result;
       const nextActions = (data.result.actions ?? []).filter(
         (a) => a.type !== "search_verified_foods"
       );
       const cards = normalizeMealSummaryToCard(
-        data.result.mealSummary,
+        result.mealSummary,
         `${Date.now()}`
       );
 
@@ -687,8 +776,9 @@ export function AssistantClient() {
         ...m,
         {
           role: "assistant",
-          text: data.result!.reply,
+          text: result.reply,
           ...(cards.length > 0 ? { verifiedSuggestions: cards } : {}),
+          ...(result.menuDraft ? { menuDraft: result.menuDraft } : {}),
         },
       ]);
       // Save lightweight memory hint: last topic.
@@ -897,6 +987,32 @@ export function AssistantClient() {
                     onShopping={onCardShopping}
                   />
                 )}
+              {m.role === "assistant" && m.menuDraft ? (
+                <MenuDraftCard
+                  draft={m.menuDraft}
+                  gender={gender}
+                  onSave={() => {
+                    const d = m.menuDraft!;
+                    addSavedMenu({
+                      title: d.title,
+                      meals: d.meals.map((x) => ({
+                        name: x.name,
+                        calories: x.calories,
+                        protein: x.protein,
+                        carbs: x.carbs,
+                        fat: x.fat,
+                        items: x.items.map((it) => ({ ...it })),
+                      })),
+                      totalCalories: d.totalCalories,
+                      totalProtein: d.totalProtein,
+                      totalCarbs: d.totalCarbs,
+                      totalFat: d.totalFat,
+                    });
+                    setToast(gf(gender, "נוסף לתפריטים שלך.", "נוסף לתפריטים שלך."));
+                    window.location.assign("/menus");
+                  }}
+                />
+              ) : null}
             </div>
           ))}
           <div ref={endRef} />
