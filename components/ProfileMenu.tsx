@@ -255,6 +255,14 @@ export function ProfileMenu() {
               מתכונים (מחשבון)
             </Link>
             <Link
+              href="/planner"
+              role="menuitem"
+              className="block px-4 py-3 text-sm font-semibold text-[var(--stem)] hover:bg-[var(--cherry-muted)]"
+              onClick={() => setOpen(false)}
+            >
+              בניית תפריט (ידני)
+            </Link>
+            <Link
               href="/shopping"
               role="menuitem"
               className="block px-4 py-3 text-sm font-semibold text-[var(--stem)] hover:bg-[var(--cherry-muted)]"
