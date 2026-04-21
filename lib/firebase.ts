@@ -3,6 +3,7 @@
 import { initializeApp, getApps } from "firebase/app";
 import { getAuth } from "firebase/auth";
 import { getDatabase } from "firebase/database";
+import { getFirestore } from "firebase/firestore";
 
 type FirebasePublicConfig = {
   apiKey: string;
@@ -49,5 +50,11 @@ export function getFirebaseRtdb() {
   const app = getFirebaseApp();
   if (!app) return null;
   return getDatabase(app);
+}
+
+export function getFirebaseFirestore() {
+  const app = getFirebaseApp();
+  if (!app) return null;
+  return getFirestore(app);
 }
 

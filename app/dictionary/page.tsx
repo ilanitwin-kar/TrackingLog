@@ -46,6 +46,7 @@ import {
   gf,
 } from "@/lib/hebrewGenderUi";
 import Link from "next/link";
+import { rankedFuzzySearchByText, type MatchRange } from "@/lib/rankedSearch";
 
 const fontFood =
   "font-[Calibri,'Segoe_UI','Helvetica_Neue',system-ui,sans-serif]";
@@ -125,6 +126,21 @@ function sortSavedByQuery(items: DictionaryItem[], query: string): DictionaryIte
   return [...p, ...c];
 }
 
+function renderHighlighted(text: string, ranges: MatchRange[]) {
+  if (!ranges || ranges.length < 1) return text;
+  const out: React.ReactNode[] = [];
+  let at = 0;
+  for (const [s, e] of ranges) {
+    const start = Math.max(0, Math.min(text.length, s));
+    const end = Math.max(0, Math.min(text.length - 1, e));
+    if (start > at) out.push(<span key={`t-${at}`}>{text.slice(at, start)}</span>);
+    out.push(<strong key={`b-${start}`}>{text.slice(start, end + 1)}</strong>);
+    at = end + 1;
+  }
+  if (at < text.length) out.push(<span key={`t-${at}-end`}>{text.slice(at)}</span>);
+  return <>{out}</>;
+}
+
 export default function DictionaryPage() {
   const gender = loadProfile().gender;
   const [saved, setSaved] = useState<DictionaryItem[]>([]);
@@ -166,10 +182,40 @@ export default function DictionaryPage() {
     return () => window.removeEventListener("focus", onFocus);
   }, [refresh]);
 
-  const filteredSaved = useMemo(
-    () => sortSavedByQuery(saved, rawQ),
-    [saved, rawQ]
-  );
+  const filteredSaved = useMemo(() => sortSavedByQuery(saved, rawQ), [saved, rawQ]);
+
+  const savedHits = useMemo(() => {
+    const q = rawQ.trim();
+    if (q.length < 2) return null;
+    return rankedFuzzySearchByText(filteredSaved, q, {
+      getText: (d) => d.food,
+      getKey: (d) => d.id,
+      limit: 80,
+      threshold: 0.34,
+    });
+  }, [filteredSaved, rawQ]);
+
+  const explorerHits = useMemo(() => {
+    const q = debouncedQ.trim();
+    if (q.length < 2) return null;
+    return rankedFuzzySearchByText(explorerRows, q, {
+      getText: (r) => r.name,
+      getKey: (r) => `ex:${r.id}`,
+      limit: 40,
+      threshold: 0.34,
+    });
+  }, [explorerRows, debouncedQ]);
+
+  const offHits = useMemo(() => {
+    const q = debouncedQ.trim();
+    if (q.length < 2) return null;
+    return rankedFuzzySearchByText(offRows, q, {
+      getText: (r) => r.name,
+      getKey: (r) => `off:${r.id}`,
+      limit: 24,
+      threshold: 0.34,
+    });
+  }, [offRows, debouncedQ]);
 
   useEffect(() => {
     const t = rawQ.trim();
@@ -485,7 +531,7 @@ export default function DictionaryPage() {
           </p>
         ) : (
           <ul className="space-y-2">
-            {filteredSaved.map((d) => {
+            {(savedHits ? savedHits.map((h) => h.item) : filteredSaved).map((d) => {
               const preset =
                 d.mealPresetId != null
                   ? presetMap.get(d.mealPresetId)
@@ -504,7 +550,17 @@ export default function DictionaryPage() {
                   <div className="flex items-start justify-between gap-2">
                     <div className="min-w-0 flex-1">
                       <p className="flex flex-wrap items-center gap-2 font-semibold text-[var(--stem)]">
-                        {d.food}
+                        <span className="text-xs" aria-hidden>
+                          🍒
+                        </span>
+                        <span className="min-w-0 break-words">
+                          {savedHits
+                            ? renderHighlighted(
+                                d.food,
+                                savedHits.find((x) => x.item.id === d.id)?.ranges ?? []
+                              )
+                            : d.food}
+                        </span>
                         {isMeal && (
                           <span className="rounded-md bg-[var(--cherry-muted)] px-2 py-0.5 text-xs font-semibold text-[var(--cherry)]">
                             ארוחה שמורה
@@ -679,7 +735,7 @@ export default function DictionaryPage() {
               <>
                 <h3 className="mb-2 text-sm font-extrabold text-[var(--stem)]">מאגר פנימי</h3>
                 <ul className="mb-5 space-y-2">
-                  {explorerRows.map((row) => {
+                  {(explorerHits ? explorerHits.map((h) => h.item) : explorerRows).map((row) => {
                     void explorerUiTick;
                     const inDict = isExplorerFoodInDictionary(row.id);
                     const inCart = cartLookup.has(row.id);
@@ -696,11 +752,18 @@ export default function DictionaryPage() {
                               title="מאגר פנימי מאומת"
                             >
                               <IconVerified className="h-4 w-4 text-[#d4a017]" />
-                              <span className="text-[10px] font-bold text-[var(--stem)]/90">
-                                מאגר
+                              <span className="text-[10px] font-bold text-[var(--stem)]/90" aria-hidden>
+                                🔎
                               </span>
                             </span>
-                            <span>{row.name}</span>
+                            <span>
+                              {explorerHits
+                                ? renderHighlighted(
+                                    row.name,
+                                    explorerHits.find((x) => x.item.id === row.id)?.ranges ?? []
+                                  )
+                                : row.name}
+                            </span>
                           </p>
                           <p className="mt-0.5 text-xs text-[var(--cherry)]/75">{row.category}</p>
                           <p className="mt-1 text-sm leading-relaxed text-[var(--stem)]/95">
@@ -767,7 +830,7 @@ export default function DictionaryPage() {
                   Open Food Facts (עולמי)
                 </h3>
                 <ul className="space-y-2">
-                  {offRows.map((row) => {
+                  {(offHits ? offHits.map((h) => h.item) : offRows).map((row) => {
                     void explorerUiTick;
                     const inDict = isExplorerFoodInDictionary(row.id);
                     const inCart = cartLookup.has(row.id);
@@ -779,10 +842,17 @@ export default function DictionaryPage() {
                       >
                         <div className="min-w-0 flex-1">
                           <p className="flex flex-wrap items-center gap-1.5 font-semibold text-[var(--stem)]">
-                            <span className="text-[10px] font-bold text-[var(--stem)]/90">
-                              עולמי
+                            <span className="text-[10px] font-bold text-[var(--stem)]/90" aria-hidden>
+                              🌐
                             </span>
-                            <span>{row.name}</span>
+                            <span>
+                              {offHits
+                                ? renderHighlighted(
+                                    row.name,
+                                    offHits.find((x) => x.item.id === row.id)?.ranges ?? []
+                                  )
+                                : row.name}
+                            </span>
                           </p>
                           <p className="mt-0.5 text-xs text-[var(--cherry)]/75">{row.category}</p>
                           <p className="mt-1 text-sm leading-relaxed text-[var(--stem)]/95">

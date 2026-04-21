@@ -1,4 +1,6 @@
-export type PlannerItemSource = "dictionary" | "explorer" | "openFoodFacts" | "manual";
+export type PlannerItemSource = "dictionary" | "explorer" | "openFoodFacts" | "ai" | "manual";
+
+export type PlannerMealSlot = "בוקר" | "צהריים" | "ערב" | "ביניים";
 
 export type PlannerItem = {
   id: string;
@@ -13,12 +15,22 @@ export type PlannerItem = {
   unit: "גרם" | "יחידה";
   /** משקל יחידה בגרם (רשות) */
   gramsPerUnit?: number | null;
+  /** שיוך ליום בשבוע: 0=א׳ ... 6=ש׳ */
+  dayIndex?: number;
+  /** שיוך לארוחה */
+  mealSlot?: PlannerMealSlot;
 };
 
 export type PlannerState = {
   updatedAt: string;
   mode: "day" | "week";
   items: PlannerItem[];
+  /** תאריך עוגן של שבוע (למצב שבועי) */
+  weekAnchorDateKey?: string;
+  /** תאריך במצב יומי */
+  dayDateKey?: string;
+  /** יום נבחר לעריכה: 0=א׳ ... 6=ש׳ */
+  selectedDayIndex?: number;
 };
 
 const KEY = "cj_planner_state_v1";
@@ -39,17 +51,25 @@ function sanitizeItem(x: unknown): PlannerItem | null {
   if (!name) return null;
   const source = String(o.source ?? "");
   const sourceOk: PlannerItemSource =
-    source === "dictionary" || source === "explorer" || source === "openFoodFacts" || source === "manual"
+    source === "dictionary" || source === "explorer" || source === "openFoodFacts" || source === "ai" || source === "manual"
       ? (source as PlannerItemSource)
       : "manual";
   const unit = String(o.unit ?? "גרם");
   const unitOk = unit === "יחידה" ? "יחידה" : "גרם";
-  const qty = clamp(Number(o.qty) || 0, 0.01, 50000);
+  const qty = clamp(Number(o.qty) || 0, 0, 50000);
   const gPerUnitRaw = o.gramsPerUnit;
   const gramsPerUnit =
     typeof gPerUnitRaw === "number" && Number.isFinite(gPerUnitRaw) && gPerUnitRaw > 0
       ? clamp(gPerUnitRaw, 0.1, 2000)
       : null;
+  const dayIndexRaw = Number(o.dayIndex);
+  const dayIndex =
+    Number.isFinite(dayIndexRaw) && dayIndexRaw >= 0 && dayIndexRaw <= 6 ? Math.round(dayIndexRaw) : 0;
+  const mealSlotRaw = String(o.mealSlot ?? "");
+  const mealSlot: PlannerMealSlot =
+    mealSlotRaw === "בוקר" || mealSlotRaw === "צהריים" || mealSlotRaw === "ערב" || mealSlotRaw === "ביניים"
+      ? (mealSlotRaw as PlannerMealSlot)
+      : "בוקר";
 
   return {
     id: String(o.id ?? "").trim() || makeId(),
@@ -62,6 +82,8 @@ function sanitizeItem(x: unknown): PlannerItem | null {
     qty,
     unit: unitOk,
     gramsPerUnit,
+    dayIndex,
+    mealSlot,
   };
 }
 
@@ -75,6 +97,9 @@ function sanitizeState(x: unknown): PlannerState | null {
     updatedAt: String(o.updatedAt ?? "").trim() || new Date().toISOString(),
     mode,
     items: items.slice(0, 200),
+    weekAnchorDateKey: typeof o.weekAnchorDateKey === "string" ? o.weekAnchorDateKey : undefined,
+    dayDateKey: typeof o.dayDateKey === "string" ? o.dayDateKey : undefined,
+    selectedDayIndex: typeof o.selectedDayIndex === "number" ? o.selectedDayIndex : undefined,
   };
 }
 

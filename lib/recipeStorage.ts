@@ -13,6 +13,15 @@ export type SavedRecipe = {
   title: string;
   createdAt: string;
   servings: number;
+  /** משקל סופי לאחר בישול (גרם). אם לא ידוע — null */
+  finalCookedWeightG?: number | null;
+  /** ערכים כוללים למתכון (קבועים לפי סכום המרכיבים) */
+  totals?: {
+    calories: number;
+    protein: number;
+    carbs: number;
+    fat: number;
+  };
   ingredients: RecipeIngredient[];
 };
 
@@ -33,6 +42,20 @@ function sanitizeRecipe(x: unknown): SavedRecipe | null {
   const title = String(o.title ?? "").trim().slice(0, 120);
   if (!title) return null;
   const servings = clamp(Number(o.servings) || 1, 1, 60);
+  const finalCookedWeightG =
+    typeof o.finalCookedWeightG === "number" && Number.isFinite(o.finalCookedWeightG) && o.finalCookedWeightG > 0
+      ? clamp(o.finalCookedWeightG, 1, 200000)
+      : null;
+  const totalsRaw = o.totals;
+  const totals =
+    totalsRaw && typeof totalsRaw === "object"
+      ? {
+          calories: clamp(Math.round(Number((totalsRaw as Record<string, unknown>).calories) || 0), 0, 200000),
+          protein: clamp(Number((totalsRaw as Record<string, unknown>).protein) || 0, 0, 20000),
+          carbs: clamp(Number((totalsRaw as Record<string, unknown>).carbs) || 0, 0, 20000),
+          fat: clamp(Number((totalsRaw as Record<string, unknown>).fat) || 0, 0, 20000),
+        }
+      : undefined;
   const ingredientsRaw = o.ingredients;
   if (!Array.isArray(ingredientsRaw) || ingredientsRaw.length < 1) return null;
 
@@ -57,7 +80,7 @@ function sanitizeRecipe(x: unknown): SavedRecipe | null {
 
   const id = String(o.id ?? "").trim() || makeId();
   const createdAt = String(o.createdAt ?? "").trim() || new Date().toISOString();
-  return { id, title, createdAt, servings, ingredients };
+  return { id, title, createdAt, servings, finalCookedWeightG, totals, ingredients };
 }
 
 export function loadRecipes(): SavedRecipe[] {

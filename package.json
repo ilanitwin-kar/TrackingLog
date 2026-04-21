@@ -20,6 +20,7 @@
     "csv-parse": "^6.2.1",
     "firebase": "^12.12.0",
     "framer-motion": "^12.23.12",
+    "fuse.js": "^7.3.0",
     "html5-qrcode": "^2.3.8",
     "iconv-lite": "^0.7.2",
     "next": "^15.1.0",

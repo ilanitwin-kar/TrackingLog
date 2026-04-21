@@ -252,7 +252,15 @@ export function ProfileMenu() {
               className="block px-4 py-3 text-sm font-semibold text-[var(--stem)] hover:bg-[var(--cherry-muted)]"
               onClick={() => setOpen(false)}
             >
-              מתכונים (מחשבון)
+              מחשבון מתכונים
+            </Link>
+            <Link
+              href="/my-recipes"
+              role="menuitem"
+              className="block px-4 py-3 text-sm font-semibold text-[var(--stem)] hover:bg-[var(--cherry-muted)]"
+              onClick={() => setOpen(false)}
+            >
+              המתכונים שלי
             </Link>
             <Link
               href="/planner"
