@@ -525,7 +525,7 @@ export function AssistantClient() {
   const [actions, setActions] = useState<AssistantAction[]>([]);
   const [toast, setToast] = useState<string | null>(null);
   const [exerciseRev, setExerciseRev] = useState(0);
-  const endRef = useRef<HTMLDivElement | null>(null);
+  const lastMsgRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     const bump = () => setExerciseRev((x) => x + 1);
@@ -595,8 +595,11 @@ export function AssistantClient() {
   }, [messages]);
 
   useEffect(() => {
-    // Always keep the newest message visible.
-    endRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
+    // Keep the newest message visible (avoid scrolling past it).
+    // Using "nearest" prevents jumping further down than needed.
+    window.requestAnimationFrame(() => {
+      lastMsgRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+    });
   }, [messages.length]);
 
   const visibleMessages = useMemo(() => {
@@ -1104,7 +1107,7 @@ export function AssistantClient() {
               ) : null}
             </div>
           ))}
-          <div ref={endRef} />
+          <div ref={lastMsgRef} />
         </div>
 
         {actions.length > 0 && (
