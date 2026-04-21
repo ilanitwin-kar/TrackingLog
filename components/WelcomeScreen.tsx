@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import {
   hasWelcomeAutoResume,
+  loadAuthRecord,
   registerAccount,
   startSession,
   verifyLogin,
@@ -314,7 +315,11 @@ export function WelcomeScreen() {
     "heading-page text-4xl tracking-tight sm:text-5xl";
 
   function openAuth(mode: "signup" | "login") {
-    setAuthEmail("");
+    setAuthEmail(
+      mode === "login"
+        ? loadAuthRecord()?.email ?? loadProfile().email ?? ""
+        : ""
+    );
     setAuthPassword("");
     setAuthConfirm("");
     setAuthError(null);
@@ -357,7 +362,16 @@ export function WelcomeScreen() {
     try {
       const ok = await verifyLogin(authEmail, authPassword);
       if (!ok) {
-        setAuthError(t.errWrongCreds);
+        const reg = loadAuthRecord()?.email ?? "";
+        const p0 = loadProfile();
+        const prof = p0.email.trim().toLowerCase();
+        if (reg && prof && reg !== prof) {
+          setAuthError(
+            `${t.errWrongCreds} טיפ: האימייל בפרופיל (${p0.email.trim()}) שונה מהאימייל שאיתו נרשמת (${reg}). נסי את אחד מהם או «שכחתי סיסמה».`
+          );
+        } else {
+          setAuthError(t.errWrongCreds);
+        }
         return;
       }
       startSession();

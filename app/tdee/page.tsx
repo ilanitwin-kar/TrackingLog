@@ -18,6 +18,7 @@ import { InfoCard } from "@/components/InfoCard";
 import type { ActivityLevel } from "@/lib/tdee";
 import { dailyCalorieTarget, tdee } from "@/lib/tdee";
 import { gf, infoProfileBody, infoTdeeResultsBody } from "@/lib/hebrewGenderUi";
+import { syncAuthEmailWithProfile } from "@/lib/localAuth";
 
 const activities: { id: ActivityLevel; label: string }[] = [
   { id: "sedentary", label: "יושבנית (מעט תנועה)" },
@@ -132,6 +133,9 @@ export default function TdeePage() {
       if (!prev) return prev;
       const next: UserProfile = { ...prev, [key]: value };
       saveProfile(next);
+      if (key === "email" && typeof value === "string") {
+        syncAuthEmailWithProfile(value);
+      }
       return next;
     });
   }

@@ -28,13 +28,21 @@ async function sha256Hex(message: string): Promise<string> {
   return hashArray.map((b) => b.toString(16).padStart(2, "0")).join("");
 }
 
-async function hashPassword(emailNorm: string, password: string): Promise<string> {
+/** גיבוב ישן: כולל אימייל — שינוי אימייל בפרופיל שבר כניסה */
+async function hashPasswordLegacy(emailNorm: string, password: string): Promise<string> {
   return sha256Hex(`${PEPPER}:${emailNorm}:${password}`);
+}
+
+/** גיבוב נוכחי: סיסמה בלבד — מאפשר סנכרון אימייל עם הפרופיל */
+async function hashPasswordV2(password: string): Promise<string> {
+  return sha256Hex(`${PEPPER}:v2:${password}`);
 }
 
 export type AuthRecord = {
   email: string;
   passwordHash: string;
+  /** חסר או 1 = legacy; 2 = סיסמה בלבד */
+  pwHashVersion?: 1 | 2;
 };
 
 function normalizeEmail(email: string): string {
@@ -53,7 +61,14 @@ export function loadAuthRecord(): AuthRecord | null {
     ) {
       return null;
     }
-    return { email: parsed.email, passwordHash: parsed.passwordHash };
+    const v = parsed.pwHashVersion;
+    const pwHashVersion =
+      v === 2 ? 2 : v === 1 ? 1 : undefined;
+    return {
+      email: parsed.email,
+      passwordHash: parsed.passwordHash,
+      ...(pwHashVersion != null ? { pwHashVersion } : {}),
+    };
   } catch {
     return null;
   }
@@ -104,8 +119,8 @@ export async function registerAccount(
   if (!EMAIL_RE.test(n)) return { ok: false, error: "email" };
   if (password.length < 6) return { ok: false, error: "short" };
   if (loadAuthRecord()) return { ok: false, error: "exists" };
-  const passwordHash = await hashPassword(n, password);
-  saveAuthRecord({ email: n, passwordHash });
+  const passwordHash = await hashPasswordV2(password);
+  saveAuthRecord({ email: n, passwordHash, pwHashVersion: 2 });
   const p = loadProfile();
   const wasComplete = isRegistrationComplete({ ...p, email: n });
   saveProfile({
@@ -121,8 +136,59 @@ export async function verifyLogin(email: string, password: string): Promise<bool
   if (!auth) return false;
   const n = normalizeEmail(email);
   if (auth.email !== n) return false;
-  const h = await hashPassword(n, password);
-  return h === auth.passwordHash;
+
+  if (auth.pwHashVersion === 2) {
+    const h = await hashPasswordV2(password);
+    return h === auth.passwordHash;
+  }
+
+  const legacy = await hashPasswordLegacy(auth.email, password);
+  if (legacy !== auth.passwordHash) return false;
+
+  const migrated = await hashPasswordV2(password);
+  saveAuthRecord({
+    email: auth.email,
+    passwordHash: migrated,
+    pwHashVersion: 2,
+  });
+  return true;
+}
+
+export type ResetLocalPasswordResult =
+  | { ok: true }
+  | { ok: false; error: "email" | "short" | "no_account" };
+
+/**
+ * איפוס סיסמה מקומי (אין שרת) — רק אם האימייל תואם לחשבון השמור או לפרופיל.
+ */
+export async function resetLocalPassword(
+  email: string,
+  newPassword: string
+): Promise<ResetLocalPasswordResult> {
+  const auth = loadAuthRecord();
+  if (!auth) return { ok: false, error: "no_account" };
+  const n = normalizeEmail(email);
+  const profileEmail = normalizeEmail(loadProfile().email);
+  if (n !== auth.email && n !== profileEmail) {
+    return { ok: false, error: "email" };
+  }
+  if (newPassword.length < 6) return { ok: false, error: "short" };
+  const passwordHash = await hashPasswordV2(newPassword);
+  saveAuthRecord({ email: n, passwordHash, pwHashVersion: 2 });
+  const p = loadProfile();
+  saveProfile({ ...p, email: n });
+  dispatchAuthChanged();
+  return { ok: true };
+}
+
+/** אחרי שינוי אימייל בפרופיל — מסנכרן רק לחשבונות בגיבוב v2 */
+export function syncAuthEmailWithProfile(profileEmail: string): void {
+  const auth = loadAuthRecord();
+  if (!auth || auth.pwHashVersion !== 2) return;
+  const n = normalizeEmail(profileEmail);
+  if (n === auth.email) return;
+  if (!EMAIL_RE.test(n)) return;
+  saveAuthRecord({ ...auth, email: n });
 }
 
 /** ערכים שמפעילים דילוג בלחיצה אחת (ב-Netlify / .env) */
