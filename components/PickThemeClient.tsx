@@ -7,7 +7,8 @@ import {
   setAppVariant,
   type AppVariant,
 } from "@/lib/appVariant";
-import { PickThemeFigureMan, PickThemeFigureWoman } from "@/components/PickThemeFigures";
+import { BlueberryMark } from "@/components/BlueberryMark";
+import { CherryMark } from "@/components/CherryMark";
 
 /**
  * מסך בחירה ראשוני — 2 כרטיסים גדולים (פרימיום).
@@ -47,9 +48,6 @@ export function PickThemeClient() {
         <h1 className="text-center text-2xl font-extrabold tracking-tight text-white sm:text-3xl">
           בחירת מסלול
         </h1>
-        <p className="mt-2 text-center text-sm font-semibold text-white/70">
-          בחרי את המסלול המתאים — כל מסלול מותאם לשפה ולעיצוב שלו.
-        </p>
 
         <div className="mt-6 grid w-full grid-cols-1 gap-4 md:grid-cols-2 md:gap-6">
           {/* נשים */}
@@ -77,7 +75,7 @@ export function PickThemeClient() {
                 <div className="absolute -bottom-24 -end-24 h-60 w-60 rounded-full bg-black/35 blur-3xl" />
               </div>
               <div className="relative">
-                <PickThemeFigureWoman className="mx-auto h-28 w-28 text-white/95 drop-shadow-[0_14px_40px_rgba(0,0,0,0.35)]" />
+                <CherryMark className="mx-auto h-28 w-28 text-white/95 drop-shadow-[0_14px_40px_rgba(0,0,0,0.35)]" />
               </div>
               <div className="relative text-3xl font-extrabold tracking-tight">
                 {copy.cherry.title}
@@ -119,7 +117,7 @@ export function PickThemeClient() {
                 <div className="absolute -bottom-24 -end-24 h-60 w-60 rounded-full bg-black/35 blur-3xl" />
               </div>
               <div className="relative">
-                <PickThemeFigureMan className="mx-auto h-28 w-28 text-white/95 drop-shadow-[0_14px_40px_rgba(0,0,0,0.35)]" />
+                <BlueberryMark className="mx-auto h-28 w-28 text-white/95 drop-shadow-[0_14px_40px_rgba(0,0,0,0.35)]" />
               </div>
               <div className="relative text-3xl font-extrabold tracking-tight">
                 {copy.blueberry.title}
