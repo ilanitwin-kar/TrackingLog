@@ -3,11 +3,10 @@
 import Link from "next/link";
 import { motion } from "framer-motion";
 import { useRouter } from "next/navigation";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   type UserProfile,
   ensureBaselineWeightRowFromProfile,
-  isProfileFormValid,
   loadProfile,
   markWelcomeLeft,
   saveProfile,
@@ -19,6 +18,37 @@ import type { ActivityLevel } from "@/lib/tdee";
 import { dailyCalorieTarget, tdee } from "@/lib/tdee";
 import { gf, infoProfileBody, infoTdeeResultsBody } from "@/lib/hebrewGenderUi";
 import { syncAuthEmailWithProfile } from "@/lib/localAuth";
+
+const EMAIL_RE_TDEE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+type TdeeFieldId =
+  | "email"
+  | "firstName"
+  | "age"
+  | "heightCm"
+  | "weightKg"
+  | "goalWeightKg"
+  | "deficit";
+
+function getIncompleteTdeeFields(p: UserProfile): { id: TdeeFieldId; label: string }[] {
+  const missing: { id: TdeeFieldId; label: string }[] = [];
+  if (!EMAIL_RE_TDEE.test(p.email.trim())) missing.push({ id: "email", label: "אימייל" });
+  if (!p.firstName.trim()) missing.push({ id: "firstName", label: "שם פרטי" });
+  if (!p.age || p.age < 12 || p.age > 120) missing.push({ id: "age", label: "גיל" });
+  if (!p.heightCm || p.heightCm < 100 || p.heightCm > 230) {
+    missing.push({ id: "heightCm", label: "גובה" });
+  }
+  if (!p.weightKg || p.weightKg < 30 || p.weightKg > 250) {
+    missing.push({ id: "weightKg", label: "משקל נוכחי" });
+  }
+  if (!p.goalWeightKg || p.goalWeightKg < 30 || p.goalWeightKg > 250) {
+    missing.push({ id: "goalWeightKg", label: "יעד משקל" });
+  }
+  if (!p.deficit || p.deficit < 100 || p.deficit > 1500) {
+    missing.push({ id: "deficit", label: "גירעון יומי" });
+  }
+  return missing;
+}
 
 const activities: { id: ActivityLevel; label: string }[] = [
   { id: "sedentary", label: "יושבנית (מעט תנועה)" },
@@ -66,6 +96,9 @@ export default function TdeePage() {
   const [weightText, setWeightText] = useState("");
   const [goalWeightText, setGoalWeightText] = useState("");
   const [deficitText, setDeficitText] = useState("");
+  const [highlightFields, setHighlightFields] = useState<Set<TdeeFieldId>>(new Set());
+  const [formBottomMsg, setFormBottomMsg] = useState<string | null>(null);
+  const fieldEls = useRef<Partial<Record<TdeeFieldId, HTMLElement>>>({});
 
   const t = useMemo(() => {
     if (!p) return 0;
@@ -124,11 +157,11 @@ export default function TdeePage() {
   }
 
   const registered = p.onboardingComplete === true;
-  const formValid = isProfileFormValid(p);
-  const canFinishRegistration = formValid && !registered;
   const gender = p.gender;
 
   function update<K extends keyof UserProfile>(key: K, value: UserProfile[K]) {
+    setHighlightFields(new Set());
+    setFormBottomMsg(null);
     setP((prev) => {
       if (!prev) return prev;
       const next: UserProfile = { ...prev, [key]: value };
@@ -151,13 +184,36 @@ export default function TdeePage() {
   }
 
   function finishRegistration() {
-    if (!canFinishRegistration || !p) return;
+    if (!p || registered) return;
+    const missing = getIncompleteTdeeFields(p);
+    if (missing.length > 0) {
+      setHighlightFields(new Set(missing.map((m) => m.id)));
+      setFormBottomMsg(
+        `חסרים או מחוץ לטווח: ${missing.map((m) => m.label).join(" · ")}`
+      );
+      const firstEl = fieldEls.current[missing[0].id];
+      firstEl?.scrollIntoView({ behavior: "smooth", block: "center" });
+      const focusable = firstEl?.querySelector?.("input,select") as
+        | HTMLInputElement
+        | HTMLSelectElement
+        | undefined;
+      focusable?.focus?.();
+      return;
+    }
+    setHighlightFields(new Set());
+    setFormBottomMsg(null);
     markWelcomeLeft();
     const next: UserProfile = { ...p, onboardingComplete: true };
     saveProfile(next);
     ensureBaselineWeightRowFromProfile();
     setP(next);
     router.replace("/");
+  }
+
+  function fieldWrapClass(id: TdeeFieldId): string {
+    return highlightFields.has(id)
+      ? "rounded-xl ring-2 ring-[#c62828] ring-offset-2 ring-offset-[rgba(255,250,250,0.9)]"
+      : "";
   }
 
   return (
@@ -198,33 +254,53 @@ export default function TdeePage() {
         initial={{ opacity: 0, y: 8 }}
         animate={{ opacity: 1, y: 0 }}
       >
-        <label className="block">
-          <span className="text-sm font-semibold text-[var(--cherry)]">אימייל</span>
-          <input
-            type="email"
-            autoComplete="email"
-            value={p.email}
-            onChange={(e) => update("email", e.target.value)}
-            className="input-luxury-dark mt-1 w-full"
-            placeholder="you@example.com"
-          />
-        </label>
+        <div
+          ref={(el) => {
+            if (el) fieldEls.current.email = el;
+          }}
+          className={fieldWrapClass("email")}
+        >
+          <label className="block">
+            <span className="text-sm font-semibold text-[var(--cherry)]">אימייל</span>
+            <input
+              type="email"
+              autoComplete="email"
+              value={p.email}
+              onChange={(e) => update("email", e.target.value)}
+              className="input-luxury-dark mt-1 w-full"
+              placeholder="you@example.com"
+            />
+          </label>
+        </div>
 
-        <label className="block">
-          <span className="text-sm font-semibold text-[var(--cherry)]">שם פרטי</span>
-          <input
-            type="text"
-            autoComplete="given-name"
-            value={p.firstName}
-            onChange={(e) => update("firstName", e.target.value)}
-            className="input-luxury-dark mt-1 w-full"
-            placeholder="לפרסונליזציה בלוח המפה"
-          />
-        </label>
+        <div
+          ref={(el) => {
+            if (el) fieldEls.current.firstName = el;
+          }}
+          className={fieldWrapClass("firstName")}
+        >
+          <label className="block">
+            <span className="text-sm font-semibold text-[var(--cherry)]">שם פרטי</span>
+            <input
+              type="text"
+              autoComplete="given-name"
+              value={p.firstName}
+              onChange={(e) => update("firstName", e.target.value)}
+              className="input-luxury-dark mt-1 w-full"
+              placeholder="לפרסונליזציה בלוח המפה"
+            />
+          </label>
+        </div>
 
-        <label className="block">
-          <span className="text-sm font-semibold text-[var(--cherry)]">גיל</span>
-          <input
+        <div
+          ref={(el) => {
+            if (el) fieldEls.current.age = el;
+          }}
+          className={fieldWrapClass("age")}
+        >
+          <label className="block">
+            <span className="text-sm font-semibold text-[var(--cherry)]">גיל</span>
+            <input
             type="text"
             inputMode="numeric"
             value={ageText}
@@ -245,13 +321,20 @@ export default function TdeePage() {
             className="input-luxury-dark mt-1 w-full"
             placeholder={gf(gender, "הזיני גיל…", "הזן גיל…")}
           />
-        </label>
+          </label>
+        </div>
 
-        <label className="block">
-          <span className="text-sm font-semibold text-[var(--cherry)]">
-            גובה (ס״מ)
-          </span>
-          <input
+        <div
+          ref={(el) => {
+            if (el) fieldEls.current.heightCm = el;
+          }}
+          className={fieldWrapClass("heightCm")}
+        >
+          <label className="block">
+            <span className="text-sm font-semibold text-[var(--cherry)]">
+              גובה (ס״מ)
+            </span>
+            <input
             type="text"
             inputMode="numeric"
             value={heightText}
@@ -275,61 +358,79 @@ export default function TdeePage() {
             className="input-luxury-dark mt-1 w-full"
             placeholder={gf(gender, "הזיני גובה…", "הזן גובה…")}
           />
-        </label>
+          </label>
+        </div>
 
-        <label className="block">
-          <span className="text-sm font-semibold text-[var(--cherry)]">
-            משקל נוכחי (ק״ג)
-          </span>
-          <input
+        <div
+          ref={(el) => {
+            if (el) fieldEls.current.weightKg = el;
+          }}
+          className={fieldWrapClass("weightKg")}
+        >
+          <label className="block">
+            <span className="text-sm font-semibold text-[var(--cherry)]">
+              משקל נוכחי (ק״ג)
+            </span>
+            <input
             type="text"
-            inputMode="numeric"
+            inputMode="decimal"
             value={weightText}
             onFocus={focusClearZero}
             onChange={(e) => {
-              const next = sanitizeDecimal(e.target.value, false);
+              const next = sanitizeDecimal(e.target.value, true);
               setWeightText(next);
               const n = parseOrNull(next);
               if (n == null) return;
-              update("weightKg", Math.max(30, Math.min(250, n)));
+              update("weightKg", Math.max(30, Math.min(250, Math.round(n * 10) / 10)));
             }}
             onBlur={() => {
               const n = parseOrNull(weightText);
               if (n == null) return;
-              const clamped = Math.max(30, Math.min(250, n));
+              const clamped = Math.max(30, Math.min(250, Math.round(n * 10) / 10));
               setWeightText(String(clamped));
             }}
             className="input-luxury-dark mt-1 w-full"
             placeholder={gf(gender, "הזיני משקל…", "הזן משקל…")}
           />
-        </label>
+          </label>
+        </div>
 
-        <label className="block">
-          <span className="text-sm font-semibold text-[var(--cherry)]">
-            יעד משקל (ק״ג)
-          </span>
-          <input
+        <div
+          ref={(el) => {
+            if (el) fieldEls.current.goalWeightKg = el;
+          }}
+          className={fieldWrapClass("goalWeightKg")}
+        >
+          <label className="block">
+            <span className="text-sm font-semibold text-[var(--cherry)]">
+              יעד משקל (ק״ג)
+            </span>
+            <input
             type="text"
-            inputMode="numeric"
+            inputMode="decimal"
             value={goalWeightText}
             onFocus={focusClearZero}
             onChange={(e) => {
-              const next = sanitizeDecimal(e.target.value, false);
+              const next = sanitizeDecimal(e.target.value, true);
               setGoalWeightText(next);
               const n = parseOrNull(next);
               if (n == null) return;
-              update("goalWeightKg", Math.max(30, Math.min(250, n)));
+              update(
+                "goalWeightKg",
+                Math.max(30, Math.min(250, Math.round(n * 10) / 10))
+              );
             }}
             onBlur={() => {
               const n = parseOrNull(goalWeightText);
               if (n == null) return;
-              const clamped = Math.max(30, Math.min(250, n));
+              const clamped = Math.max(30, Math.min(250, Math.round(n * 10) / 10));
               setGoalWeightText(String(clamped));
             }}
             className="input-luxury-dark mt-1 w-full"
             placeholder={gf(gender, "הזיני יעד…", "הזן יעד…")}
           />
-        </label>
+          </label>
+        </div>
 
         <label className="block">
           <span className="text-sm font-semibold text-[var(--cherry)]">
@@ -350,11 +451,17 @@ export default function TdeePage() {
           </select>
         </label>
 
-        <label className="block">
-          <span className="text-sm font-semibold text-[var(--cherry)]">
-            גירעון יומי מטרה (קק״ל)
-          </span>
-          <input
+        <div
+          ref={(el) => {
+            if (el) fieldEls.current.deficit = el;
+          }}
+          className={fieldWrapClass("deficit")}
+        >
+          <label className="block">
+            <span className="text-sm font-semibold text-[var(--cherry)]">
+              גירעון יומי מטרה (קק״ל)
+            </span>
+            <input
             type="text"
             inputMode="numeric"
             value={deficitText}
@@ -373,9 +480,10 @@ export default function TdeePage() {
               setDeficitText(String(clamped));
             }}
             className="input-luxury-dark mt-1 w-full"
-            placeholder={gf(gender, "הזיני יעד…", "הזן יעד…")}
+            placeholder={gf(gender, "למשל 500", "למשל 500")}
           />
-        </label>
+          </label>
+        </div>
       </motion.section>
 
       <motion.div
@@ -421,17 +529,19 @@ export default function TdeePage() {
         >
           <button
             type="button"
-            className="btn-stem w-full rounded-xl py-3 text-base font-semibold disabled:cursor-not-allowed disabled:opacity-45"
-            disabled={!canFinishRegistration}
+            className="btn-stem w-full rounded-xl py-3 text-base font-semibold"
             onClick={finishRegistration}
           >
             המשך לדשבורד
           </button>
-          {!formValid && (
-            <p className="mt-2 text-center text-xs font-medium text-[#8b2e2e]">
-              יש למלא את כל השדות (כולל אימייל תקין) בטווחים המותרים.
+          {formBottomMsg ? (
+            <p
+              className="mt-3 rounded-xl border-2 border-[#c62828] bg-[#fff5f5] px-3 py-2.5 text-center text-sm font-bold text-[#8b2e2e]"
+              role="alert"
+            >
+              {formBottomMsg}
             </p>
-          )}
+          ) : null}
         </motion.div>
       )}
 

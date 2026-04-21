@@ -24,6 +24,7 @@ import {
   type AppVariant,
 } from "@/lib/appVariant";
 import { DevAdminQuickEntry } from "@/components/DevAdminQuickEntry";
+import { PasswordRevealInput } from "@/components/PasswordRevealInput";
 import { gf } from "@/lib/hebrewGenderUi";
 import { getTimeOfDaySlot } from "@/lib/dashboardGreeting";
 
@@ -67,6 +68,7 @@ type Copy = {
   errAlreadyRegistered: string;
   loggingIn: string;
   registering: string;
+  signupLocalNote: string;
 };
 
 const COPY: Record<Lang, Copy> = {
@@ -111,6 +113,8 @@ const COPY: Record<Lang, Copy> = {
     errAlreadyRegistered: "כבר קיים חשבון במכשיר — התחברי",
     loggingIn: "מתחברת…",
     registering: "יוצרת חשבון…",
+    signupLocalNote:
+      "החשבון נשמר במכשיר בלבד. בשלב זה אין מייל אימות מהשרת — אפשר לאפס סיסמה דרך «שכחתי סיסמה».",
   },
   en: {
     taglinePrimary: "A direct path to your dream body",
@@ -153,6 +157,8 @@ const COPY: Record<Lang, Copy> = {
     errAlreadyRegistered: "An account already exists on this device — log in",
     loggingIn: "Signing in…",
     registering: "Creating account…",
+    signupLocalNote:
+      "Your account is stored on this device only. There is no server email verification yet — use “Forgot password” if needed.",
   },
 };
 
@@ -334,19 +340,27 @@ export function WelcomeScreen() {
 
   async function submitSignup() {
     setAuthError(null);
-    if (authPassword !== authConfirm) {
+    if (authPassword.trim() !== authConfirm.trim()) {
       setAuthError(t.errPasswordMismatch);
       return;
     }
     setAuthBusy(true);
     try {
-      const r = await registerAccount(authEmail, authPassword);
+      const r = await registerAccount(authEmail, authPassword.trim());
       if (!r.ok) {
         if (r.error === "email") setAuthError(t.errEmail);
         else if (r.error === "short") setAuthError(t.errPasswordShort);
         else setAuthError(t.errAlreadyRegistered);
         return;
       }
+      void fetch("/api/email/welcome", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          email: authEmail.trim(),
+          gender: trackGender,
+        }),
+      }).catch(() => {});
       startSession();
       markWelcomeLeft();
       closeAuth();
@@ -360,7 +374,7 @@ export function WelcomeScreen() {
     setAuthError(null);
     setAuthBusy(true);
     try {
-      const ok = await verifyLogin(authEmail, authPassword);
+      const ok = await verifyLogin(authEmail, authPassword.trim());
       if (!ok) {
         const reg = loadAuthRecord()?.email ?? "";
         const p0 = loadProfile();
@@ -562,29 +576,34 @@ export function WelcomeScreen() {
                 <span className="mb-1 block text-xs font-semibold text-[var(--cherry)]">
                   {t.passwordLabel}
                 </span>
-                <input
-                  type="password"
+                <PasswordRevealInput
                   autoComplete={
                     authOpen === "signup" ? "new-password" : "current-password"
                   }
                   value={authPassword}
-                  onChange={(e) => setAuthPassword(e.target.value)}
+                  onChange={setAuthPassword}
                   className="input-luxury-search rounded-xl border-2 border-[var(--border-cherry-soft)] px-3 py-2.5 text-sm"
+                  disabled={authBusy}
                 />
               </label>
               {authOpen === "signup" && (
-                <label className="block">
-                  <span className="mb-1 block text-xs font-semibold text-[var(--cherry)]">
-                    {t.confirmPasswordLabel}
-                  </span>
-                  <input
-                    type="password"
-                    autoComplete="new-password"
-                    value={authConfirm}
-                    onChange={(e) => setAuthConfirm(e.target.value)}
-                    className="input-luxury-search rounded-xl border-2 border-[var(--border-cherry-soft)] px-3 py-2.5 text-sm"
-                  />
-                </label>
+                <>
+                  <label className="block">
+                    <span className="mb-1 block text-xs font-semibold text-[var(--cherry)]">
+                      {t.confirmPasswordLabel}
+                    </span>
+                    <PasswordRevealInput
+                      autoComplete="new-password"
+                      value={authConfirm}
+                      onChange={setAuthConfirm}
+                      className="input-luxury-search rounded-xl border-2 border-[var(--border-cherry-soft)] px-3 py-2.5 text-sm"
+                      disabled={authBusy}
+                    />
+                  </label>
+                  <p className="text-[11px] font-medium leading-relaxed text-[var(--text)]/70">
+                    {t.signupLocalNote}
+                  </p>
+                </>
               )}
             </div>
             {authError && (
