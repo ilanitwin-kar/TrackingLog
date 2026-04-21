@@ -57,10 +57,10 @@ function computeTotalsFromIngredients(ingredients: RecipeIngredient[]) {
 }
 
 function getRecipeFinalWeightG(r: SavedRecipe): number {
-  const totals = r.totals ?? computeTotalsFromIngredients(r.ingredients);
+  const rawGrams = computeTotalsFromIngredients(r.ingredients).grams;
   const fw = typeof r.finalCookedWeightG === "number" && Number.isFinite(r.finalCookedWeightG) && r.finalCookedWeightG > 0
     ? r.finalCookedWeightG
-    : totals.grams;
+    : rawGrams;
   return Math.max(1, Math.round(fw));
 }
 

@@ -20,7 +20,7 @@ const fontFood =
 type SearchRow = {
   id: string;
   name: string;
-  source: "dictionary" | "explorer" | "openFoodFacts" | "ai";
+  source: "dictionary" | "explorer" | "openFoodFacts" | "ai" | "manual";
   caloriesPer100g: number;
   proteinPer100g: number;
   carbsPer100g: number;
@@ -108,6 +108,7 @@ function sourceIcon(src: SearchRow["source"]) {
   if (src === "dictionary") return "🍒";
   if (src === "explorer") return "🔎";
   if (src === "openFoodFacts") return "🌐";
+  if (src === "manual") return "✏️";
   return "🧠";
 }
 
