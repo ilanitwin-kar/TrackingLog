@@ -544,6 +544,34 @@ export function AssistantClient() {
     exerciseRev,
   ]);
 
+  function getLastMealCardForQuickAdd(): FoodSuggestionCard | null {
+    for (let i = messages.length - 1; i >= 0; i -= 1) {
+      const m = messages[i];
+      if (m?.role !== "assistant") continue;
+      const cards = m.verifiedSuggestions ?? [];
+      if (cards.length < 1) continue;
+      const first = cards[0]!;
+      if (first.isAggregatedMeal) return first;
+    }
+    return null;
+  }
+
+  function isUserYes(text: string): boolean {
+    const t = text.trim().toLowerCase();
+    return (
+      t === "כן" ||
+      t === "כן." ||
+      t === "כן!" ||
+      t === "כן תודה" ||
+      t === "כן, תודה" ||
+      t === "יאללה" ||
+      t === "סבבה" ||
+      t === "אוקיי" ||
+      t === "ok" ||
+      t === "yes"
+    );
+  }
+
   async function send() {
     const text = input.trim();
     if (!text || busy) return;
@@ -553,6 +581,25 @@ export function AssistantClient() {
     setMessages((m) => [...m, { role: "user", text }]);
     setInput("");
     try {
+      // UX: אם המשתמש עונה "כן" אחרי כרטיס סיכום ארוחה — נוסיף אוטומטית ליומן כשורה אחת.
+      // (עדיין לא "מנחשים": זה רק אישור לפעולת הוספה.)
+      const lastCard = getLastMealCardForQuickAdd();
+      if (lastCard && isUserYes(text)) {
+        onCardJournal(lastCard);
+        setMessages((m) => [
+          ...m,
+          {
+            role: "assistant",
+            text: gf(
+              gender,
+              `בוצע — ${lastCard.journalFoodLabel ?? "נוסף ליומן היום."}`,
+              `בוצע — ${lastCard.journalFoodLabel ?? "נוסף ליומן היום."}`
+            ),
+          },
+        ]);
+        return;
+      }
+
       const history = [...messages, { role: "user" as const, text }].slice(-16);
 
       // Save preference facts to cloud (diet likes/dislikes) when user states them.
@@ -861,18 +908,12 @@ export function AssistantClient() {
           </button>
         </div>
 
-        <div className="mt-3 flex flex-wrap justify-center gap-x-4 gap-y-1 text-center text-xs font-semibold text-[var(--cherry)]">
-          <Link
-            href={`/add-food?date=${encodeURIComponent(getTodayKey())}`}
-            className="underline-offset-2 hover:underline"
-          >
-            {gf(gender, "מעבר להוספת מזון ליומן", "מעבר להוספת מזון ליומן")}
+        <div className="mt-3 flex flex-wrap justify-center gap-x-5 gap-y-1 text-center text-xs font-semibold text-[var(--cherry)]">
+          <Link href="/explorer" className="underline-offset-2 hover:underline">
+            {gf(gender, "מעבר למגלה המזונות", "מעבר למגלה המזונות")}
           </Link>
-          <Link
-            href={`/add-food-ai?date=${encodeURIComponent(getTodayKey())}`}
-            className="underline-offset-2 hover:underline"
-          >
-            {gf(gender, "רישום ארוחה במסך ה-AI", "רישום ארוחה במסך ה-AI")}
+          <Link href="/dictionary" className="underline-offset-2 hover:underline">
+            {gf(gender, "מעבר למילון שלי", "מעבר למילון שלי")}
           </Link>
         </div>
       </div>
