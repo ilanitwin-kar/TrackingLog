@@ -1,5 +1,3 @@
-import type { Gender } from "@/lib/tdee";
-
 export type TimeOfDaySlot = {
   salutationHe: string;
   emoji: string;

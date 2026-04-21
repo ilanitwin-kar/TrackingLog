@@ -393,6 +393,18 @@ const quickNavBtnClass =
 const foodToolbarBtnClass =
   "inline-flex min-h-[2.75rem] min-w-[2.75rem] flex-col items-center justify-center gap-0.5 rounded-xl border border-[var(--border-cherry-soft)] bg-white/95 px-2 py-1.5 text-[var(--stem)] shadow-sm transition hover:bg-[var(--cherry-muted)] disabled:cursor-not-allowed disabled:opacity-40";
 
+type WeatherClientState = {
+  tempC: number;
+  description: string;
+  isRain: boolean;
+  isHot: boolean;
+};
+
+type WeatherLocalStorageV1 = {
+  ts?: number;
+  data?: Partial<WeatherClientState> & Record<string, unknown>;
+};
+
 export function HomeClient({ mode = "dashboard" }: { mode?: "dashboard" | "journal" }) {
   const gender = loadProfile().gender;
   const appVariant = useAppVariant();
@@ -553,7 +565,7 @@ export function HomeClient({ mode = "dashboard" }: { mode?: "dashboard" | "journ
         profile?.firstName ?? "",
         greetingHour
       ),
-    [gender, profile?.firstName, greetingHour]
+    [profile?.firstName, greetingHour]
   );
 
   const isJournalMode = mode === "journal";
@@ -571,14 +583,14 @@ export function HomeClient({ mode = "dashboard" }: { mode?: "dashboard" | "journ
     [gender, target, total]
   );
 
-  const [weather, setWeather] = useState<null | { tempC: number; description: string; isRain: boolean; isHot: boolean }>(null);
+  const [weather, setWeather] = useState<null | WeatherClientState>(null);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
     try {
       const raw = localStorage.getItem("cj_weather_v1");
       if (!raw) return;
-      const parsed = JSON.parse(raw) as { ts?: number; data?: any };
+      const parsed = JSON.parse(raw) as WeatherLocalStorageV1;
       const ts = Number(parsed?.ts);
       if (!Number.isFinite(ts) || Date.now() - ts > 60 * 60 * 1000) return;
       const d = parsed?.data;

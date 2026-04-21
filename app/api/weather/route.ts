@@ -16,6 +16,16 @@ function clamp(n: number, lo: number, hi: number): number {
   return Math.min(hi, Math.max(lo, n));
 }
 
+/** מינימום נדרש מתשובת OpenWeather — בלי `any` */
+type OpenWeatherApiResponse = {
+  main?: { temp?: number };
+  weather?: Array<{
+    id?: number;
+    main?: string;
+    description?: string;
+  }>;
+};
+
 export async function GET(req: Request) {
   const key = process.env.OPENWEATHER_API_KEY?.trim() ?? "";
   if (!key) return NextResponse.json({ ok: false } satisfies WeatherOut);
@@ -37,7 +47,7 @@ export async function GET(req: Request) {
   try {
     const res = await fetch(url.toString(), { cache: "no-store" });
     if (!res.ok) return NextResponse.json({ ok: false } satisfies WeatherOut);
-    const data = (await res.json()) as any;
+    const data = (await res.json()) as OpenWeatherApiResponse;
     const tempC = clamp(Number(data?.main?.temp) || 0, -60, 80);
     const description = String(data?.weather?.[0]?.description ?? "").trim().slice(0, 80);
     const main = String(data?.weather?.[0]?.main ?? "").toLowerCase();
