@@ -60,6 +60,35 @@ function uid(): string {
   return `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
 }
 
+/** תצוגת «נבחרו לאחרונה»: כמות אחרונה מזיכרון + קלוריות למנה */
+function recentPickQtyAndKcal(row: HomeSuggestRow): { qtyLine: string; kcal: number } {
+  const mem = getFoodMemory(row.name.trim());
+  const unit: FoodUnit = mem?.unit ?? "גרם";
+  const qtyRaw = mem?.quantity ?? 100;
+  const qty =
+    unit === "גרם"
+      ? clampGrams(Number(qtyRaw))
+      : clampServingUnits(Number(qtyRaw));
+  const gramsTotal =
+    unit === "גרם"
+      ? qty
+      : (() => {
+          const gPerU =
+            mem?.gramsPerUnit != null &&
+            Number.isFinite(mem.gramsPerUnit) &&
+            mem.gramsPerUnit > 0
+              ? mem.gramsPerUnit
+              : 0;
+          return gPerU > 0 ? qty * gPerU : 0;
+        })();
+  const per100 = row.calories ?? 0;
+  const factor = gramsTotal > 0 ? gramsTotal / 100 : qty / 100;
+  const kcal = Math.max(1, Math.round(per100 * factor));
+  const qtyLine =
+    unit === "גרם" ? `${qty} גרם` : `${qty} ${unit}`;
+  return { qtyLine, kcal };
+}
+
 function pickRandom<T>(arr: readonly T[]): T {
   return arr[Math.floor(Math.random() * arr.length)]!;
 }
@@ -1091,7 +1120,7 @@ export function AddFoodClient({
 
   function quickAddRowToJournal(row: HomeSuggestRow): void {
     const per100 = row.calories ?? 0;
-    const mem = getFoodMemory(row.name);
+    const mem = getFoodMemory(row.name.trim());
     const unit = mem?.unit ?? ("גרם" as const);
     const qtyRaw = mem?.quantity ?? 100;
     const qty =
@@ -1115,7 +1144,7 @@ export function AddFoodClient({
 
     const entry: LogEntry = {
       id: uid(),
-      food: row.name,
+      food: row.name.trim(),
       calories,
       quantity: qty,
       unit,
@@ -1132,7 +1161,7 @@ export function AddFoodClient({
     setRecentPicks(loadRecentFoodPicks());
     setQuickAddId(`${row.source ?? "local"}-${row.id}`);
     window.setTimeout(() => setQuickAddId(null), 900);
-    showQuickAddToast(`«${row.name}» נרשם ביומן`);
+    showQuickAddToast(`«${row.name.trim()}» נרשם ביומן`);
     emitMealLoggedFeedback(gf(gender, "נוסף ליומן.", "נוסף ליומן."));
   }
 
@@ -1201,32 +1230,32 @@ export function AddFoodClient({
         {screen === "search" && (
           <>
             <nav
-              className="mb-3 flex items-center justify-center gap-2 overflow-x-auto pb-1 [-webkit-overflow-scrolling:touch]"
+              className="mb-3 flex flex-wrap items-center justify-center gap-2 pb-1"
               aria-label="מקורות הוספה"
             >
               <Link
                 href={`/add-food?${tabsQuery}`}
-                className="shrink-0 rounded-full border-2 border-[var(--border-cherry-soft)] bg-white px-3 py-1.5 text-xs font-extrabold text-[var(--stem)]"
+                className="shrink-0 rounded-full border-2 border-[var(--border-cherry-soft)] bg-white px-4 py-2 text-sm font-extrabold text-[var(--stem)] sm:text-base"
               >
                 הכל
               </Link>
               <Link
                 href={`/menus?${tabsQuery}`}
-                className="shrink-0 rounded-full border-2 border-[var(--border-cherry-soft)] bg-white px-3 py-1.5 text-xs font-extrabold text-[var(--stem)]"
+                className="shrink-0 rounded-full border-2 border-[var(--border-cherry-soft)] bg-white px-4 py-2 text-sm font-extrabold text-[var(--stem)] sm:text-base"
               >
-                התפריטים שלי
+                תפריטים
               </Link>
               <Link
                 href={`/my-recipes?${tabsQuery}`}
-                className="shrink-0 rounded-full border-2 border-[var(--border-cherry-soft)] bg-white px-3 py-1.5 text-xs font-extrabold text-[var(--stem)]"
+                className="shrink-0 rounded-full border-2 border-[var(--border-cherry-soft)] bg-white px-4 py-2 text-sm font-extrabold text-[var(--stem)] sm:text-base"
               >
-                המתכונים שלי
+                מתכונים
               </Link>
               <Link
                 href={`/dictionary?${tabsQuery}`}
-                className="shrink-0 rounded-full border-2 border-[var(--border-cherry-soft)] bg-white px-3 py-1.5 text-xs font-extrabold text-[var(--stem)]"
+                className="shrink-0 rounded-full border-2 border-[var(--border-cherry-soft)] bg-white px-4 py-2 text-sm font-extrabold text-[var(--stem)] sm:text-base"
               >
-                המילון שלי
+                מילון
               </Link>
             </nav>
 
@@ -1306,22 +1335,54 @@ export function AddFoodClient({
 
               {recentPicks.length > 0 && (
                 <div className="mt-3">
-                  <p className="mb-1.5 text-xs font-bold text-[var(--cherry)]">
+                  <p className="mb-2 text-sm font-extrabold text-[var(--cherry)]">
                     נבחרו לאחרונה
                   </p>
-                  <div className="flex gap-2 overflow-x-auto pb-1 [-webkit-overflow-scrolling:touch]">
-                    {recentPicks.map((r) => (
-                      <button
-                        key={`${r.id}-${r.name}`}
-                        type="button"
-                        className="max-w-[11rem] shrink-0 truncate rounded-xl border-2 border-[var(--border-cherry-soft)] bg-white px-3 py-2 text-start text-xs font-semibold text-[var(--stem)] shadow-sm transition hover:bg-[var(--cherry-muted)] active:scale-[0.99]"
-                        title={r.name}
-                        onClick={() => openPickModalFromRow(r)}
-                      >
-                        {r.name}
-                      </button>
-                    ))}
-                  </div>
+                  <ul className="space-y-2">
+                    {recentPicks.map((r) => {
+                      const { qtyLine, kcal } = recentPickQtyAndKcal(r);
+                      const qk = `${r.source ?? "local"}-${r.id}`;
+                      return (
+                        <li
+                          key={`${r.id}-${r.name}`}
+                          className="flex items-stretch gap-2 rounded-xl border-2 border-[var(--border-cherry-soft)] bg-white shadow-sm"
+                        >
+                          <button
+                            type="button"
+                            className="flex min-w-0 flex-1 flex-col items-stretch gap-0.5 px-3 py-2.5 text-start transition hover:bg-[var(--cherry-muted)]/45"
+                            onClick={() => openPickModalFromRow(r)}
+                          >
+                            <span className="text-sm font-extrabold leading-snug text-[var(--stem)]">
+                              {r.name}
+                            </span>
+                            <span className="text-xs font-semibold tabular-nums text-[var(--stem)]/75">
+                              {qtyLine} · {kcal} קק״ל
+                            </span>
+                          </button>
+                          <button
+                            type="button"
+                            className={`flex w-[3.25rem] shrink-0 flex-col items-center justify-center border-s-2 border-[var(--border-cherry-soft)]/60 bg-[var(--cherry-muted)]/25 transition hover:bg-[var(--cherry-muted)]/55 active:scale-[0.98] ${
+                              quickAddId === qk ? "ring-2 ring-inset ring-[var(--stem)]" : ""
+                            }`}
+                            title={gf(gender, "הוספה מהירה ליומן", "הוספה מהירה ליומן")}
+                            aria-label={gf(gender, "הוספה מהירה ליומן", "הוספה מהירה ליומן")}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              quickAddRowToJournal(r);
+                            }}
+                          >
+                            {quickAddId === qk ? (
+                              <span className="text-lg font-extrabold text-[var(--cherry)]" aria-hidden>
+                                ✓
+                              </span>
+                            ) : (
+                              <IconPlusCircle className="h-6 w-6 text-[var(--cherry)]" />
+                            )}
+                          </button>
+                        </li>
+                      );
+                    })}
+                  </ul>
                 </div>
               )}
             </div>
