@@ -97,6 +97,36 @@ function resolveDateKey(raw: string | null): string {
   return raw;
 }
 
+type MealSlot = "morning" | "lunch" | "snack" | "dinner" | "night";
+
+function resolveMealSlot(raw: string | null): MealSlot {
+  switch (raw) {
+    case "morning":
+    case "lunch":
+    case "snack":
+    case "dinner":
+    case "night":
+      return raw;
+    default:
+      return "snack";
+  }
+}
+
+function mealLabelHe(m: MealSlot): string {
+  switch (m) {
+    case "morning":
+      return "בוקר";
+    case "lunch":
+      return "צהריים";
+    case "snack":
+      return "ביניים";
+    case "dinner":
+      return "ערב";
+    case "night":
+      return "לילה";
+  }
+}
+
 export function AddFoodClient({
   screen = "search",
 }: {
@@ -106,6 +136,8 @@ export function AddFoodClient({
   const router = useRouter();
   const searchParams = useSearchParams();
   const dateKey = resolveDateKey(searchParams.get("date"));
+  const meal = resolveMealSlot(searchParams.get("meal"));
+  const from = searchParams.get("from") ?? "";
 
   const [food, setFood] = useState("");
 
@@ -1040,7 +1072,69 @@ export function AddFoodClient({
     }
   }
 
-  const homeLink = `/?date=${encodeURIComponent(dateKey)}`;
+  const backBase = from === "journal" ? "/journal" : "/";
+  const homeLink =
+    dateKey === getTodayKey()
+      ? backBase
+      : `${backBase}?date=${encodeURIComponent(dateKey)}`;
+
+  const tabsQuery = `date=${encodeURIComponent(dateKey)}&meal=${encodeURIComponent(meal)}&from=${encodeURIComponent(from || "journal")}`;
+  const [quickAddToast, setQuickAddToast] = useState<string | null>(null);
+  const [quickAddId, setQuickAddId] = useState<string | null>(null);
+  const quickAddTimerRef = useRef<number | null>(null);
+
+  function showQuickAddToast(msg: string) {
+    setQuickAddToast(msg);
+    if (quickAddTimerRef.current != null) window.clearTimeout(quickAddTimerRef.current);
+    quickAddTimerRef.current = window.setTimeout(() => setQuickAddToast(null), 1100);
+  }
+
+  function quickAddRowToJournal(row: HomeSuggestRow): void {
+    const per100 = row.calories ?? 0;
+    const mem = getFoodMemory(row.name);
+    const unit = mem?.unit ?? ("גרם" as const);
+    const qtyRaw = mem?.quantity ?? 100;
+    const qty =
+      unit === "גרם"
+        ? clampGrams(Number(qtyRaw))
+        : clampServingUnits(Number(qtyRaw));
+    const gramsTotal =
+      unit === "גרם"
+        ? qty
+        : (() => {
+            const gPerU =
+              mem?.gramsPerUnit != null &&
+              Number.isFinite(mem.gramsPerUnit) &&
+              mem.gramsPerUnit > 0
+                ? mem.gramsPerUnit
+                : 0;
+            return gPerU > 0 ? qty * gPerU : 0;
+          })();
+    const factor = gramsTotal > 0 ? gramsTotal / 100 : qty / 100;
+    const calories = Math.max(1, Math.round(per100 * factor));
+
+    const entry: LogEntry = {
+      id: uid(),
+      food: row.name,
+      calories,
+      quantity: qty,
+      unit,
+      createdAt: new Date().toISOString(),
+      verified: (row.source ?? "local") === "local",
+      meal,
+      ...(row.protein != null ? { proteinG: Math.round(row.protein * factor * 10) / 10 } : {}),
+      ...(row.carbs != null ? { carbsG: Math.round(row.carbs * factor * 10) / 10 } : {}),
+      ...(row.fat != null ? { fatG: Math.round(row.fat * factor * 10) / 10 } : {}),
+    };
+    const existing = getEntriesForDate(dateKey);
+    saveDayLogEntries(dateKey, [entry, ...existing]);
+    rememberFoodPick(row);
+    setRecentPicks(loadRecentFoodPicks());
+    setQuickAddId(`${row.source ?? "local"}-${row.id}`);
+    window.setTimeout(() => setQuickAddId(null), 900);
+    showQuickAddToast(`«${row.name}» נרשם ביומן`);
+    emitMealLoggedFeedback(gf(gender, "נוסף ליומן.", "נוסף ליומן."));
+  }
 
   const pickPreview = useMemo(() => {
     if (!pickModalRow) return null;
@@ -1061,7 +1155,9 @@ export function AddFoodClient({
             חזרה
           </Link>
           <div className="flex min-w-0 flex-1 flex-col items-center gap-2 text-center">
-            <h1 className="panel-title-cherry text-lg">הוסף מזון</h1>
+            <h1 className="panel-title-cherry text-lg">
+              {mealLabelHe(meal)} — הוסף מזון
+            </h1>
             <div className="flex w-full max-w-[20rem] items-center justify-center gap-1.5">
               <button
                 type="button"
@@ -1104,6 +1200,36 @@ export function AddFoodClient({
       <div className="mx-auto w-full max-w-lg px-3 pt-3">
         {screen === "search" && (
           <>
+            <nav
+              className="mb-3 flex items-center justify-center gap-2 overflow-x-auto pb-1 [-webkit-overflow-scrolling:touch]"
+              aria-label="מקורות הוספה"
+            >
+              <Link
+                href={`/add-food?${tabsQuery}`}
+                className="shrink-0 rounded-full border-2 border-[var(--border-cherry-soft)] bg-white px-3 py-1.5 text-xs font-extrabold text-[var(--stem)]"
+              >
+                הכל
+              </Link>
+              <Link
+                href={`/menus?${tabsQuery}`}
+                className="shrink-0 rounded-full border-2 border-[var(--border-cherry-soft)] bg-white px-3 py-1.5 text-xs font-extrabold text-[var(--stem)]"
+              >
+                התפריטים שלי
+              </Link>
+              <Link
+                href={`/my-recipes?${tabsQuery}`}
+                className="shrink-0 rounded-full border-2 border-[var(--border-cherry-soft)] bg-white px-3 py-1.5 text-xs font-extrabold text-[var(--stem)]"
+              >
+                המתכונים שלי
+              </Link>
+              <Link
+                href={`/dictionary?${tabsQuery}`}
+                className="shrink-0 rounded-full border-2 border-[var(--border-cherry-soft)] bg-white px-3 py-1.5 text-xs font-extrabold text-[var(--stem)]"
+              >
+                המילון שלי
+              </Link>
+            </nav>
+
             <div>
               <label className="shrink-0">
                 <span className="mb-1.5 flex flex-wrap items-center justify-between gap-2 text-sm font-semibold text-[var(--stem)]">
@@ -1146,20 +1272,35 @@ export function AddFoodClient({
                     placeholder={gf(gender, "חפשי מזון…", "חפש מזון…")}
                     className="input-luxury-search w-full ps-4 pe-[5.25rem] sm:pe-24"
                   />
-                  <button
-                    type="button"
-                    className="absolute end-1.5 top-1/2 z-[70] flex min-h-[2.65rem] min-w-[4.25rem] -translate-y-1/2 flex-col items-center justify-center gap-0 rounded-xl border-2 border-[var(--border-cherry-soft)] bg-white px-1 py-0.5 text-[var(--stem)] shadow-sm transition hover:bg-[var(--cherry-muted)]"
-                    aria-label="סריקת ברקוד — פתיחת מצלמה לסריקת מוצר"
-                    title="סריקת ברקוד — מעבר למסך סריקה"
-                    onClick={() => {
-                      searchInputRef.current?.blur();
-                      setScanModalOpen(true);
-                    }}
-                  >
-                    <IconCaption label="ברקוד">
-                      <IconScanBarcode className="h-5 w-5 sm:h-6 sm:w-6" />
-                    </IconCaption>
-                  </button>
+                  <div className="absolute end-1.5 top-1/2 z-[70] flex -translate-y-1/2 gap-1">
+                    <button
+                      type="button"
+                      className="flex min-h-[2.65rem] min-w-[4.25rem] flex-col items-center justify-center gap-0 rounded-xl border-2 border-[var(--border-cherry-soft)] bg-white px-1 py-0.5 text-[var(--stem)] shadow-sm transition hover:bg-[var(--cherry-muted)]"
+                      aria-label="סריקת ברקוד — פתיחת מצלמה לסריקת מוצר"
+                      title="סריקת ברקוד"
+                      onClick={() => {
+                        searchInputRef.current?.blur();
+                        setScanModalOpen(true);
+                      }}
+                    >
+                      <IconCaption label="ברקוד">
+                        <IconScanBarcode className="h-5 w-5 sm:h-6 sm:w-6" />
+                      </IconCaption>
+                    </button>
+                    <button
+                      type="button"
+                      className="flex min-h-[2.65rem] min-w-[4.25rem] flex-col items-center justify-center gap-0 rounded-xl border-2 border-[var(--border-cherry-soft)] bg-white px-1 py-0.5 text-[var(--stem)] shadow-sm transition hover:bg-[var(--cherry-muted)]"
+                      aria-label="הוספה מהירה"
+                      title="הוספה מהירה"
+                      onClick={openManualModal}
+                    >
+                      <IconCaption label="מהיר">
+                        <span aria-hidden className="text-lg font-extrabold leading-none">
+                          +
+                        </span>
+                      </IconCaption>
+                    </button>
+                  </div>
                 </div>
               </label>
 
@@ -1186,6 +1327,14 @@ export function AddFoodClient({
             </div>
 
             <div className="mt-3 rounded-xl border border-[var(--border-cherry-soft)] bg-white/90 p-2 shadow-sm">
+              {quickAddToast && (
+                <p
+                  className="mb-2 rounded-lg border border-[var(--border-cherry-soft)] bg-[#ecfdf5] px-2 py-2 text-center text-xs font-semibold text-[var(--stem)]"
+                  role="status"
+                >
+                  {quickAddToast}
+                </p>
+              )}
               {dictFeedback && (
                 <p
                   className="rounded-lg border border-[var(--border-cherry-soft)] bg-[#fff9e6] px-2 py-2 text-center text-xs font-semibold text-[var(--stem)]"
@@ -1232,7 +1381,7 @@ export function AddFoodClient({
                             <button
                               type="button"
                               className="suggestion-item flex min-w-0 flex-1 flex-col items-stretch gap-0.5 rounded-lg px-3 py-2.5 text-right transition hover:bg-[var(--cherry-muted)]"
-                              onClick={() => setFood(s.name)}
+                              onClick={(e) => openPickModal(s, e)}
                             >
                               <span className="flex flex-wrap items-center justify-end gap-x-2 gap-y-1 font-semibold text-[var(--stem)]">
                                 <span>{s.name}</span>
@@ -1266,13 +1415,27 @@ export function AddFoodClient({
                             </button>
                             <button
                               type="button"
-                              className="flex min-w-[3.35rem] shrink-0 flex-col items-center justify-center rounded-lg border-2 border-[var(--border-cherry-soft)] bg-white px-0.5 py-1 text-[var(--stem)] shadow-sm transition hover:bg-[var(--cherry-muted)] active:scale-[0.98]"
-                              aria-label={`הוספת «${s.name}» — בחירת כמות ויעד ליומן`}
-                              title="הוספה ליומן — בחירת כמות"
-                              onClick={(e) => openPickModal(s, e)}
+                              className={`flex min-w-[3.35rem] shrink-0 flex-col items-center justify-center rounded-lg border-2 border-[var(--border-cherry-soft)] bg-white px-0.5 py-1 shadow-sm transition hover:bg-[var(--cherry-muted)] active:scale-[0.98] ${
+                                quickAddId === `${src}-${s.id}` ? "ring-2 ring-[var(--stem)]" : ""
+                              }`}
+                              aria-label={`הוספת «${s.name}» ליומן`}
+                              title="הוספה ליומן"
+                              onClick={() => quickAddRowToJournal(s)}
                             >
                               <IconCaption label="הוספה">
-                                <IconPlusCircle className="h-6 w-6 sm:h-7 sm:w-7" />
+                                {quickAddId === `${src}-${s.id}` ? (
+                                  <span className="text-lg font-extrabold text-[var(--stem)]" aria-hidden>
+                                    ✓
+                                  </span>
+                                ) : (
+                                  <IconPlusCircle
+                                    className={`h-6 w-6 sm:h-7 sm:w-7 ${
+                                      gender === "male"
+                                        ? "text-[#1e3a5f]"
+                                        : "text-[var(--cherry)]"
+                                    }`}
+                                  />
+                                )}
                               </IconCaption>
                             </button>
                           </li>
