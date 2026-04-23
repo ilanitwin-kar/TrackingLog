@@ -150,6 +150,7 @@ export function resetJourneyStartToToday(): void {
   localStorage.setItem(KEYS.journeyStart, getTodayKey());
   // לא מוחק נתונים, רק מאתחל את התהליך להצגה/צבירה חדשה
   localStorage.removeItem(KEYS.dayJournalClosed);
+  localStorage.removeItem(KEYS.storyRevealUnlock);
   window.dispatchEvent(new Event("cj-journal-closed-changed"));
   window.dispatchEvent(new Event("cj-profile-updated"));
 }
@@ -344,10 +345,12 @@ export function loadDayLogs(): DayLogsMap {
 /** מספר ימי רצף לאחור (כולל היום) שבהם קיימת לפחות רשומה אחת ביומן. */
 export function getJournalStreakDays(): number {
   const all = loadDayLogs();
+  const journeyStart = getJourneyStartDateKey();
   let streak = 0;
   let k = getTodayKey();
   // תקרה בטיחותית כדי למנוע לולאה אינסופית במקרה של נתונים משובשים
   for (let i = 0; i < 3650; i++) {
+    if (journeyStart && k < journeyStart) break;
     const list = all[k];
     if (!Array.isArray(list) || list.length === 0) break;
     streak++;

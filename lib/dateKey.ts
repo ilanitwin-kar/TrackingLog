@@ -68,3 +68,18 @@ export function getDateKeysFromStartToToday(startKey: string): string[] {
   }
   return keys;
 }
+
+/** רצף תאריכים מ-startKey קדימה לאורך count ימים (כולל startKey). */
+export function getDateKeysFromStartCount(startKey: string, count: number): string[] {
+  const n = Math.floor(Number(count));
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(startKey) || !Number.isFinite(n) || n < 1) {
+    return [getTodayKey()];
+  }
+  const keys: string[] = [];
+  let k = startKey;
+  for (let i = 0; i < Math.min(3650, n); i++) {
+    keys.push(k);
+    k = addDaysToDateKey(k, 1);
+  }
+  return keys;
+}

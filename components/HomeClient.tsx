@@ -51,7 +51,6 @@ import { optionalMacroGram, sumMacroGrams } from "@/lib/macroGrams";
 import { dailyCalorieTarget } from "@/lib/tdee";
 import { weeklyCalorieSavingsClosedDays } from "@/lib/weeklyCalorieSavings";
 import { loadDayLogs } from "@/lib/storage";
-import { InfoCard } from "./InfoCard";
 import { CelebrationConfetti } from "./Fireworks";
 import { useAppVariant } from "./useAppVariant";
 import {
@@ -420,6 +419,7 @@ export function HomeClient({ mode = "dashboard" }: { mode?: "dashboard" | "journ
   const mealBtnRef = useRef<HTMLButtonElement | null>(null);
   const [mealModalPos, setMealModalPos] = useState<{ top: number; left: number; width: number } | null>(null);
   const [mealCtaEntryId, setMealCtaEntryId] = useState<string | null>(null);
+  const [journalInfoOpen, setJournalInfoOpen] = useState(false);
 
   const datePickerRef = useRef<HTMLInputElement | null>(null);
   const touchRef = useRef<{ x: number; y: number; t: number } | null>(null);
@@ -1341,24 +1341,35 @@ export function HomeClient({ mode = "dashboard" }: { mode?: "dashboard" | "journ
           })}
         </div>
 
-        <InfoCard
-          gender={gender}
-          icon="🏦"
-          title="הון קלורי שנצבר השבוע"
-          body={`${weeklySavings.toLocaleString("he-IL")} קק״ל`}
-          className="shadow-[0_8px_24px_var(--panel-shadow-soft)]"
-        />
-        <div className="mt-2 rounded-2xl border-2 border-[var(--border-cherry-soft)] bg-white/90 px-3 py-3 text-center shadow-sm">
-          <p className="text-xs font-semibold leading-relaxed text-[var(--stem)]/80">
-            כדי לראות את כל מה שצברת מתחילת התהליך, סגרי את כל הימים ביומן.
-          </p>
-          <button
-            type="button"
-            className="btn-stem mt-2 w-full rounded-xl py-2.5 text-sm font-extrabold"
-            onClick={closeAllJournalDays}
-          >
-            סגור
-          </button>
+        <div className="rounded-2xl border-2 border-[var(--border-cherry-soft)] bg-white/90 px-4 py-4 shadow-[0_8px_24px_var(--panel-shadow-soft)]">
+          <div className="flex items-start gap-3" dir="rtl">
+            <div
+              className="flex size-11 shrink-0 items-center justify-center rounded-2xl bg-[var(--cherry-muted)] text-2xl shadow-sm"
+              aria-hidden
+            >
+              🏦
+            </div>
+            <div className="min-w-0 flex-1">
+              <h2 className="text-lg font-extrabold tracking-tight text-[var(--cherry)]">
+                הון קלורי שנצבר השבוע
+              </h2>
+              <p className="mt-2 text-sm leading-relaxed text-[var(--text)]/85">
+                <span className="font-extrabold text-[var(--stem)]">
+                  {weeklySavings.toLocaleString("he-IL")} קק״ל
+                </span>
+              </p>
+              <p className="mt-2 text-xs font-semibold leading-relaxed text-[var(--stem)]/80">
+                כדי לראות את כל מה שצברת מתחילת התהליך, סגרי את כל הימים ביומן.
+              </p>
+              <button
+                type="button"
+                className="btn-stem mt-3 w-full rounded-xl py-2.5 text-sm font-extrabold"
+                onClick={closeAllJournalDays}
+              >
+                סגור
+              </button>
+            </div>
+          </div>
         </div>
 
         <nav className="grid w-full grid-cols-2 gap-2 sm:gap-3" aria-label="פעולות מהירות">
@@ -1393,17 +1404,15 @@ export function HomeClient({ mode = "dashboard" }: { mode?: "dashboard" | "journ
           <div className="flex items-center justify-between gap-2" dir="rtl">
             <div className="flex items-center gap-2">
               <h1 className="text-lg font-extrabold text-[var(--stem)]">יומן</h1>
-              <details className="relative">
-                <summary className="list-none cursor-pointer rounded-lg border border-[var(--border-cherry-soft)] bg-white px-2 py-1 text-sm font-extrabold text-[var(--stem)] shadow-sm">
-                  ℹ️
-                </summary>
-                <div className="absolute right-0 mt-2 w-[min(22rem,86vw)] overflow-hidden rounded-xl border border-[var(--border-cherry-soft)] bg-white p-3 text-sm text-[var(--stem)] shadow-lg">
-                  <p className="mb-1 font-extrabold text-[var(--cherry)]">
-                    {homeJournalIntroTitle()}
-                  </p>
-                  <p className="leading-relaxed">{homeJournalIntroBody(gender)}</p>
-                </div>
-              </details>
+              <button
+                type="button"
+                className="rounded-lg border border-[var(--border-cherry-soft)] bg-white px-2 py-1 text-sm font-extrabold text-[var(--stem)] shadow-sm"
+                aria-label="פתיחת הסבר על היומן"
+                aria-expanded={journalInfoOpen}
+                onClick={() => setJournalInfoOpen((x) => !x)}
+              >
+                ℹ️
+              </button>
             </div>
             <div className="flex items-center gap-2">
               <div className="flex items-center gap-1.5 rounded-full border border-[var(--border-cherry-soft)] bg-white px-2.5 py-1 text-xs font-bold text-[var(--cherry)]">
@@ -1447,6 +1456,49 @@ export function HomeClient({ mode = "dashboard" }: { mode?: "dashboard" | "journ
           </button>
         </div>
       )}
+
+      <AnimatePresence>
+        {journalInfoOpen && isJournalMode && (
+          <motion.div
+            className="fixed inset-0 z-[600] flex items-center justify-center bg-black/30 p-4 backdrop-blur-[2px]"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            role="presentation"
+            onClick={(e) => {
+              if (e.target === e.currentTarget) setJournalInfoOpen(false);
+            }}
+          >
+            <motion.div
+              role="dialog"
+              aria-modal
+              className="w-full max-w-md rounded-2xl border-2 border-[var(--border-cherry-soft)] bg-white p-4 shadow-2xl"
+              initial={{ scale: 0.96, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.97, opacity: 0 }}
+              transition={{ type: "spring", damping: 26, stiffness: 320 }}
+              onClick={(e) => e.stopPropagation()}
+              dir="rtl"
+            >
+              <div className="flex items-start justify-between gap-3">
+                <h2 className="text-lg font-extrabold tracking-tight text-[var(--cherry)]">
+                  {homeJournalIntroTitle()}
+                </h2>
+                <button
+                  type="button"
+                  className="rounded-lg border-2 border-[var(--border-cherry-soft)] bg-white px-3 py-1.5 text-sm font-semibold text-[var(--text)] transition hover:bg-[var(--cherry-muted)]"
+                  onClick={() => setJournalInfoOpen(false)}
+                >
+                  סגירה
+                </button>
+              </div>
+              <p className="mt-2 text-sm leading-relaxed text-[var(--stem)]/85">
+                {homeJournalIntroBody(gender)}
+              </p>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* CTA moved next to the last starred entry (see below) */}
 
@@ -1541,9 +1593,7 @@ export function HomeClient({ mode = "dashboard" }: { mode?: "dashboard" | "journ
               </button>
             </div>
           </div>
-          <p className="text-center text-xs font-medium tabular-nums text-[var(--text)]/55">
-            אפשר גם להחליק ימינה/שמאלה כדי לעבור ימים
-          </p>
+          {/* hint removed per UX request */}
         </div>
 
         <div className="mb-5 rounded-2xl border-2 border-[var(--border-cherry-soft)] bg-white/90 px-3 py-3 shadow-sm">
