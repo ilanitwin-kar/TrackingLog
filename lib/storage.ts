@@ -897,23 +897,36 @@ export function deleteMealPreset(id: string): MealPreset[] {
   return next;
 }
 
-/** הוספת כל רכיבי הארוחה ליומן היום (למעלה) */
+/** הוספת ארוחה כ"רשומה אחת" ליומן היום (למעלה) */
 export function applyMealPresetToToday(preset: MealPreset): LogEntry[] {
   const dateKey = getTodayKey();
   const existing = getTodayEntries();
-  const newOnes: LogEntry[] = preset.components.map((c) => ({
+  const sumCalories = preset.components.reduce((s, c) => s + (Number.isFinite(c.calories) ? c.calories : 0), 0);
+  const sumProtein = preset.components.reduce((s, c) => s + (Number.isFinite(c.proteinG) ? (c.proteinG ?? 0) : 0), 0);
+  const sumCarbs = preset.components.reduce((s, c) => s + (Number.isFinite(c.carbsG) ? (c.carbsG ?? 0) : 0), 0);
+  const sumFat = preset.components.reduce((s, c) => s + (Number.isFinite(c.fatG) ? (c.fatG ?? 0) : 0), 0);
+
+  const entry: LogEntry = {
     id: makeId(),
-    food: c.food,
-    calories: c.calories,
-    quantity: c.quantity,
-    unit: c.unit,
+    food: preset.name,
+    calories: Math.max(1, Math.round(sumCalories)),
+    quantity: 1,
+    unit: "יחידה",
     createdAt: new Date().toISOString(),
     mealStarred: false,
-    proteinG: c.proteinG,
-    carbsG: c.carbsG,
-    fatG: c.fatG,
-  }));
-  const merged = [...newOnes, ...existing];
+    ...(sumProtein > 0 ? { proteinG: Math.round(sumProtein * 10) / 10 } : {}),
+    ...(sumCarbs > 0 ? { carbsG: Math.round(sumCarbs * 10) / 10 } : {}),
+    ...(sumFat > 0 ? { fatG: Math.round(sumFat * 10) / 10 } : {}),
+    // לא מציגים רכיבים כרשומות נפרדות, אבל שומרים פירוט אם נרצה להציג/לשחזר בעתיד
+    aiBreakdownJson: JSON.stringify({
+      type: "meal-preset",
+      presetId: preset.id,
+      name: preset.name,
+      components: preset.components,
+    }),
+  };
+
+  const merged = [entry, ...existing];
   saveDayLogEntries(dateKey, merged);
   return merged;
 }

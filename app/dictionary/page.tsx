@@ -868,6 +868,19 @@ export default function DictionaryPage() {
                                 </IconCaption>
                               </button>
                             )}
+                            {isMeal && preset && (
+                              <button
+                                type="button"
+                                className="btn-icon-luxury flex min-w-[3.1rem] flex-col justify-center gap-0 py-1.5"
+                                title="הוספת הארוחה ליומן היום"
+                                aria-label="יומן — הוספת הארוחה ליומן היום"
+                                onClick={() => applyPreset(preset)}
+                              >
+                                <IconCaption label="יומן">
+                                  <IconPlusCircle className="h-5 w-5 sm:h-6 sm:w-6 text-[var(--stem)]" />
+                                </IconCaption>
+                              </button>
+                            )}
                             {!isMeal && (
                               <button
                                 type="button"
@@ -942,15 +955,6 @@ export default function DictionaryPage() {
                       </motion.div>
                     )}
                   </AnimatePresence>
-                  {isMeal && preset && (
-                    <button
-                      type="button"
-                      className="btn-stem mt-3 w-full rounded-xl py-3 text-sm font-semibold"
-                      onClick={() => applyPreset(preset)}
-                    >
-                      הוספה ליומן היום
-                    </button>
-                  )}
                   {d.mealPresetId && !preset && (
                     <p className="mt-2 text-xs text-[#8b2e2e]">
                       לא נמצאה ארוחה — ניתן להסיר את הרשומה.
