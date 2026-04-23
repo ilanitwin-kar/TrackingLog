@@ -1,4 +1,4 @@
-import { getTodayKey } from "./dateKey";
+import { addDaysToDateKey, getTodayKey } from "./dateKey";
 import type { ActivityLevel, Gender } from "./tdee";
 import { getAppVariant } from "./appVariant";
 
@@ -33,6 +33,8 @@ export type LogEntry = {
   quantity: number;
   unit: FoodUnit;
   createdAt: string;
+  /** חלוקת ארוחות ביומן (חדש). ערכים ישנים בלי meal מוצגים תחת \"ביניים\". */
+  meal?: "morning" | "lunch" | "snack" | "dinner" | "night";
   /** מסומן ליצירת ארוחה קבועה */
   mealStarred?: boolean;
   /** ערך מאומת ממאגר Caloric Intelligence */
@@ -304,6 +306,21 @@ export function loadDayLogs(): DayLogsMap {
   } catch {
     return {};
   }
+}
+
+/** מספר ימי רצף לאחור (כולל היום) שבהם קיימת לפחות רשומה אחת ביומן. */
+export function getJournalStreakDays(): number {
+  const all = loadDayLogs();
+  let streak = 0;
+  let k = getTodayKey();
+  // תקרה בטיחותית כדי למנוע לולאה אינסופית במקרה של נתונים משובשים
+  for (let i = 0; i < 3650; i++) {
+    const list = all[k];
+    if (!Array.isArray(list) || list.length === 0) break;
+    streak++;
+    k = addDaysToDateKey(k, -1);
+  }
+  return streak;
 }
 
 export function saveDayLogEntries(dateKey: string, entries: LogEntry[]): void {

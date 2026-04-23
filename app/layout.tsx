@@ -21,7 +21,7 @@ export const viewport: Viewport = {
   themeColor: "#9b1b30",
   width: "device-width",
   initialScale: 1,
-  maximumScale: 1,
+  /** לא לנעול zoom — נגישות ובעיות פחות ב-Safari בנייד */
 };
 
 export default function RootLayout({

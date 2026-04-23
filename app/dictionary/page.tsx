@@ -50,6 +50,7 @@ import {
   gf,
 } from "@/lib/hebrewGenderUi";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { rankedFuzzySearchByText, type MatchRange } from "@/lib/rankedSearch";
 import { getTodayKey } from "@/lib/dateKey";
 
@@ -153,6 +154,7 @@ function renderHighlighted(text: string, ranges: MatchRange[]) {
 
 export default function DictionaryPage() {
   const gender = loadProfile().gender;
+  const searchParams = useSearchParams();
   const [saved, setSaved] = useState<DictionaryItem[]>([]);
   const [presetMap, setPresetMap] = useState<Map<string, MealPreset>>(
     () => new Map()
@@ -553,6 +555,28 @@ export default function DictionaryPage() {
       className={`mx-auto max-w-lg px-4 py-8 pb-28 md:py-12 ${fontFood}`}
       dir="rtl"
     >
+      {(() => {
+        const date = searchParams.get("date");
+        const meal = searchParams.get("meal");
+        const from = searchParams.get("from");
+        const backHref =
+          date && meal && from
+            ? `/add-food?from=${encodeURIComponent(from)}&date=${encodeURIComponent(
+                date
+              )}&meal=${encodeURIComponent(meal)}`
+            : "/";
+        return (
+          <div className="mb-4 flex items-center justify-between gap-2">
+            <Link
+              href={backHref}
+              className="rounded-xl border-2 border-[var(--border-cherry-soft)] bg-white px-3 py-2 text-sm font-semibold text-[var(--stem)] shadow-sm transition hover:bg-[var(--cherry-muted)]"
+            >
+              חזרה
+            </Link>
+            <div className="w-[4.25rem]" aria-hidden />
+          </div>
+        );
+      })()}
       <motion.h1
         className="heading-page mb-6 text-center text-3xl md:text-4xl"
         initial={{ opacity: 0, y: -8 }}
@@ -654,62 +678,63 @@ export default function DictionaryPage() {
                   className="rounded-xl border-2 border-[var(--border-cherry-soft)] bg-white px-3 py-3"
                   style={{ boxShadow: "var(--list-row-shadow)" }}
                 >
-                  <div className="flex items-start justify-between gap-2">
-                    <div className="min-w-0 flex-1">
-                      <p className="flex flex-wrap items-center gap-2 font-semibold text-[var(--stem)]">
-                        <span className="text-xs" aria-hidden>
-                          🍒
+                  <div className="flex min-w-0 flex-col gap-2">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="text-xs" aria-hidden>
+                        🍒
+                      </span>
+                      <span className="min-w-0 flex-1 break-words text-base font-semibold leading-snug text-[var(--text)]">
+                        {savedHits
+                          ? renderHighlighted(
+                              d.food,
+                              savedHits.find((x) => x.item.id === d.id)?.ranges ?? []
+                            )
+                          : d.food}
+                      </span>
+                      {isMeal && (
+                        <span className="rounded-md bg-[var(--cherry-muted)] px-2 py-0.5 text-xs font-semibold text-[var(--cherry)]">
+                          ארוחה שמורה
                         </span>
-                        <span className="min-w-0 break-words">
-                          {savedHits
-                            ? renderHighlighted(
-                                d.food,
-                                savedHits.find((x) => x.item.id === d.id)?.ranges ?? []
-                              )
-                            : d.food}
-                        </span>
-                        {isMeal && (
-                          <span className="rounded-md bg-[var(--cherry-muted)] px-2 py-0.5 text-xs font-semibold text-[var(--cherry)]">
-                            ארוחה שמורה
-                          </span>
-                        )}
-                      </p>
-                      {!isMeal && (
-                        <p className="mt-1 text-sm text-[var(--text)]/80">
-                          {d.quantity} {d.unit}
-                          {d.lastCalories != null
-                            ? ` · קלוריות (אחרון ביומן): ${d.lastCalories}`
-                            : ""}
-                        </p>
-                      )}
-                      {isMeal && preset && (
-                        <ul className="mt-2 space-y-1 text-sm text-[var(--text)]/90">
-                          {preset.components.map((c, i) => (
-                            <li key={`${d.id}-c-${i}`}>
-                              {c.food} — {c.quantity} {c.unit} ({c.calories}{" "}
-                              קק״ל)
-                            </li>
-                          ))}
-                        </ul>
-                      )}
-                      {d.caloriesPer100g != null && !isMeal && (
-                        <p className="mt-1 text-xs text-[var(--text)]/70">
-                          ל־100 גרם: {Math.round(d.caloriesPer100g)} קק״ל
-                          {d.proteinPer100g != null &&
-                            d.carbsPer100g != null &&
-                            d.fatPer100g != null && (
-                              <>
-                                {" "}
-                                · ח {d.proteinPer100g.toFixed(1)} · פחם{" "}
-                                {d.carbsPer100g.toFixed(1)} · שומן{" "}
-                                {d.fatPer100g.toFixed(1)} ג׳
-                              </>
-                            )}
-                          {d.barcode ? ` · ברקוד ${d.barcode}` : ""}
-                        </p>
                       )}
                     </div>
-                    <div className="flex shrink-0 flex-wrap items-start justify-end gap-1">
+
+                    {!isMeal && (
+                      <p className="text-sm text-[var(--text)]/80">
+                        {d.quantity} {d.unit}
+                        {d.lastCalories != null
+                          ? ` · קלוריות (אחרון ביומן): ${d.lastCalories}`
+                          : ""}
+                      </p>
+                    )}
+
+                    {isMeal && preset && (
+                      <ul className="space-y-1 text-sm text-[var(--text)]/90">
+                        {preset.components.map((c, i) => (
+                          <li key={`${d.id}-c-${i}`}>
+                            {c.food} — {c.quantity} {c.unit} ({c.calories} קק״ל)
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+
+                    {d.caloriesPer100g != null && !isMeal && (
+                      <p className="text-xs text-[var(--text)]/70">
+                        ל־100 גרם: {Math.round(d.caloriesPer100g)} קק״ל
+                        {d.proteinPer100g != null &&
+                          d.carbsPer100g != null &&
+                          d.fatPer100g != null && (
+                            <>
+                              {" "}
+                              · ח {d.proteinPer100g.toFixed(1)} · פחם{" "}
+                              {d.carbsPer100g.toFixed(1)} · שומן{" "}
+                              {d.fatPer100g.toFixed(1)} ג׳
+                            </>
+                          )}
+                        {d.barcode ? ` · ברקוד ${d.barcode}` : ""}
+                      </p>
+                    )}
+
+                    <div className="mt-2 flex w-full max-w-full flex-wrap items-center justify-center gap-2 border-t border-[var(--border-cherry-soft)]/60 bg-gradient-to-b from-[var(--cherry-muted)]/35 to-transparent px-1 py-2.5 sm:gap-3">
                       {!isMeal && (
                         <button
                           type="button"

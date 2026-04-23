@@ -30,6 +30,7 @@ import {
   addMealPreset,
   getEntriesForDate,
   type UserProfile,
+  getJournalStreakDays,
   isFoodStarred,
   loadDayJournalClosedMap,
   loadProfile,
@@ -417,6 +418,7 @@ export function HomeClient({ mode = "dashboard" }: { mode?: "dashboard" | "journ
   const [mealNameDraft, setMealNameDraft] = useState("");
   const mealBtnRef = useRef<HTMLButtonElement | null>(null);
   const [mealModalPos, setMealModalPos] = useState<{ top: number; left: number; width: number } | null>(null);
+  const [mealCtaEntryId, setMealCtaEntryId] = useState<string | null>(null);
 
   const datePickerRef = useRef<HTMLInputElement | null>(null);
   const touchRef = useRef<{ x: number; y: number; t: number } | null>(null);
@@ -478,24 +480,15 @@ export function HomeClient({ mode = "dashboard" }: { mode?: "dashboard" | "journ
 
   function navigateToDate(dk: string) {
     setViewDateKey(dk);
+    const base = isJournalMode ? "/journal" : "/";
     if (dk === getTodayKey()) {
-      router.replace("/", { scroll: false });
+      router.replace(base, { scroll: false });
     } else {
-      router.replace(`/?date=${encodeURIComponent(dk)}`, { scroll: false });
+      router.replace(`${base}?date=${encodeURIComponent(dk)}`, { scroll: false });
     }
   }
 
-  function openDatePicker() {
-    const el = datePickerRef.current;
-    if (!el) return;
-    try {
-      const anyEl = el as unknown as { showPicker?: () => void };
-      if (typeof anyEl.showPicker === "function") anyEl.showPicker();
-      else el.click();
-    } catch {
-      el.focus();
-    }
-  }
+  // Date picker kept for future; not used in journal header UX right now.
 
   function toggleJournalClosedForViewDay() {
     const m = { ...loadDayJournalClosedMap() };
@@ -559,6 +552,47 @@ export function HomeClient({ mode = "dashboard" }: { mode?: "dashboard" | "journ
 
   const macroGoals = useMemo(() => dailyMacroTargetsGrams(target), [target]);
 
+  const remainingKcal = useMemo(() => Math.round(target - total), [target, total]);
+  const remainingProteinG = useMemo(
+    () => Math.round(macroGoals.proteinG - totalProteinG),
+    [macroGoals.proteinG, totalProteinG]
+  );
+  const remainingCarbsG = useMemo(
+    () => Math.round(macroGoals.carbsG - totalCarbsG),
+    [macroGoals.carbsG, totalCarbsG]
+  );
+  const remainingFatG = useMemo(
+    () => Math.round(macroGoals.fatG - totalFatG),
+    [macroGoals.fatG, totalFatG]
+  );
+
+  const MEAL_SLOTS = useMemo(
+    () =>
+      [
+        { id: "morning", label: "בוקר" },
+        { id: "lunch", label: "צהריים" },
+        { id: "snack", label: "ביניים" },
+        { id: "dinner", label: "ערב" },
+        { id: "night", label: "לילה" },
+      ] as const,
+    []
+  );
+
+  function entryMealId(
+    e: LogEntry
+  ): (typeof MEAL_SLOTS)[number]["id"] {
+    const m = e.meal;
+    if (
+      m === "morning" ||
+      m === "lunch" ||
+      m === "snack" ||
+      m === "dinner" ||
+      m === "night"
+    )
+      return m;
+    return "snack";
+  }
+
   const greetingLine = useMemo(
     () =>
       buildDashboardGreetingLine(
@@ -569,6 +603,10 @@ export function HomeClient({ mode = "dashboard" }: { mode?: "dashboard" | "journ
   );
 
   const isJournalMode = mode === "journal";
+  const journalStreakDays = useMemo(
+    () => (isJournalMode ? getJournalStreakDays() : 0),
+    [isJournalMode]
+  );
 
   const weeklySavings = useMemo(
     () =>
@@ -823,6 +861,7 @@ export function HomeClient({ mode = "dashboard" }: { mode?: "dashboard" | "journ
         e.id === id ? { ...e, mealStarred: !e.mealStarred } : e
       )
     );
+    setMealCtaEntryId(id);
   }
 
   function openMealModal() {
@@ -1300,7 +1339,7 @@ export function HomeClient({ mode = "dashboard" }: { mode?: "dashboard" | "journ
 
         <nav className="grid w-full grid-cols-2 gap-2 sm:gap-3" aria-label="פעולות מהירות">
           <Link
-            href={`/add-food?date=${encodeURIComponent(viewDateKey)}`}
+            href={`/add-food?from=journal&date=${encodeURIComponent(viewDateKey)}&meal=snack`}
             className={`${quickNavBtnClass} min-h-[3.25rem] px-3 py-3 text-sm sm:min-h-[3.5rem] sm:text-base`}
           >
             <span className="text-xl" aria-hidden>
@@ -1322,18 +1361,44 @@ export function HomeClient({ mode = "dashboard" }: { mode?: "dashboard" | "journ
       )}
 
       {isJournalMode ? (
-      <motion.div
-        className="mb-8 flex flex-wrap items-center justify-center gap-x-2 gap-y-1.5 px-3 text-center"
-        initial={{ opacity: 0, y: -8 }}
-        animate={{ opacity: 1, y: 0 }}
-      >
-        <span className="text-base font-bold leading-snug tracking-wide text-[var(--stem)] md:text-lg">
-          יומן המעקב של
-        </span>
-        <h1 className="app-title relative inline-block rounded-2xl border border-[var(--home-title-border)] bg-gradient-to-b from-white to-[var(--home-title-bg-end)] px-3 py-2 text-[1.2rem] leading-snug shadow-[0_2px_14px_var(--home-title-glow),0_0_0_1px_var(--glass-glow-inner)] md:px-4 md:py-2.5 md:text-2xl lg:text-[1.55rem]">
-          אינטליגנציה קלורית
-        </h1>
-      </motion.div>
+        <motion.header
+          className="mb-5 rounded-2xl border-2 border-[var(--border-cherry-soft)] bg-white/90 px-3 py-3 shadow-sm"
+          initial={{ opacity: 0, y: -8 }}
+          animate={{ opacity: 1, y: 0 }}
+        >
+          <div className="flex items-center justify-between gap-2" dir="rtl">
+            <h1 className="text-lg font-extrabold text-[var(--stem)]">יומן</h1>
+            <div className="flex items-center gap-2">
+              <div className="flex items-center gap-1.5 rounded-full border border-[var(--border-cherry-soft)] bg-white px-2.5 py-1 text-xs font-bold text-[var(--cherry)]">
+                <span aria-hidden className="text-base leading-none">
+                  {appVariant === "blueberry" ? "🫐" : "🍒"}
+                </span>
+                <span className="tabular-nums">{journalStreakDays} ימים ברצף</span>
+              </div>
+              <details className="relative">
+                <summary className="list-none cursor-pointer rounded-xl border border-[var(--border-cherry-soft)] bg-white px-3 py-1.5 text-sm font-extrabold text-[var(--stem)] shadow-sm">
+                  ⋯
+                </summary>
+                <div className="absolute left-0 mt-2 w-44 overflow-hidden rounded-xl border border-[var(--border-cherry-soft)] bg-white shadow-lg">
+                  <button
+                    type="button"
+                    className="block w-full px-3 py-2 text-right text-sm font-semibold text-[var(--stem)] hover:bg-[var(--cherry-muted)]"
+                    onClick={() => router.push("/my-recipes")}
+                  >
+                    המתכונים שלי
+                  </button>
+                  <button
+                    type="button"
+                    className="block w-full px-3 py-2 text-right text-sm font-semibold text-[var(--stem)] hover:bg-[var(--cherry-muted)]"
+                    onClick={() => router.push("/menus")}
+                  >
+                    התפריטים שלי
+                  </button>
+                </div>
+              </details>
+            </div>
+          </div>
+        </motion.header>
       ) : (
         <div className="mb-8">
           <button
@@ -1346,29 +1411,49 @@ export function HomeClient({ mode = "dashboard" }: { mode?: "dashboard" | "journ
         </div>
       )}
 
-      {isJournalMode && starredForMealCount >= 2 && !isDayClosed && (
-        <motion.div
-          className="mb-4"
-          initial={{ opacity: 0, y: 6 }}
-          animate={{ opacity: 1, y: 0 }}
-        >
-          <button
-            type="button"
-            className="btn-stem w-full rounded-xl py-3 text-base font-semibold"
-            onClick={openMealModal}
-            ref={mealBtnRef}
-          >
-            שמירה במילון מהפריטים המסומנים ({starredForMealCount})
-          </button>
-        </motion.div>
-      )}
+      {/* CTA moved next to the last starred entry (see below) */}
 
       {isJournalMode ? (
-      <section className="glass-panel p-4">
+      <section
+        className="glass-panel p-4"
+        onTouchStart={(e) => {
+          const t = e.touches?.[0];
+          if (!t) return;
+          const tag =
+            (e.target as HTMLElement | null)?.tagName?.toLowerCase() ?? "";
+          if (
+            tag === "input" ||
+            tag === "textarea" ||
+            tag === "button" ||
+            tag === "select" ||
+            tag === "a"
+          )
+            return;
+          touchRef.current = { x: t.clientX, y: t.clientY, t: Date.now() };
+        }}
+        onTouchEnd={(e) => {
+          const start = touchRef.current;
+          touchRef.current = null;
+          if (!start) return;
+          const t = e.changedTouches?.[0];
+          if (!t) return;
+          const dx = t.clientX - start.x;
+          const dy = t.clientY - start.y;
+          if (Math.abs(dx) < 60) return;
+          if (Math.abs(dx) < Math.abs(dy) * 1.4) return;
+          if (dx > 0) {
+            // ימינה: יום קודם
+            navigateToDate(addDaysToDateKey(viewDateKey, -1));
+          } else {
+            // שמאלה: יום הבא (עד היום)
+            if (canGoNextDay) navigateToDate(addDaysToDateKey(viewDateKey, 1));
+          }
+        }}
+      >
         <div className="mb-5 flex flex-col gap-3">
           <div className="flex flex-wrap items-center justify-center gap-2">
             <Link
-              href={`/add-food?date=${encodeURIComponent(viewDateKey)}`}
+              href={`/add-food?from=journal&date=${encodeURIComponent(viewDateKey)}&meal=snack`}
               className={`${quickNavBtnClass} min-h-[3rem] px-4 py-3 text-sm font-extrabold sm:min-h-[3.25rem] sm:text-base`}
             >
               <span className="text-xl" aria-hidden>
@@ -1391,26 +1476,72 @@ export function HomeClient({ mode = "dashboard" }: { mode?: "dashboard" | "journ
                 }
               }}
             />
-            <button
-              type="button"
-              className="rounded-xl border-2 border-[var(--border-cherry-soft)] bg-white px-3 py-2 text-sm font-bold text-[var(--stem)] shadow-sm transition hover:bg-[rgba(74,124,35,0.08)]"
-              onClick={openDatePicker}
-            >
-              בחירת תאריך
-            </button>
-            {!isViewingToday && (
+            <div className="flex items-center gap-2 rounded-xl border-2 border-[var(--border-cherry-soft)] bg-white px-2 py-1.5 shadow-sm">
               <button
                 type="button"
-                className="rounded-xl border-2 border-dashed border-[var(--border-cherry-soft)] bg-[#fffafb] px-3 py-2 text-sm font-bold text-[var(--cherry)]"
-                onClick={() => navigateToDate(getTodayKey())}
+                className="rounded-lg px-2 py-1 text-base font-extrabold text-[var(--stem)] hover:bg-[var(--cherry-muted)] disabled:opacity-40"
+                onClick={() => navigateToDate(addDaysToDateKey(viewDateKey, -1))}
+                aria-label="יום קודם"
               >
-                חזרה להיום
+                ›
               </button>
-            )}
+              <button
+                type="button"
+                onClick={() => navigateToDate(getTodayKey())}
+                className="min-w-[7.5rem] px-2 text-center text-sm font-extrabold text-[var(--stem)]"
+                aria-label="חזרה להיום"
+              >
+                {isViewingToday ? "היום" : formatDateKeyHe(viewDateKey)}
+              </button>
+              <button
+                type="button"
+                className="rounded-lg px-2 py-1 text-base font-extrabold text-[var(--stem)] hover:bg-[var(--cherry-muted)] disabled:opacity-40"
+                onClick={() => canGoNextDay && navigateToDate(addDaysToDateKey(viewDateKey, 1))}
+                disabled={!canGoNextDay}
+                aria-label="יום הבא"
+              >
+                ‹
+              </button>
+            </div>
           </div>
           <p className="text-center text-xs font-medium tabular-nums text-[var(--text)]/55">
             אפשר גם להחליק ימינה/שמאלה כדי לעבור ימים
           </p>
+        </div>
+
+        <div className="mb-5 rounded-2xl border-2 border-[var(--border-cherry-soft)] bg-white/90 px-3 py-3 shadow-sm">
+          <p className="text-center text-xs font-extrabold tracking-wide text-[var(--cherry)]/80">
+            נשאר להיום
+          </p>
+          <div className="mt-2 grid grid-cols-4 gap-1.5">
+            {(
+              [
+                ["קלוריות", remainingKcal, "קק״ל"] as const,
+                ["חלבון", remainingProteinG, "ג"] as const,
+                ["פחמימה", remainingCarbsG, "ג"] as const,
+                ["שומן", remainingFatG, "ג"] as const,
+              ] as const
+            ).map(([label, val, unit]) => (
+              <div
+                key={label}
+                className="min-w-0 rounded-xl border border-[var(--border-cherry-soft)] bg-white px-2 py-2 text-center"
+              >
+                <p className="text-[11px] font-bold text-[var(--stem)]/70">
+                  {label}
+                </p>
+                <p
+                  className={`mt-0.5 text-sm font-extrabold tabular-nums ${
+                    val < 0 ? "text-[var(--cherry)]" : "text-[var(--stem)]"
+                  }`}
+                >
+                  {val}
+                  <span className="ms-1 text-[11px] font-bold opacity-70">
+                    {unit}
+                  </span>
+                </p>
+              </div>
+            ))}
+          </div>
         </div>
 
         <InfoCard
@@ -1437,60 +1568,35 @@ export function HomeClient({ mode = "dashboard" }: { mode?: "dashboard" | "journ
             </button>
           </div>
         )}
-        <h2 className="panel-title-cherry mb-1 text-xl">
-          {isViewingToday
-            ? "היום ביומן"
-            : `יומן — ${formatDateKeyHe(viewDateKey)}`}
+        <h2 className="sr-only">
+          {isViewingToday ? "היום ביומן" : `יומן — ${formatDateKeyHe(viewDateKey)}`}
         </h2>
-        <p className="mb-3 text-center text-xs font-medium tabular-nums text-[var(--text)]/55">
-          {viewDateKey}
-        </p>
+
+        <div className="mb-4 grid grid-cols-2 gap-2 sm:grid-cols-3">
+          {MEAL_SLOTS.map((m) => (
+            <Link
+              key={m.id}
+              href={`/add-food?from=journal&date=${encodeURIComponent(
+                viewDateKey
+              )}&meal=${encodeURIComponent(m.id)}`}
+              className="rounded-2xl border-2 border-[var(--border-cherry-soft)] bg-white px-3 py-3 text-center text-sm font-extrabold text-[var(--stem)] shadow-sm transition hover:bg-[var(--cherry-muted)]"
+            >
+              {m.label} · הוסף מזון
+            </Link>
+          ))}
+        </div>
+
         {entries.length === 0 ? (
           <p className="text-[var(--text)]/85">
             {gf(
               gender,
-              "עדיין אין רשומות — לחצי על ״הוספת מזון״ למעלה או על הכפתור המרכזי ״הוספה״ בתפריט התחתון,",
-              "עדיין אין רשומות — לחץ על ״הוספת מזון״ למעלה או על הכפתור המרכזי ״הוספה״ בתפריט התחתון,"
+              "עדיין אין רשומות — בחרי ארוחה ולחצי על ״הוסף מזון״.",
+              "עדיין אין רשומות — בחר ארוחה ולחץ על ״הוסף מזון״."
             )}{" "}
-            ואז על ״פתיחת מסך הוספת מזון״ (המקלדת לא מסתירה את תוצאות החיפוש).
+            אפשר גם להשתמש בכפתור המרכזי ״הוספה״ בתפריט התחתון.
           </p>
         ) : (
-          <ul
-            className="space-y-3"
-            data-dict-rev={dictTick}
-            onTouchStart={(e) => {
-              const t = e.touches?.[0];
-              if (!t) return;
-              const tag =
-                (e.target as HTMLElement | null)?.tagName?.toLowerCase() ?? "";
-              if (
-                tag === "input" ||
-                tag === "textarea" ||
-                tag === "button" ||
-                tag === "select"
-              )
-                return;
-              touchRef.current = { x: t.clientX, y: t.clientY, t: Date.now() };
-            }}
-            onTouchEnd={(e) => {
-              const start = touchRef.current;
-              touchRef.current = null;
-              if (!start) return;
-              const t = e.changedTouches?.[0];
-              if (!t) return;
-              const dx = t.clientX - start.x;
-              const dy = t.clientY - start.y;
-              if (Math.abs(dx) < 60) return;
-              if (Math.abs(dx) < Math.abs(dy) * 1.4) return;
-              if (dx > 0) {
-                // ימינה: יום קודם
-                navigateToDate(addDaysToDateKey(viewDateKey, -1));
-              } else {
-                // שמאלה: יום הבא (עד היום)
-                if (canGoNextDay) navigateToDate(addDaysToDateKey(viewDateKey, 1));
-              }
-            }}
-          >
+          <ul className="space-y-3" data-dict-rev={dictTick}>
             {entries.map((item) => {
               const inDictionary = isFoodStarred(item.food);
               const mealOn = item.mealStarred === true;
@@ -1531,6 +1637,9 @@ export function HomeClient({ mode = "dashboard" }: { mode?: "dashboard" | "journ
                   */}
                   <div className="flex min-w-0 w-full flex-col gap-2">
                     <div className="flex flex-wrap items-center gap-1.5">
+                      <span className="inline-flex items-center rounded-md border border-[var(--border-cherry-soft)] bg-white px-2 py-0.5 text-[10px] font-extrabold text-[var(--stem)]/75">
+                        {MEAL_SLOTS.find((m) => m.id === entryMealId(item))?.label ?? "ביניים"}
+                      </span>
                       {isAiMeal && (
                         <span className="inline-flex items-center gap-1 rounded-md border border-[var(--border-cherry-soft)] bg-white px-2 py-0.5 text-[10px] font-extrabold text-[var(--cherry)]">
                           🤖 ארוחת AI
@@ -1688,6 +1797,29 @@ export function HomeClient({ mode = "dashboard" }: { mode?: "dashboard" | "journ
                       </IconCaption>
                     </button>
                   </div>
+
+                  {isJournalMode &&
+                    !isDayClosed &&
+                    starredForMealCount >= 2 &&
+                    mealCtaEntryId === item.id && (
+                      <motion.div
+                        className="mt-3 rounded-xl border-2 border-[var(--border-cherry-soft)] bg-white px-3 py-3"
+                        initial={{ opacity: 0, y: 6 }}
+                        animate={{ opacity: 1, y: 0 }}
+                      >
+                        <button
+                          type="button"
+                          className="btn-stem w-full rounded-xl py-2.5 text-sm font-extrabold"
+                          onClick={openMealModal}
+                          ref={mealBtnRef}
+                        >
+                          יצירת ארוחה מהמסומנים ({starredForMealCount})
+                        </button>
+                        <p className="mt-1 text-center text-[11px] font-medium text-[var(--text)]/60">
+                          זה ישמור ארוחה במילון לפי הפריטים שסימנת בכוכב.
+                        </p>
+                      </motion.div>
+                    )}
                 </motion.li>
               );
             })}

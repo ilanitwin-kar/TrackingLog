@@ -3,6 +3,7 @@
 import { AnimatePresence, motion } from "framer-motion";
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { loadProfile } from "@/lib/storage";
 import { gf } from "@/lib/hebrewGenderUi";
 import { loadSavedMenus, removeSavedMenu, type SavedMenu } from "@/lib/menuStorage";
@@ -22,8 +23,19 @@ function formatTs(iso: string): string {
 
 export default function MenusPage() {
   const gender = loadProfile().gender;
+  const searchParams = useSearchParams();
   const [menus, setMenus] = useState<SavedMenu[]>([]);
   const [openId, setOpenId] = useState<string | null>(null);
+
+  const backHref = (() => {
+    const date = searchParams.get("date");
+    const meal = searchParams.get("meal");
+    const from = searchParams.get("from");
+    if (date && meal && from) {
+      return `/add-food?from=${encodeURIComponent(from)}&date=${encodeURIComponent(date)}&meal=${encodeURIComponent(meal)}`;
+    }
+    return "/";
+  })();
 
   useEffect(() => {
     setMenus(loadSavedMenus());
@@ -38,7 +50,7 @@ export default function MenusPage() {
     <div className={`mx-auto max-w-lg px-4 py-8 pb-28 md:py-12 ${fontFood}`} dir="rtl">
       <div className="flex items-center justify-between gap-2">
         <Link
-          href="/"
+          href={backHref}
           className="rounded-xl border-2 border-[var(--border-cherry-soft)] bg-white px-3 py-2 text-sm font-semibold text-[var(--stem)] shadow-sm transition hover:bg-[var(--cherry-muted)]"
         >
           חזרה
