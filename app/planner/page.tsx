@@ -307,16 +307,9 @@ export default function PlannerPage() {
   }, [debouncedQ, dictRows, explorerRows, offRows, aiRows]);
 
   const totalTarget = useMemo(() => {
-    const daily = dailyCalorieTarget(
-      profile.gender,
-      profile.weightKg,
-      profile.heightCm,
-      profile.age,
-      profile.deficit,
-      profile.activity
-    );
+    const daily = dailyCalorieTarget(profile);
     return Math.round(daily) * (mode === "week" ? 7 : 1);
-  }, [profile.gender, profile.weightKg, profile.heightCm, profile.age, profile.deficit, profile.activity, mode]);
+  }, [profile, mode]);
 
   const totals = useMemo(() => computeTotals(items), [items]);
   const remaining = Math.round(totalTarget - totals.calories);

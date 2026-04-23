@@ -14,7 +14,6 @@ import {
   type FoodUnit,
   type LogEntry,
   type MealPreset,
-  type MealPresetComponent,
   applyMealPresetToToday,
   getEntriesForDate,
   isExplorerFoodInDictionary,
@@ -32,7 +31,6 @@ import {
 } from "@/lib/explorerStorage";
 import { IconCaption } from "@/components/IconCaption";
 import {
-  IconBookmark,
   IconCart,
   IconPencil,
   IconTrash,
@@ -123,6 +121,24 @@ function firstHebLetter(title: string): string | null {
   return (HEB_LETTERS as readonly string[]).includes(norm) ? norm : null;
 }
 
+function sumPresetTotals(preset: MealPreset): {
+  kcal: number;
+  protein: number;
+  carbs: number;
+  fat: number;
+} {
+  return preset.components.reduce(
+    (acc, c) => ({
+      kcal: acc.kcal + (Number.isFinite(c.calories) ? c.calories : 0),
+      protein:
+        acc.protein + (typeof c.proteinG === "number" ? c.proteinG : 0),
+      carbs: acc.carbs + (typeof c.carbsG === "number" ? c.carbsG : 0),
+      fat: acc.fat + (typeof c.fatG === "number" ? c.fatG : 0),
+    }),
+    { kcal: 0, protein: 0, carbs: 0, fat: 0 }
+  );
+}
+
 function clampGramQty(q: number): number {
   if (!Number.isFinite(q)) return 100;
   return Math.min(5000, Math.max(1, Math.round(q)));
@@ -159,11 +175,9 @@ function servingTotalGrams(
   return null;
 }
 
-function kcalPer100FromMealComponent(c: MealPresetComponent): number {
-  if (c.unit === "גרם" && c.quantity > 0 && c.calories > 0) {
-    return Math.round((c.calories / c.quantity) * 100);
-  }
-  return 0;
+function fmtMacroG(n: number | undefined): string {
+  if (typeof n !== "number" || !Number.isFinite(n)) return "—";
+  return n.toFixed(1);
 }
 
 function clampJournalQty(q: number, unit: FoodUnit): number {
@@ -390,21 +404,6 @@ export default function DictionaryPage() {
     if (added) setShopToast(true);
   }
 
-  function onCartMealPreset(preset: MealPreset) {
-    let anyNew = false;
-    preset.components.forEach((c, i) => {
-      const added = addToShopping({
-        foodId: `dictionary-meal:${preset.id}:${i}`,
-        name: c.food.trim(),
-        category: `מרכיב: ${preset.name}`,
-        calories: kcalPer100FromMealComponent(c),
-      });
-      if (added) anyNew = true;
-    });
-    setShopTick((x) => x + 1);
-    if (anyNew) setShopToast(true);
-  }
-
   function onExplorerDictionary(row: ExplorerFoodRow) {
     toggleExplorerFoodInDictionary({
       id: row.id,
@@ -529,13 +528,6 @@ export default function DictionaryPage() {
     if (added) setShopToast(true);
   }
 
-  function mealFullyInCart(preset: MealPreset): boolean {
-    if (preset.components.length === 0) return false;
-    return preset.components.every((_, i) =>
-      cartLookup.has(`dictionary-meal:${preset.id}:${i}`)
-    );
-  }
-
   function applyPreset(preset: MealPreset) {
     applyMealPresetToToday(preset);
     emitMealLoggedFeedback(
@@ -570,6 +562,14 @@ export default function DictionaryPage() {
     const name = editFood.trim();
     if (!name) {
       setEditError(dictionaryEditFoodError(gender));
+      return;
+    }
+    if (editTarget.mealPresetId) {
+      const next = patchDictionaryItemById(editTarget.id, { food: name });
+      if (next) {
+        setSaved(next);
+        closeEdit();
+      }
       return;
     }
     const qty = parseQtyForUnit(editQtyText, editUnit);
@@ -769,9 +769,7 @@ export default function DictionaryPage() {
                   ? presetMap.get(d.mealPresetId)
                   : undefined;
               const isMeal = Boolean(d.mealPresetId && preset);
-              const inCart = isMeal
-                ? preset != null && mealFullyInCart(preset)
-                : cartLookup.has(`dictionary:${d.id}`);
+              const inCart = !isMeal && cartLookup.has(`dictionary:${d.id}`);
               const isOpen = openSavedId === d.id;
               return (
                 <motion.li
@@ -828,13 +826,32 @@ export default function DictionaryPage() {
                           )}
 
                           {isMeal && preset && (
-                            <ul className="space-y-1 text-sm text-[var(--text)]/90">
-                              {preset.components.map((c, i) => (
-                                <li key={`${d.id}-c-${i}`}>
-                                  {c.food} — {c.quantity} {c.unit} ({c.calories} קק״ל)
-                                </li>
-                              ))}
-                            </ul>
+                            <>
+                              <ul className="space-y-1 text-sm text-[var(--text)]/90">
+                                {preset.components.map((c, i) => (
+                                  <li key={`${d.id}-c-${i}`}>
+                                    {c.food} — {c.quantity} {c.unit} ({c.calories}{" "}
+                                    קק״ל)
+                                    <span className="text-[var(--stem)]/75">
+                                      {" "}
+                                      · ח {fmtMacroG(c.proteinG)} · פחם{" "}
+                                      {fmtMacroG(c.carbsG)} · שומן {fmtMacroG(c.fatG)}{" "}
+                                      ג׳
+                                    </span>
+                                  </li>
+                                ))}
+                              </ul>
+                              {(() => {
+                                const s = sumPresetTotals(preset);
+                                return (
+                                  <p className="text-sm font-extrabold text-[var(--stem)]">
+                                    סה״כ ארוחה: {Math.round(s.kcal)} קק״ל · ח{" "}
+                                    {s.protein.toFixed(1)} · פחם {s.carbs.toFixed(1)} ·
+                                    שומן {s.fat.toFixed(1)} ג׳
+                                  </p>
+                                );
+                              })()}
+                            </>
                           )}
 
                           {d.caloriesPer100g != null && !isMeal && (
@@ -881,42 +898,22 @@ export default function DictionaryPage() {
                                 </IconCaption>
                               </button>
                             )}
-                            {!isMeal && (
-                              <button
-                                type="button"
-                                className="btn-icon-luxury flex min-w-[3.1rem] flex-col justify-center gap-0 py-1.5"
-                                title="עריכת שם וכמויות"
-                                aria-label={`עריכה — עריכת «${d.food}» במילון`}
-                                onClick={() => openEdit(d)}
-                              >
-                                <IconCaption label="עריכה">
-                                  <IconPencil className="h-5 w-5 sm:h-6 sm:w-6" />
-                                </IconCaption>
-                              </button>
-                            )}
-                            {preset && isMeal ? (
-                              <button
-                                type="button"
-                                className={`btn-icon-luxury flex min-w-[3.1rem] flex-col justify-center gap-0 py-1.5 transition-colors ${
-                                  inCart
-                                    ? "bg-[var(--cherry-muted)] ring-2 ring-[var(--border-cherry-soft)]"
-                                    : ""
-                                }`}
-                                title="הוספת מרכיבי הארוחה לרשימת הקניות"
-                                aria-label="קניות — הוספת מרכיבי הארוחה לרשימת הקניות"
-                                aria-pressed={inCart}
-                                onClick={() => onCartMealPreset(preset)}
-                              >
-                                <IconCaption label="קניות">
-                                  <IconCart
-                                    filled={inCart}
-                                    className={`h-5 w-5 sm:h-6 sm:w-6 ${
-                                      inCart ? "text-[var(--cherry)]" : "text-[var(--stem)]"
-                                    }`}
-                                  />
-                                </IconCaption>
-                              </button>
-                            ) : !isMeal ? (
+                            <button
+                              type="button"
+                              className="btn-icon-luxury flex min-w-[3.1rem] flex-col justify-center gap-0 py-1.5"
+                              title={
+                                isMeal
+                                  ? "עריכת שם הארוחה"
+                                  : "עריכת שם וכמויות"
+                              }
+                              aria-label={`עריכה — עריכת «${d.food}» במילון`}
+                              onClick={() => openEdit(d)}
+                            >
+                              <IconCaption label="עריכה">
+                                <IconPencil className="h-5 w-5 sm:h-6 sm:w-6" />
+                              </IconCaption>
+                            </button>
+                            {!isMeal ? (
                               <button
                                 type="button"
                                 className={`btn-icon-luxury flex min-w-[3.1rem] flex-col justify-center gap-0 py-1.5 transition-colors ${
@@ -1226,7 +1223,9 @@ export default function DictionaryPage() {
                   id={editTitleId}
                   className="panel-title-cherry text-lg"
                 >
-                  עריכת פריט במילון
+                  {editTarget.mealPresetId
+                    ? "עריכת ארוחה במילון"
+                    : "עריכת פריט במילון"}
                 </h2>
                 <button
                   type="button"
@@ -1248,107 +1247,119 @@ export default function DictionaryPage() {
                   autoComplete="off"
                 />
               </label>
-              <div className="flex flex-wrap gap-3">
-                <label className="min-w-[6rem] flex-1">
-                  <span className="mb-1 block text-xs font-semibold text-[var(--cherry)]">
-                    כמות
-                  </span>
-                  <input
-                    type="text"
-                    inputMode="decimal"
-                    value={editQtyText}
-                    onFocus={(e) => e.currentTarget.select()}
-                    onChange={(e) => {
-                      if ((e.nativeEvent as InputEvent).isComposing) return;
-                      const raw = e.target.value;
-                      if (raw.trim() === "") {
-                        setEditQtyText("");
-                        return;
-                      }
-                      const cleaned = raw
-                        .replace(",", ".")
-                        .replace(/[^\d.]/g, "")
-                        .replace(/^0+(?=\d)/, "");
-                      const parts = cleaned.split(".");
-                      setEditQtyText(
-                        parts.length <= 1
-                          ? parts[0]
-                          : `${parts[0]}.${parts.slice(1).join("")}`
-                      );
-                    }}
-                    onBlur={() =>
-                      setEditQtyText((x) => {
-                        const n = parseFloat(x.replace(",", "."));
-                        if (!Number.isFinite(n)) return "1";
-                        return String(parseQtyForUnit(x, editUnit));
-                      })
-                    }
-                    className="input-luxury-dark w-full"
-                  />
-                </label>
-                <label className="min-w-[8rem] flex-[2]">
-                  <span className="mb-1 block text-xs font-semibold text-[var(--cherry)]">
-                    יחידה
-                  </span>
-                  <select
-                    value={editUnit}
-                    onChange={(e) => {
-                      const u = e.target.value as FoodUnit;
-                      setEditUnit(u);
-                      setEditQtyText((q) =>
-                        String(parseQtyForUnit(q, u))
-                      );
-                      if (u !== "יחידה") setEditGramsPerUnitText("");
-                    }}
-                    className="select-luxury w-full"
-                  >
-                    {UNITS.map((u) => (
-                      <option key={u} value={u}>
-                        {u}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-              </div>
-              {editUnit === "יחידה" && (
-                <label className="block">
-                  <span className="mb-1 block text-xs font-semibold text-[var(--cherry)]">
-                    משקל יחידה (גרם, אופציונלי)
-                  </span>
-                  <input
-                    type="text"
-                    inputMode="decimal"
-                    value={editGramsPerUnitText}
-                    onChange={(e) => {
-                      if ((e.nativeEvent as InputEvent).isComposing) return;
-                      const raw = e.target.value;
-                      if (raw.trim() === "") {
-                        setEditGramsPerUnitText("");
-                        return;
-                      }
-                      const cleaned = raw
-                        .replace(",", ".")
-                        .replace(/[^\d.]/g, "")
-                        .replace(/^0+(?=\d)/, "");
-                      const parts = cleaned.split(".");
-                      setEditGramsPerUnitText(
-                        parts.length <= 1
-                          ? parts[0]
-                          : `${parts[0]}.${parts.slice(1).join("")}`
-                      );
-                    }}
-                    onBlur={() => {
-                      const g = parseGramsPerUnitField(editGramsPerUnitText);
-                      setEditGramsPerUnitText(
-                        g != null ? String(g) : ""
-                      );
-                    }}
-                    placeholder="למשל 120"
-                    className="input-luxury-dark w-full"
-                  />
-                </label>
+              {editTarget.mealPresetId ? (
+                <p className="text-xs font-medium leading-relaxed text-[var(--stem)]/75">
+                  {gf(
+                    gender,
+                    "עריכת שם הארוחה בלבד. רכיבי הארוחה נשארים כפי ששמרת מהיומן.",
+                    "עריכת שם הארוחה בלבד. רכיבי הארוחה נשארים כפי ששמרת מהיומן."
+                  )}
+                </p>
+              ) : (
+                <>
+                  <div className="flex flex-wrap gap-3">
+                    <label className="min-w-[6rem] flex-1">
+                      <span className="mb-1 block text-xs font-semibold text-[var(--cherry)]">
+                        כמות
+                      </span>
+                      <input
+                        type="text"
+                        inputMode="decimal"
+                        value={editQtyText}
+                        onFocus={(e) => e.currentTarget.select()}
+                        onChange={(e) => {
+                          if ((e.nativeEvent as InputEvent).isComposing) return;
+                          const raw = e.target.value;
+                          if (raw.trim() === "") {
+                            setEditQtyText("");
+                            return;
+                          }
+                          const cleaned = raw
+                            .replace(",", ".")
+                            .replace(/[^\d.]/g, "")
+                            .replace(/^0+(?=\d)/, "");
+                          const parts = cleaned.split(".");
+                          setEditQtyText(
+                            parts.length <= 1
+                              ? parts[0]
+                              : `${parts[0]}.${parts.slice(1).join("")}`
+                          );
+                        }}
+                        onBlur={() =>
+                          setEditQtyText((x) => {
+                            const n = parseFloat(x.replace(",", "."));
+                            if (!Number.isFinite(n)) return "1";
+                            return String(parseQtyForUnit(x, editUnit));
+                          })
+                        }
+                        className="input-luxury-dark w-full"
+                      />
+                    </label>
+                    <label className="min-w-[8rem] flex-[2]">
+                      <span className="mb-1 block text-xs font-semibold text-[var(--cherry)]">
+                        יחידה
+                      </span>
+                      <select
+                        value={editUnit}
+                        onChange={(e) => {
+                          const u = e.target.value as FoodUnit;
+                          setEditUnit(u);
+                          setEditQtyText((q) =>
+                            String(parseQtyForUnit(q, u))
+                          );
+                          if (u !== "יחידה") setEditGramsPerUnitText("");
+                        }}
+                        className="select-luxury w-full"
+                      >
+                        {UNITS.map((u) => (
+                          <option key={u} value={u}>
+                            {u}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                  </div>
+                  {editUnit === "יחידה" && (
+                    <label className="block">
+                      <span className="mb-1 block text-xs font-semibold text-[var(--cherry)]">
+                        משקל יחידה (גרם, אופציונלי)
+                      </span>
+                      <input
+                        type="text"
+                        inputMode="decimal"
+                        value={editGramsPerUnitText}
+                        onChange={(e) => {
+                          if ((e.nativeEvent as InputEvent).isComposing) return;
+                          const raw = e.target.value;
+                          if (raw.trim() === "") {
+                            setEditGramsPerUnitText("");
+                            return;
+                          }
+                          const cleaned = raw
+                            .replace(",", ".")
+                            .replace(/[^\d.]/g, "")
+                            .replace(/^0+(?=\d)/, "");
+                          const parts = cleaned.split(".");
+                          setEditGramsPerUnitText(
+                            parts.length <= 1
+                              ? parts[0]
+                              : `${parts[0]}.${parts.slice(1).join("")}`
+                          );
+                        }}
+                        onBlur={() => {
+                          const g = parseGramsPerUnitField(editGramsPerUnitText);
+                          setEditGramsPerUnitText(
+                            g != null ? String(g) : ""
+                          );
+                        }}
+                        placeholder="למשל 120"
+                        className="input-luxury-dark w-full"
+                      />
+                    </label>
+                  )}
+                </>
               )}
-              {editTarget.caloriesPer100g != null && (
+              {editTarget.caloriesPer100g != null && !editTarget.mealPresetId && (
                 <p className="text-xs text-[var(--text)]/75">
                   יש ערכי קלוריות ל־100 ג׳ — הקק״ל למנה יחושבו מחדש כשהכמות
                   בגרם או ביחידה עם משקל יחידה.

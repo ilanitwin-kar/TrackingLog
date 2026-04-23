@@ -40,7 +40,7 @@ import {
   toggleDictionaryFromEntry,
 } from "@/lib/storage";
 import { buildDashboardGreetingLine } from "@/lib/dashboardGreeting";
-import { dailyMacroTargetsGrams } from "@/lib/macroTargets";
+import { dailyMacroTargetsGramsForProfile } from "@/lib/macroTargets";
 import {
   dailyCalorieMotivationLine,
   gf,
@@ -523,16 +523,7 @@ export function HomeClient({ mode = "dashboard" }: { mode?: "dashboard" | "journ
     };
   }, [viewDateKey]);
 
-  const target = profile
-    ? dailyCalorieTarget(
-        profile.gender,
-        profile.weightKg,
-        profile.heightCm,
-        profile.age,
-        profile.deficit,
-        profile.activity
-      )
-    : 0;
+  const target = profile ? dailyCalorieTarget(profile) : 0;
 
   const total = useMemo(
     () => entries.reduce((s, e) => s + e.calories, 0),
@@ -552,7 +543,17 @@ export function HomeClient({ mode = "dashboard" }: { mode?: "dashboard" | "journ
     [entries]
   );
 
-  const macroGoals = useMemo(() => dailyMacroTargetsGrams(target), [target]);
+  const macroGoals = useMemo(
+    () =>
+      profile
+        ? dailyMacroTargetsGramsForProfile(
+            target,
+            profile.weightKg,
+            profile.gender
+          )
+        : { proteinG: 0, carbsG: 0, fatG: 0 },
+    [target, profile]
+  );
 
   const remainingKcal = useMemo(() => Math.round(target - total), [target, total]);
   const remainingProteinG = useMemo(

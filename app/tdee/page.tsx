@@ -14,8 +14,12 @@ import {
 import { BackToMenuButton } from "@/components/BackToMenuButton";
 import { DevAdminQuickEntry } from "@/components/DevAdminQuickEntry";
 import { InfoCard } from "@/components/InfoCard";
-import type { ActivityLevel } from "@/lib/tdee";
-import { dailyCalorieTarget, tdee } from "@/lib/tdee";
+import type { ActivityLevel, NutritionGoal } from "@/lib/tdee";
+import {
+  CALORIE_FLOOR_MESSAGE_HE,
+  computeNutritionPlan,
+  dailyCalorieTarget,
+} from "@/lib/tdee";
 import { gf, infoProfileBody, infoTdeeResultsBody } from "@/lib/hebrewGenderUi";
 import { syncAuthEmailWithProfile } from "@/lib/localAuth";
 
@@ -28,6 +32,7 @@ type TdeeFieldId =
   | "heightCm"
   | "weightKg"
   | "goalWeightKg"
+  | "nutritionGoal"
   | "deficit";
 
 function getIncompleteTdeeFields(p: UserProfile): { id: TdeeFieldId; label: string }[] {
@@ -44,8 +49,17 @@ function getIncompleteTdeeFields(p: UserProfile): { id: TdeeFieldId; label: stri
   if (!p.goalWeightKg || p.goalWeightKg < 30 || p.goalWeightKg > 250) {
     missing.push({ id: "goalWeightKg", label: "יעד משקל" });
   }
-  if (!p.deficit || p.deficit < 100 || p.deficit > 1500) {
-    missing.push({ id: "deficit", label: "גירעון יומי" });
+  if (
+    p.nutritionGoal !== "weight_loss" &&
+    p.nutritionGoal !== "maintenance" &&
+    p.nutritionGoal !== "muscle_gain"
+  ) {
+    missing.push({ id: "nutritionGoal", label: "מטרה" });
+  }
+  if (p.customDeficitEnabled === true) {
+    if (!p.deficit || p.deficit < 50 || p.deficit > 500) {
+      missing.push({ id: "deficit", label: "גירעון נוסף" });
+    }
   }
   return missing;
 }
@@ -100,22 +114,10 @@ export default function TdeePage() {
   const [formBottomMsg, setFormBottomMsg] = useState<string | null>(null);
   const fieldEls = useRef<Partial<Record<TdeeFieldId, HTMLElement>>>({});
 
-  const t = useMemo(() => {
-    if (!p) return 0;
-    return tdee(p.gender, p.weightKg, p.heightCm, p.age, p.activity);
-  }, [p]);
+  const plan = useMemo(() => (p ? computeNutritionPlan(p) : null), [p]);
 
-  const target = useMemo(() => {
-    if (!p) return 0;
-    return dailyCalorieTarget(
-      p.gender,
-      p.weightKg,
-      p.heightCm,
-      p.age,
-      p.deficit,
-      p.activity
-    );
-  }, [p]);
+  const t = plan?.tdee ?? 0;
+  const target = p ? dailyCalorieTarget(p) : 0;
 
   useEffect(() => {
     const loaded = loadProfile();
@@ -129,6 +131,8 @@ export default function TdeePage() {
         heightCm: 0,
         weightKg: 0,
         goalWeightKg: 0,
+        nutritionGoal: loaded.nutritionGoal ?? "weight_loss",
+        customDeficitEnabled: false,
         deficit: 0,
       });
       setAgeText("");
@@ -144,7 +148,11 @@ export default function TdeePage() {
     setHeightText(String(loaded.heightCm ?? ""));
     setWeightText(String(loaded.weightKg ?? ""));
     setGoalWeightText(String(loaded.goalWeightKg ?? ""));
-    setDeficitText(String(loaded.deficit ?? ""));
+    setDeficitText(
+      loaded.customDeficitEnabled && loaded.deficit > 0
+        ? String(loaded.deficit)
+        : ""
+    );
   }, []);
 
   if (!p) {
@@ -241,7 +249,7 @@ export default function TdeePage() {
       />
       <p className="mb-6 text-center text-sm font-medium text-[var(--cherry)]/85">
         {registered
-          ? "השינויים נשמרים אוטומטית. יעד הקלוריות בדשבורד מתעדכן מיד כשמשנים גירעון או פעילות."
+          ? "השינויים נשמרים אוטומטית. יעד הקלוריות והמאקרו בדשבורד מתעדכנים לפי המטרה, הפעילות והגירעון הנוסף (אם סימנת)."
           : gf(
               gender,
               "מלאי את כל השדות כדי להגדיר את היעד היומי ולהמשיך לדשבורד.",
@@ -432,6 +440,40 @@ export default function TdeePage() {
           </label>
         </div>
 
+        <div
+          ref={(el) => {
+            if (el) fieldEls.current.nutritionGoal = el;
+          }}
+          className={fieldWrapClass("nutritionGoal")}
+        >
+          <span className="text-sm font-semibold text-[var(--cherry)]">
+            מה המטרה שלך?
+          </span>
+          <div className="mt-2 space-y-2">
+            {(
+              [
+                { id: "weight_loss" as const, label: "ירידה במשקל" },
+                { id: "maintenance" as const, label: "שמירה על הקיים" },
+                { id: "muscle_gain" as const, label: "בניית מסת שריר" },
+              ] satisfies { id: NutritionGoal; label: string }[]
+            ).map((opt) => (
+              <label
+                key={opt.id}
+                className="flex cursor-pointer items-center gap-3 rounded-xl border-2 border-[var(--border-cherry-soft)] bg-white px-3 py-2.5 shadow-sm transition hover:bg-[var(--cherry-muted)]/40"
+              >
+                <input
+                  type="radio"
+                  name="nutritionGoal"
+                  className="size-4 accent-[var(--cherry)]"
+                  checked={p.nutritionGoal === opt.id}
+                  onChange={() => update("nutritionGoal", opt.id)}
+                />
+                <span className="text-sm font-bold text-[var(--stem)]">{opt.label}</span>
+              </label>
+            ))}
+          </div>
+        </div>
+
         <label className="block">
           <span className="text-sm font-semibold text-[var(--cherry)]">
             רמת פעילות
@@ -457,13 +499,37 @@ export default function TdeePage() {
           }}
           className={fieldWrapClass("deficit")}
         >
-          <label className="block">
-            <span className="text-sm font-semibold text-[var(--cherry)]">
-              גירעון יומי מטרה (קק״ל)
-            </span>
+          <label className="flex cursor-pointer items-start gap-3 rounded-xl border-2 border-[var(--border-cherry-soft)] bg-white px-3 py-3">
             <input
+              type="checkbox"
+              className="mt-1 size-4 shrink-0 accent-[var(--cherry)]"
+              checked={p.customDeficitEnabled === true}
+              onChange={(e) => {
+                const on = e.target.checked;
+                update("customDeficitEnabled", on);
+                if (!on) {
+                  update("deficit", 0);
+                  setDeficitText("");
+                } else {
+                  const seed =
+                    p.deficit >= 50 && p.deficit <= 500 ? p.deficit : 300;
+                  setDeficitText(String(seed));
+                  update("deficit", seed);
+                }
+              }}
+            />
+            <span className="text-sm font-bold leading-snug text-[var(--stem)]">
+              {gf(
+                gender,
+                "רוצה להפחית עוד קלוריות מהיעד? סמני כאן והזיני גירעון נוסף (עד 500 קק״ל ליום).",
+                "רוצה להפחית עוד קלוריות מהיעד? סמן כאן והזן גירעון נוסף (עד 500 קק״ל ליום)."
+              )}
+            </span>
+          </label>
+          <input
             type="text"
             inputMode="numeric"
+            disabled={!p.customDeficitEnabled}
             value={deficitText}
             onFocus={focusClearZero}
             onChange={(e) => {
@@ -471,18 +537,24 @@ export default function TdeePage() {
               setDeficitText(next);
               const n = parseOrNull(next);
               if (n == null) return;
-              update("deficit", Math.max(100, Math.min(1500, Math.round(n))));
+              update("deficit", Math.max(50, Math.min(500, Math.round(n))));
             }}
             onBlur={() => {
               const n = parseOrNull(deficitText);
-              if (n == null) return;
-              const clamped = Math.max(100, Math.min(1500, Math.round(n)));
+              if (n == null) {
+                if (p.customDeficitEnabled) setDeficitText("300");
+                return;
+              }
+              const clamped = Math.max(50, Math.min(500, Math.round(n)));
               setDeficitText(String(clamped));
+              update("deficit", clamped);
             }}
-            className="input-luxury-dark mt-1 w-full"
-            placeholder={gf(gender, "למשל 500", "למשל 500")}
+            className={`input-luxury-dark mt-2 w-full ${
+              !p.customDeficitEnabled ? "opacity-45" : ""
+            }`}
+            placeholder={gf(gender, "למשל 300 (בין 50 ל־500)", "למשל 300 (בין 50 ל־500)")}
+            aria-label="גירעון נוסף בקלוריות"
           />
-          </label>
         </div>
       </motion.section>
 
@@ -500,16 +572,57 @@ export default function TdeePage() {
             body={infoTdeeResultsBody(gender)}
           />
         </div>
-        <p className="text-sm font-semibold text-[var(--cherry)]/85">TDEE משוער</p>
-        <p className="heading-page text-3xl">
-          {Math.round(t)} קק״ל
-        </p>
+        {plan && plan.calorieFloorApplied ? (
+          <p
+            className="mb-4 rounded-xl border-2 border-[var(--border-cherry-soft)] bg-[var(--cherry-muted)]/50 px-3 py-2.5 text-sm font-semibold leading-relaxed text-[var(--stem)]"
+            role="status"
+          >
+            {CALORIE_FLOOR_MESSAGE_HE}
+          </p>
+        ) : null}
+        <p className="text-sm font-semibold text-[var(--cherry)]/85">TDEE (תחזוקה)</p>
+        <p className="heading-page text-3xl tabular-nums">{t} קק״ל</p>
+        {plan && p.customDeficitEnabled && p.deficit > 0 ? (
+          <>
+            <p className="mt-3 text-sm font-semibold text-[var(--cherry)]/85">
+              יעד אחרי המטרה (לפני גירעון נוסף)
+            </p>
+            <p className="text-xl font-bold tabular-nums text-[var(--stem)]">
+              {plan.baseTargetKcal} קק״ל
+            </p>
+          </>
+        ) : null}
         <p className="mt-3 text-sm font-semibold text-[var(--cherry)]/85">
-          יעד צריכה יומי (אחרי גירעון)
+          יעד צריכה יומי סופי
         </p>
-        <p className="text-2xl font-bold text-[var(--ui-hero-metric)]">
+        <p className="text-2xl font-bold text-[var(--ui-hero-metric)] tabular-nums">
           {target} קק״ל
         </p>
+        {plan ? (
+          <div className="mt-5 grid grid-cols-3 gap-2 text-center">
+            <div className="rounded-xl border-2 border-[var(--border-cherry-soft)] bg-white/90 px-2 py-3 shadow-sm">
+              <p className="text-[10px] font-extrabold text-[var(--cherry)]">חלבון</p>
+              <p className="mt-1 text-lg font-extrabold tabular-nums text-[var(--stem)]">
+                {plan.macroGrams.proteinG}
+              </p>
+              <p className="text-[10px] font-semibold text-[var(--stem)]/60">גרם</p>
+            </div>
+            <div className="rounded-xl border-2 border-[var(--border-cherry-soft)] bg-white/90 px-2 py-3 shadow-sm">
+              <p className="text-[10px] font-extrabold text-[var(--cherry)]">פחמימות</p>
+              <p className="mt-1 text-lg font-extrabold tabular-nums text-[var(--stem)]">
+                {plan.macroGrams.carbsG}
+              </p>
+              <p className="text-[10px] font-semibold text-[var(--stem)]/60">גרם</p>
+            </div>
+            <div className="rounded-xl border-2 border-[var(--border-cherry-soft)] bg-white/90 px-2 py-3 shadow-sm">
+              <p className="text-[10px] font-extrabold text-[var(--cherry)]">שומן</p>
+              <p className="mt-1 text-lg font-extrabold tabular-nums text-[var(--stem)]">
+                {plan.macroGrams.fatG}
+              </p>
+              <p className="text-[10px] font-semibold text-[var(--stem)]/60">גרם</p>
+            </div>
+          </div>
+        ) : null}
       </motion.div>
 
       <div className="mt-6 space-y-2">
