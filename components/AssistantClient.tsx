@@ -640,14 +640,7 @@ export function AssistantClient() {
       },
       { calories: 0, protein: 0, carbs: 0, fat: 0 }
     );
-    const dailyCalorieTargetKcal = dailyCalorieTarget(
-      profile.gender,
-      profile.weightKg,
-      profile.heightCm,
-      profile.age,
-      profile.deficit,
-      profile.activity
-    );
+    const dailyCalorieTargetKcal = dailyCalorieTarget(profile);
     const caloriesConsumed = totals.calories;
     const caloriesOverGoal =
       dailyCalorieTargetKcal > 0

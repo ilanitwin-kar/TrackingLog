@@ -5,7 +5,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Pie, PieChart, ResponsiveContainer, Cell } from "recharts";
 import { BackToMenuButton } from "@/components/BackToMenuButton";
 import { InfoCard } from "@/components/InfoCard";
-import { dailyMacroTargetsGrams } from "@/lib/macroTargets";
+import { dailyMacroTargetsGramsForProfile } from "@/lib/macroTargets";
 import { getTodayKey } from "@/lib/dateKey";
 import { getEntriesForDate, loadProfile, type LogEntry } from "@/lib/storage";
 import { dailyCalorieTarget } from "@/lib/tdee";
@@ -43,14 +43,7 @@ export default function DailySummaryPage() {
     return getEntriesForDate(dateKey);
   }, [rev, dateKey]);
 
-  const computedTarget: number = dailyCalorieTarget(
-    profile.gender,
-    profile.weightKg,
-    profile.heightCm,
-    profile.age,
-    profile.deficit,
-    profile.activity
-  );
+  const computedTarget: number = dailyCalorieTarget(profile);
 
   const consumedKcal = useMemo(
     () => entries.reduce((s, e) => s + e.calories, 0),
@@ -59,7 +52,15 @@ export default function DailySummaryPage() {
   const remaining = Math.max(0, computedTarget - consumedKcal);
   const over = Math.max(0, consumedKcal - computedTarget);
 
-  const macroGoals = useMemo(() => dailyMacroTargetsGrams(computedTarget), [computedTarget]);
+  const macroGoals = useMemo(
+    () =>
+      dailyMacroTargetsGramsForProfile(
+        computedTarget,
+        profile.weightKg,
+        profile.gender
+      ),
+    [computedTarget, profile.weightKg, profile.gender]
+  );
   const protein = useMemo(() => sum(entries, "proteinG"), [entries]);
   const carbs = useMemo(() => sum(entries, "carbsG"), [entries]);
   const fat = useMemo(() => sum(entries, "fatG"), [entries]);

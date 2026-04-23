@@ -1,6 +1,6 @@
 import { loadDayLogs, loadProfile, loadWeights } from "@/lib/storage";
 import type { UserProfile } from "@/lib/storage";
-import { tdee } from "@/lib/tdee";
+import { computeNutritionPlan, tdee } from "@/lib/tdee";
 
 const KCAL_PER_KG = 7700;
 
@@ -46,7 +46,8 @@ export function getDailyCaloricDeficitKcal(): number | null {
     const deficit = tdeeKcal - avgIntake;
     return deficit > 0 ? deficit : null;
   }
-  const planned = profile.deficit;
+  const plan = computeNutritionPlan(profile);
+  const planned = plan.tdee - plan.finalTargetKcal;
   return planned > 0 ? planned : null;
 }
 
@@ -63,7 +64,8 @@ export function getDaysRemainingToGoal(): number | null {
     sorted.length > 0 ? sorted[sorted.length - 1].kg : profile.weightKg;
   const remaining = Math.max(0, current - profile.goalWeightKg);
   const kcalToBurn = remaining * KCAL_PER_KG;
-  const plannedDeficit = profile.deficit;
+  const plan = computeNutritionPlan(profile);
+  const plannedDeficit = plan.tdee - plan.finalTargetKcal;
   if (
     plannedDeficit > 0 &&
     Number.isFinite(plannedDeficit) &&

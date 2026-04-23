@@ -1,5 +1,5 @@
 import { addDaysToDateKey, getTodayKey } from "./dateKey";
-import type { ActivityLevel, Gender } from "./tdee";
+import type { ActivityLevel, Gender, NutritionGoal } from "./tdee";
 import { getAppVariant } from "./appVariant";
 
 export type FoodUnit =
@@ -82,6 +82,10 @@ export type UserProfile = {
   age: number;
   heightCm: number;
   weightKg: number;
+  /** מטרת תזונה — קובעת את יעד הקלוריות יחסית ל-TDEE */
+  nutritionGoal: NutritionGoal;
+  /** כאשר מופעל — `deficit` מופחת מיעד הקלוריות אחרי חישוב המטרה (עד 500 קק״ל) */
+  customDeficitEnabled: boolean;
   deficit: number;
   activity: ActivityLevel;
   goalWeightKg: number;
@@ -98,7 +102,18 @@ export function isProfileFormValid(p: UserProfile): boolean {
   if (p.heightCm < 100 || p.heightCm > 230) return false;
   if (p.weightKg < 30 || p.weightKg > 250) return false;
   if (p.goalWeightKg < 30 || p.goalWeightKg > 250) return false;
-  if (p.deficit < 100 || p.deficit > 1500) return false;
+  if (
+    p.nutritionGoal !== "weight_loss" &&
+    p.nutritionGoal !== "maintenance" &&
+    p.nutritionGoal !== "muscle_gain"
+  ) {
+    return false;
+  }
+  if (p.customDeficitEnabled === true) {
+    if (p.deficit < 50 || p.deficit > 500) return false;
+  } else if (p.deficit < 0 || p.deficit > 500) {
+    return false;
+  }
   return true;
 }
 
@@ -196,7 +211,9 @@ const defaultProfile: UserProfile = {
   age: 30,
   heightCm: 165,
   weightKg: 70,
-  deficit: 500,
+  nutritionGoal: "weight_loss",
+  customDeficitEnabled: false,
+  deficit: 0,
   activity: "light",
   goalWeightKg: 62,
   onboardingComplete: false,
@@ -214,6 +231,16 @@ function getTrackGenderDefault(): Gender {
 
 function normalizeLoadedProfile(parsed: Partial<UserProfile>): UserProfile {
   const trackGender = getTrackGenderDefault();
+  const rawGoal = parsed.nutritionGoal;
+  const nutritionGoal: NutritionGoal =
+    rawGoal === "maintenance" || rawGoal === "muscle_gain" || rawGoal === "weight_loss"
+      ? rawGoal
+      : "weight_loss";
+  const customDeficitEnabled = parsed.customDeficitEnabled === true;
+  let deficit = 0;
+  if (typeof parsed.deficit === "number" && Number.isFinite(parsed.deficit)) {
+    deficit = Math.max(0, Math.min(500, Math.round(parsed.deficit)));
+  }
   return {
     ...defaultProfile,
     ...parsed,
@@ -222,6 +249,9 @@ function normalizeLoadedProfile(parsed: Partial<UserProfile>): UserProfile {
       typeof parsed.firstName === "string" ? parsed.firstName.trim() : "",
     // Gender is determined by track and must not drift.
     gender: trackGender,
+    nutritionGoal,
+    customDeficitEnabled,
+    deficit,
     onboardingComplete: parsed.onboardingComplete === true,
   };
 }
@@ -544,6 +574,15 @@ export function patchDictionaryItemById(
   }
   items[idx] = next;
   saveDictionary(items);
+  if (next.mealPresetId && typeof patch.food === "string" && patch.food.trim()) {
+    const presets = loadMealPresets();
+    const pi = presets.findIndex((mp) => mp.id === next.mealPresetId);
+    if (pi >= 0) {
+      const updated = [...presets];
+      updated[pi] = { ...updated[pi]!, name: patch.food.trim() };
+      saveMealPresets(updated);
+    }
+  }
   return items;
 }
 
@@ -897,23 +936,36 @@ export function deleteMealPreset(id: string): MealPreset[] {
   return next;
 }
 
-/** הוספת כל רכיבי הארוחה ליומן היום (למעלה) */
+/** הוספת ארוחה כ"רשומה אחת" ליומן היום (למעלה) */
 export function applyMealPresetToToday(preset: MealPreset): LogEntry[] {
   const dateKey = getTodayKey();
   const existing = getTodayEntries();
-  const newOnes: LogEntry[] = preset.components.map((c) => ({
+  const sumCalories = preset.components.reduce((s, c) => s + (Number.isFinite(c.calories) ? c.calories : 0), 0);
+  const sumProtein = preset.components.reduce((s, c) => s + (Number.isFinite(c.proteinG) ? (c.proteinG ?? 0) : 0), 0);
+  const sumCarbs = preset.components.reduce((s, c) => s + (Number.isFinite(c.carbsG) ? (c.carbsG ?? 0) : 0), 0);
+  const sumFat = preset.components.reduce((s, c) => s + (Number.isFinite(c.fatG) ? (c.fatG ?? 0) : 0), 0);
+
+  const entry: LogEntry = {
     id: makeId(),
-    food: c.food,
-    calories: c.calories,
-    quantity: c.quantity,
-    unit: c.unit,
+    food: preset.name,
+    calories: Math.max(1, Math.round(sumCalories)),
+    quantity: 1,
+    unit: "יחידה",
     createdAt: new Date().toISOString(),
     mealStarred: false,
-    proteinG: c.proteinG,
-    carbsG: c.carbsG,
-    fatG: c.fatG,
-  }));
-  const merged = [...newOnes, ...existing];
+    ...(sumProtein > 0 ? { proteinG: Math.round(sumProtein * 10) / 10 } : {}),
+    ...(sumCarbs > 0 ? { carbsG: Math.round(sumCarbs * 10) / 10 } : {}),
+    ...(sumFat > 0 ? { fatG: Math.round(sumFat * 10) / 10 } : {}),
+    // לא מציגים רכיבים כרשומות נפרדות, אבל שומרים פירוט אם נרצה להציג/לשחזר בעתיד
+    aiBreakdownJson: JSON.stringify({
+      type: "meal-preset",
+      presetId: preset.id,
+      name: preset.name,
+      components: preset.components,
+    }),
+  };
+
+  const merged = [entry, ...existing];
   saveDayLogEntries(dateKey, merged);
   return merged;
 }

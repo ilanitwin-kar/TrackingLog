@@ -40,7 +40,7 @@ import {
   toggleDictionaryFromEntry,
 } from "@/lib/storage";
 import { buildDashboardGreetingLine } from "@/lib/dashboardGreeting";
-import { dailyMacroTargetsGrams } from "@/lib/macroTargets";
+import { dailyMacroTargetsGramsForProfile } from "@/lib/macroTargets";
 import {
   dailyCalorieMotivationLine,
   gf,
@@ -420,6 +420,7 @@ export function HomeClient({ mode = "dashboard" }: { mode?: "dashboard" | "journ
   const [mealModalPos, setMealModalPos] = useState<{ top: number; left: number; width: number } | null>(null);
   const [mealCtaEntryId, setMealCtaEntryId] = useState<string | null>(null);
   const [journalInfoOpen, setJournalInfoOpen] = useState(false);
+  const [journalExpandedId, setJournalExpandedId] = useState<string | null>(null);
 
   const datePickerRef = useRef<HTMLInputElement | null>(null);
   const touchRef = useRef<{ x: number; y: number; t: number } | null>(null);
@@ -522,16 +523,7 @@ export function HomeClient({ mode = "dashboard" }: { mode?: "dashboard" | "journ
     };
   }, [viewDateKey]);
 
-  const target = profile
-    ? dailyCalorieTarget(
-        profile.gender,
-        profile.weightKg,
-        profile.heightCm,
-        profile.age,
-        profile.deficit,
-        profile.activity
-      )
-    : 0;
+  const target = profile ? dailyCalorieTarget(profile) : 0;
 
   const total = useMemo(
     () => entries.reduce((s, e) => s + e.calories, 0),
@@ -551,7 +543,17 @@ export function HomeClient({ mode = "dashboard" }: { mode?: "dashboard" | "journ
     [entries]
   );
 
-  const macroGoals = useMemo(() => dailyMacroTargetsGrams(target), [target]);
+  const macroGoals = useMemo(
+    () =>
+      profile
+        ? dailyMacroTargetsGramsForProfile(
+            target,
+            profile.weightKg,
+            profile.gender
+          )
+        : { proteinG: 0, carbsG: 0, fatG: 0 },
+    [target, profile]
+  );
 
   const remainingKcal = useMemo(() => Math.round(target - total), [target, total]);
   const remainingProteinG = useMemo(
@@ -567,31 +569,24 @@ export function HomeClient({ mode = "dashboard" }: { mode?: "dashboard" | "journ
     [macroGoals.fatG, totalFatG]
   );
 
-  const MEAL_SLOTS = useMemo(
-    () =>
-      [
-        { id: "morning", label: "בוקר" },
-        { id: "lunch", label: "צהריים" },
-        { id: "snack", label: "ביניים" },
-        { id: "dinner", label: "ערב" },
-        { id: "night", label: "לילה" },
-      ] as const,
-    []
-  );
+  // (meal slots kept in data model but not shown in UI per latest UX)
 
-  function entryMealId(
-    e: LogEntry
-  ): (typeof MEAL_SLOTS)[number]["id"] {
-    const m = e.meal;
-    if (
-      m === "morning" ||
-      m === "lunch" ||
-      m === "snack" ||
-      m === "dinner" ||
-      m === "night"
-    )
-      return m;
-    return "snack";
+  function entryTimeHHmm(createdAtIso: string): string {
+    const t = formatEntryTime(createdAtIso);
+    return t && /^\d{2}:\d{2}$/.test(t) ? t : "";
+  }
+
+  function setEntryTime(id: string, hhmm: string): void {
+    if (!/^\d{2}:\d{2}$/.test(hhmm)) return;
+    const [hh, mm] = hhmm.split(":").map((x) => Number(x));
+    if (!Number.isFinite(hh) || !Number.isFinite(mm)) return;
+    if (hh < 0 || hh > 23 || mm < 0 || mm > 59) return;
+    const d = new Date(`${viewDateKey}T${hhmm}:00`);
+    const next = entries.map((e) =>
+      e.id === id ? { ...e, createdAt: d.toISOString() } : e
+    );
+    saveDayLogEntries(viewDateKey, next);
+    setEntries(next);
   }
 
   const greetingLine = useMemo(
@@ -1663,7 +1658,14 @@ export function HomeClient({ mode = "dashboard" }: { mode?: "dashboard" | "journ
           </p>
         ) : (
           <ul className="space-y-3" data-dict-rev={dictTick}>
-            {entries.map((item) => {
+            {[...entries]
+              .sort((a, b) => {
+                const ta = entryTimeHHmm(a.createdAt) || "99:99";
+                const tb = entryTimeHHmm(b.createdAt) || "99:99";
+                if (ta !== tb) return ta.localeCompare(tb);
+                return a.createdAt.localeCompare(b.createdAt);
+              })
+              .map((item) => {
               const inDictionary = isFoodStarred(item.food);
               const mealOn = item.mealStarred === true;
               const isAiMeal = item.aiMeal === true;
@@ -1686,6 +1688,7 @@ export function HomeClient({ mode = "dashboard" }: { mode?: "dashboard" | "journ
                   return null;
                 }
               })();
+              const isExpanded = journalExpandedId === item.id;
               return (
                 <motion.li
                   key={item.id}
@@ -1702,91 +1705,116 @@ export function HomeClient({ mode = "dashboard" }: { mode?: "dashboard" | "journ
                     flex-col — כותרת ומאקרו ברוחב מלא; פס פעולות אופקי למטה בלבד.
                   */}
                   <div className="flex min-w-0 w-full flex-col gap-2">
-                    <div className="flex flex-wrap items-center gap-1.5">
-                      <span className="inline-flex items-center rounded-md border border-[var(--border-cherry-soft)] bg-white px-2 py-0.5 text-[10px] font-extrabold text-[var(--stem)]/75">
-                        {MEAL_SLOTS.find((m) => m.id === entryMealId(item))?.label ?? "ביניים"}
+                    <button
+                      type="button"
+                      className="w-full max-w-full text-start"
+                      onClick={() => setJournalExpandedId((x) => (x === item.id ? null : item.id))}
+                      aria-expanded={isExpanded}
+                    >
+                      <span className="flex w-full max-w-full items-start justify-between gap-2">
+                        <span className="min-w-0 flex-1">
+                          <span className="flex min-w-0 items-start gap-2">
+                            <span className="mt-0.5 text-xs" aria-hidden>
+                              🍒
+                            </span>
+                            <span className="min-w-0 flex-1 break-words text-base font-extrabold leading-snug text-[var(--stem)]">
+                              {item.food}
+                            </span>
+                          </span>
+                        </span>
+                        <span className="shrink-0 pt-0.5 text-xs font-bold text-[var(--stem)]/55">
+                          {isExpanded ? "▲" : "▼"}
+                        </span>
                       </span>
-                      {isAiMeal && (
-                        <span className="inline-flex items-center gap-1 rounded-md border border-[var(--border-cherry-soft)] bg-white px-2 py-0.5 text-[10px] font-extrabold text-[var(--cherry)]">
-                          🤖 ארוחת AI
-                        </span>
-                      )}
-                      {item.verified && (
-                        <span
-                          className="inline-flex shrink-0 items-center gap-1"
-                          title="מאומת מהמאגר"
-                        >
-                          <IconVerified className="h-4 w-4 text-[var(--stem)]" />
-                          <span className="text-[10px] font-bold text-[var(--text)]/80">
-                            מאומת
-                          </span>
-                        </span>
-                      )}
-                    </div>
-
-                    {isAiMeal && aiRows ? (
-                      <button
-                        type="button"
-                        className="w-full max-w-full text-start"
-                        onClick={() => {
-                          setAiExpandedId((x) => (x === item.id ? null : item.id));
-                        }}
-                      >
-                        <span className="flex w-full max-w-full items-start justify-between gap-2">
-                          <span className="min-w-0 flex-1 break-words text-base font-semibold leading-snug text-[var(--text)]">
-                            {item.food}
-                          </span>
-                          <span className="shrink-0 pt-0.5 text-xs font-bold text-[var(--stem)]/55">
-                            {aiExpandedId === item.id ? "▲" : "▼"}
-                          </span>
-                        </span>
-                      </button>
-                    ) : (
-                      <p className="w-full max-w-full break-words text-base font-semibold leading-snug text-[var(--text)]">
-                        {item.food}
-                      </p>
-                    )}
+                    </button>
 
                     <p className="w-full text-sm text-[var(--text)]/80">
-                      {formatEntryTime(item.createdAt) ? (
-                        <>
-                          <span className="tabular-nums font-medium text-[var(--text)]">
-                            {formatEntryTime(item.createdAt)}
-                          </span>
-                          {" · "}
-                        </>
-                      ) : null}
+                      <span className="inline-flex items-center gap-1.5">
+                        <input
+                          type="time"
+                          className="rounded-lg border border-[var(--border-cherry-soft)] bg-white px-2 py-1 text-[12px] font-semibold tabular-nums text-[var(--stem)] shadow-sm"
+                          value={entryTimeHHmm(item.createdAt)}
+                          onChange={(e) => setEntryTime(item.id, e.target.value)}
+                          disabled={isDayClosed}
+                          aria-label="שעה"
+                        />
+                        <span className="text-[var(--text)]/55">·</span>
+                      </span>
                       {formatQtyLabel(item.quantity, item.unit)} {item.unit} ·{" "}
                       {item.calories} קק״ל
                     </p>
-                    <p className="w-full text-xs text-[var(--text)]/65">
-                      חלבון {formatMacroCell(item.proteinG)} · פחמימות{" "}
-                      {formatMacroCell(item.carbsG)} · שומן{" "}
-                      {formatMacroCell(item.fatG)}
-                    </p>
-                    {isAiMeal && aiRows && aiExpandedId === item.id && (
-                      <div className="mt-1 w-full rounded-xl border border-[var(--border-cherry-soft)] bg-white/80 p-3 text-sm">
-                        <p className="mb-2 text-xs font-extrabold text-[var(--cherry)]">
-                          פירוט חישוב ה-AI
-                        </p>
-                        <ul className="space-y-2">
-                          {aiRows.map((r, idx) => (
-                            <li key={`${item.id}-ai-${idx}`} className="leading-relaxed">
-                              <p className="font-semibold text-[var(--stem)]">
-                                {r.item}{" "}
-                                <span className="text-xs font-semibold text-[var(--stem)]/70">
-                                  ({r.qty})
+                    <AnimatePresence>
+                      {isExpanded && (
+                        <motion.div
+                          className="mt-1 w-full"
+                          initial={{ opacity: 0, y: -4 }}
+                          animate={{ opacity: 1, y: 0 }}
+                          exit={{ opacity: 0, y: -4 }}
+                        >
+                          <div className="flex flex-wrap items-center gap-1.5">
+                            {isAiMeal && (
+                              <span className="inline-flex items-center gap-1 rounded-md border border-[var(--border-cherry-soft)] bg-white px-2 py-0.5 text-[10px] font-extrabold text-[var(--cherry)]">
+                                🤖 ארוחת AI
+                              </span>
+                            )}
+                            {item.verified && (
+                              <span
+                                className="inline-flex shrink-0 items-center gap-1"
+                                title="מאומת מהמאגר"
+                              >
+                                <IconVerified className="h-4 w-4 text-[var(--stem)]" />
+                                <span className="text-[10px] font-bold text-[var(--text)]/80">
+                                  מאומת
                                 </span>
-                              </p>
-                              <p className="text-xs text-[var(--stem)]/75">
-                                קלוריות {Math.round(r.calories)} · חלבון {r.protein} ·
-                                פחמימות {r.carbs} · שומן {r.fat}
-                              </p>
-                            </li>
-                          ))}
-                        </ul>
-                      </div>
-                    )}
+                              </span>
+                            )}
+                          </div>
+
+                          <p className="mt-1 w-full text-xs text-[var(--text)]/65">
+                            חלבון {formatMacroCell(item.proteinG)} · פחמימות{" "}
+                            {formatMacroCell(item.carbsG)} · שומן{" "}
+                            {formatMacroCell(item.fatG)}
+                          </p>
+
+                          {isAiMeal && aiRows ? (
+                            <button
+                              type="button"
+                              className="mt-2 w-full rounded-xl border border-[var(--border-cherry-soft)] bg-white/80 p-3 text-start text-sm"
+                              onClick={() => {
+                                setAiExpandedId((x) => (x === item.id ? null : item.id));
+                              }}
+                            >
+                              <span className="flex items-start justify-between gap-2">
+                                <span className="text-xs font-extrabold text-[var(--cherry)]">
+                                  פירוט חישוב ה-AI
+                                </span>
+                                <span className="text-xs font-bold text-[var(--stem)]/55">
+                                  {aiExpandedId === item.id ? "▲" : "▼"}
+                                </span>
+                              </span>
+                              {aiExpandedId === item.id ? (
+                                <ul className="mt-2 space-y-2">
+                                  {aiRows.map((r, idx) => (
+                                    <li key={`${item.id}-ai-${idx}`} className="leading-relaxed">
+                                      <p className="font-semibold text-[var(--stem)]">
+                                        {r.item}{" "}
+                                        <span className="text-xs font-semibold text-[var(--stem)]/70">
+                                          ({r.qty})
+                                        </span>
+                                      </p>
+                                      <p className="text-xs text-[var(--stem)]/75">
+                                        קלוריות {Math.round(r.calories)} · חלבון {r.protein} ·
+                                        פחמימות {r.carbs} · שומן {r.fat}
+                                      </p>
+                                    </li>
+                                  ))}
+                                </ul>
+                              ) : null}
+                            </button>
+                          ) : null}
+                        </motion.div>
+                      )}
+                    </AnimatePresence>
                   </div>
 
                   <div

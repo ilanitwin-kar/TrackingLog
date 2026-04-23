@@ -365,7 +365,9 @@ export function seedBypassProfileIfNeeded(): void {
     weightKg: p.weightKg >= 30 && p.weightKg <= 250 ? p.weightKg : 70,
     goalWeightKg:
       p.goalWeightKg >= 30 && p.goalWeightKg <= 250 ? p.goalWeightKg : 62,
-    deficit: p.deficit >= 100 && p.deficit <= 1500 ? p.deficit : 500,
+    nutritionGoal: p.nutritionGoal ?? "weight_loss",
+    customDeficitEnabled: false,
+    deficit: 0,
     activity: p.activity ?? "light",
     onboardingComplete: true,
   };

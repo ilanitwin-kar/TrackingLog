@@ -9,14 +9,7 @@ export function weeklyCalorieSavingsClosedDays(
   profile: UserProfile,
   closedMap: Record<string, boolean>
 ): number {
-  const target = dailyCalorieTarget(
-    profile.gender,
-    profile.weightKg,
-    profile.heightCm,
-    profile.age,
-    profile.deficit,
-    profile.activity
-  );
+  const target = dailyCalorieTarget(profile);
   if (target <= 0) return 0;
   const keys = getCalendarWeekDateKeys(getTodayKey());
   let sum = 0;
