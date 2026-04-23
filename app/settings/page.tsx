@@ -1,15 +1,17 @@
 "use client";
 
-import Link from "next/link";
 import { motion } from "framer-motion";
 import { useEffect, useState } from "react";
 import { gf } from "@/lib/hebrewGenderUi";
 import { loadProfile } from "@/lib/storage";
+import { resetJourneyStartToToday } from "@/lib/storage";
 import { loadSoundEffectsEnabled, saveSoundEffectsEnabled } from "@/lib/soundSettings";
+import { useRouter } from "next/navigation";
 
 type WeatherCache = { ts: number; data: { tempC: number; description: string; isRain: boolean; isHot: boolean } };
 
 export default function SettingsPage() {
+  const router = useRouter();
   const gender = loadProfile().gender;
   const [soundsOn, setSoundsOn] = useState(true);
   const [weather, setWeather] = useState<null | WeatherCache["data"]>(null);
@@ -68,12 +70,13 @@ export default function SettingsPage() {
   return (
     <div className="mx-auto max-w-lg px-4 pb-28 pt-8 md:pt-12" dir="rtl">
       <div className="flex items-center justify-between gap-2">
-        <Link
-          href="/"
+        <button
+          type="button"
+          onClick={() => router.back()}
           className="rounded-xl border-2 border-[var(--border-cherry-soft)] bg-white px-3 py-2 text-sm font-semibold text-[var(--stem)] shadow-sm transition hover:bg-[var(--cherry-muted)]"
         >
           חזרה
-        </Link>
+        </button>
         <h1 className="panel-title-cherry text-lg">הגדרות</h1>
         <div className="w-[4.25rem]" aria-hidden />
       </div>
@@ -115,6 +118,35 @@ export default function SettingsPage() {
             נשמר: {weather.tempC}° · {weather.description || "מזג אוויר"}
           </p>
         )}
+      </motion.section>
+
+      <motion.section className="mt-4 glass-panel p-4" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}>
+        <h2 className="text-base font-extrabold text-[var(--stem)]">תהליך</h2>
+        <p className="mt-2 text-sm font-semibold leading-relaxed text-[var(--stem)]/75">
+          {gf(
+            gender,
+            "אם עצרת באמצע וחזרת אחרי זמן — אפשר להתחיל תהליך חדש. זה מאפס את נקודת ההתחלה של לוח הצבירה והסגירות, בלי למחוק נתונים ישנים.",
+            "אם עצרת באמצע וחזרת אחרי זמן — אפשר להתחיל תהליך חדש. זה מאפס את נקודת ההתחלה של לוח הצבירה והסגירות, בלי למחוק נתונים ישנים."
+          )}
+        </p>
+        <button
+          type="button"
+          className="mt-3 w-full rounded-2xl border-2 border-[var(--border-cherry-soft)] bg-white px-4 py-4 text-base font-extrabold text-[var(--cherry)] shadow-sm transition hover:bg-[var(--cherry-muted)]"
+          onClick={() => {
+            const ok = window.confirm(
+              gf(
+                gender,
+                "להתחיל תהליך חדש? זה יאפס את לוח הצבירה והסגירות מהיום.",
+                "להתחיל תהליך חדש? זה יאפס את לוח הצבירה והסגירות מהיום."
+              )
+            );
+            if (!ok) return;
+            resetJourneyStartToToday();
+            window.alert(gf(gender, "בוצע. התהליך התחיל מחדש מהיום.", "בוצע. התהליך התחיל מחדש מהיום."));
+          }}
+        >
+          התחלת תהליך מחדש
+        </button>
       </motion.section>
     </div>
   );

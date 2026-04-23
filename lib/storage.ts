@@ -112,6 +112,8 @@ const KEYS = {
   foodMemory: "cj_food_memory_v1",
   dayLogs: "cj_day_logs_v1",
   weights: "cj_weights_v1",
+  /** תחילת התהליך/מסלול — תאריך בסיס לקוביות צבירה */
+  journeyStart: "cj_journey_start_v1",
   halfGoalDate: "cj_half_goal_date_v1",
   fullGoalDate: "cj_full_goal_date_v1",
   dictionary: "cj_dictionary_v1",
@@ -125,6 +127,32 @@ const KEYS = {
   /** המשתמש עבר ממסך הכניסה (הרשמה/התחברות) — מותר להמשיך ל־TDEE */
   welcomeLeft: "cj_welcome_left_v1",
 } as const;
+
+export function getJourneyStartDateKey(): string | null {
+  if (typeof window === "undefined") return null;
+  const raw = localStorage.getItem(KEYS.journeyStart);
+  if (raw && /^\d{4}-\d{2}-\d{2}$/.test(raw)) return raw;
+  return null;
+}
+
+export function ensureJourneyStartDateKey(): string {
+  const existing = getJourneyStartDateKey();
+  if (existing) return existing;
+  const k = getTodayKey();
+  if (typeof window !== "undefined") {
+    localStorage.setItem(KEYS.journeyStart, k);
+  }
+  return k;
+}
+
+export function resetJourneyStartToToday(): void {
+  if (typeof window === "undefined") return;
+  localStorage.setItem(KEYS.journeyStart, getTodayKey());
+  // לא מוחק נתונים, רק מאתחל את התהליך להצגה/צבירה חדשה
+  localStorage.removeItem(KEYS.dayJournalClosed);
+  window.dispatchEvent(new Event("cj-journal-closed-changed"));
+  window.dispatchEvent(new Event("cj-profile-updated"));
+}
 
 export function hasLeftWelcome(): boolean {
   if (typeof window === "undefined") return false;
@@ -211,6 +239,11 @@ export function loadProfile(): UserProfile {
 
 export function saveProfile(p: UserProfile): void {
   localStorage.setItem(KEYS.profile, JSON.stringify(p));
+  // קובעים תחילת תהליך בפעם הראשונה שההרשמה הושלמה
+  if (p.onboardingComplete === true) {
+    const hasStart = getJourneyStartDateKey();
+    if (!hasStart) ensureJourneyStartDateKey();
+  }
   if (typeof window !== "undefined") {
     window.dispatchEvent(new Event("cj-profile-updated"));
   }

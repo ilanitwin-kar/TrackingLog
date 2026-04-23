@@ -50,6 +50,7 @@ import {
 import { optionalMacroGram, sumMacroGrams } from "@/lib/macroGrams";
 import { dailyCalorieTarget } from "@/lib/tdee";
 import { weeklyCalorieSavingsClosedDays } from "@/lib/weeklyCalorieSavings";
+import { loadDayLogs } from "@/lib/storage";
 import { InfoCard } from "./InfoCard";
 import { CelebrationConfetti } from "./Fireworks";
 import { useAppVariant } from "./useAppVariant";
@@ -615,6 +616,17 @@ export function HomeClient({ mode = "dashboard" }: { mode?: "dashboard" | "journ
         : 0,
     [profile, journalClosedMap]
   );
+
+  function closeAllJournalDays(): void {
+    const all = loadDayLogs();
+    const next = { ...loadDayJournalClosedMap() };
+    for (const [k, list] of Object.entries(all)) {
+      if (!Array.isArray(list) || list.length === 0) continue;
+      next[k] = true;
+    }
+    saveDayJournalClosedMap(next);
+    setJournalClosedMap(next);
+  }
 
   const dailyMotivationLine = useMemo(
     () => dailyCalorieMotivationLine(gender, target, total),
@@ -1333,9 +1345,21 @@ export function HomeClient({ mode = "dashboard" }: { mode?: "dashboard" | "journ
           gender={gender}
           icon="🏦"
           title="הון קלורי שנצבר השבוע"
-          body={`${weeklySavings.toLocaleString("he-IL")} קק״ל — סכום מהימים הסגורים השבוע שבהם נצרכו פחות מהיעד.`}
+          body={`${weeklySavings.toLocaleString("he-IL")} קק״ל`}
           className="shadow-[0_8px_24px_var(--panel-shadow-soft)]"
         />
+        <div className="mt-2 rounded-2xl border-2 border-[var(--border-cherry-soft)] bg-white/90 px-3 py-3 text-center shadow-sm">
+          <p className="text-xs font-semibold leading-relaxed text-[var(--stem)]/80">
+            כדי לראות את כל מה שצברת מתחילת התהליך, סגרי את כל הימים ביומן.
+          </p>
+          <button
+            type="button"
+            className="btn-stem mt-2 w-full rounded-xl py-2.5 text-sm font-extrabold"
+            onClick={closeAllJournalDays}
+          >
+            סגור
+          </button>
+        </div>
 
         <nav className="grid w-full grid-cols-2 gap-2 sm:gap-3" aria-label="פעולות מהירות">
           <Link
@@ -1367,7 +1391,20 @@ export function HomeClient({ mode = "dashboard" }: { mode?: "dashboard" | "journ
           animate={{ opacity: 1, y: 0 }}
         >
           <div className="flex items-center justify-between gap-2" dir="rtl">
-            <h1 className="text-lg font-extrabold text-[var(--stem)]">יומן</h1>
+            <div className="flex items-center gap-2">
+              <h1 className="text-lg font-extrabold text-[var(--stem)]">יומן</h1>
+              <details className="relative">
+                <summary className="list-none cursor-pointer rounded-lg border border-[var(--border-cherry-soft)] bg-white px-2 py-1 text-sm font-extrabold text-[var(--stem)] shadow-sm">
+                  ℹ️
+                </summary>
+                <div className="absolute right-0 mt-2 w-[min(22rem,86vw)] overflow-hidden rounded-xl border border-[var(--border-cherry-soft)] bg-white p-3 text-sm text-[var(--stem)] shadow-lg">
+                  <p className="mb-1 font-extrabold text-[var(--cherry)]">
+                    {homeJournalIntroTitle()}
+                  </p>
+                  <p className="leading-relaxed">{homeJournalIntroBody(gender)}</p>
+                </div>
+              </details>
+            </div>
             <div className="flex items-center gap-2">
               <div className="flex items-center gap-1.5 rounded-full border border-[var(--border-cherry-soft)] bg-white px-2.5 py-1 text-xs font-bold text-[var(--cherry)]">
                 <span aria-hidden className="text-base leading-none">
@@ -1513,7 +1550,7 @@ export function HomeClient({ mode = "dashboard" }: { mode?: "dashboard" | "journ
           <p className="text-center text-xs font-extrabold tracking-wide text-[var(--cherry)]/80">
             נשאר להיום
           </p>
-          <div className="mt-2 grid grid-cols-4 gap-1.5">
+          <div className="mt-2 flex w-full items-stretch gap-1.5">
             {(
               [
                 ["קלוריות", remainingKcal, "קק״ל"] as const,
@@ -1524,7 +1561,9 @@ export function HomeClient({ mode = "dashboard" }: { mode?: "dashboard" | "journ
             ).map(([label, val, unit]) => (
               <div
                 key={label}
-                className="min-w-0 rounded-xl border border-[var(--border-cherry-soft)] bg-white px-2 py-2 text-center"
+                className={`min-w-0 rounded-xl border border-[var(--border-cherry-soft)] bg-white px-2 py-2 text-center ${
+                  label === "קלוריות" ? "flex-[1.35]" : "flex-1"
+                }`}
               >
                 <p className="text-[11px] font-bold text-[var(--stem)]/70">
                   {label}
@@ -1535,7 +1574,7 @@ export function HomeClient({ mode = "dashboard" }: { mode?: "dashboard" | "journ
                   }`}
                 >
                   {val}
-                  <span className="ms-1 text-[11px] font-bold opacity-70">
+                  <span className="ms-1 text-[10px] font-bold opacity-70">
                     {unit}
                   </span>
                 </p>
@@ -1543,14 +1582,6 @@ export function HomeClient({ mode = "dashboard" }: { mode?: "dashboard" | "journ
             ))}
           </div>
         </div>
-
-        <InfoCard
-          gender={gender}
-          icon="📔"
-          title={homeJournalIntroTitle()}
-          body={homeJournalIntroBody(gender)}
-          className="mb-5"
-        />
         {isDayClosed && (
           <div
             className="mb-4 space-y-3 rounded-xl border-2 border-[var(--border-cherry-soft)] bg-cherry-faint px-3 py-3 text-center"
@@ -1572,28 +1603,13 @@ export function HomeClient({ mode = "dashboard" }: { mode?: "dashboard" | "journ
           {isViewingToday ? "היום ביומן" : `יומן — ${formatDateKeyHe(viewDateKey)}`}
         </h2>
 
-        <div className="mb-4 grid grid-cols-2 gap-2 sm:grid-cols-3">
-          {MEAL_SLOTS.map((m) => (
-            <Link
-              key={m.id}
-              href={`/add-food?from=journal&date=${encodeURIComponent(
-                viewDateKey
-              )}&meal=${encodeURIComponent(m.id)}`}
-              className="rounded-2xl border-2 border-[var(--border-cherry-soft)] bg-white px-3 py-3 text-center text-sm font-extrabold text-[var(--stem)] shadow-sm transition hover:bg-[var(--cherry-muted)]"
-            >
-              {m.label} · הוסף מזון
-            </Link>
-          ))}
-        </div>
-
         {entries.length === 0 ? (
           <p className="text-[var(--text)]/85">
             {gf(
               gender,
-              "עדיין אין רשומות — בחרי ארוחה ולחצי על ״הוסף מזון״.",
-              "עדיין אין רשומות — בחר ארוחה ולחץ על ״הוסף מזון״."
+              "עדיין אין רשומות — לחצי על ״הוספת מזון״ למעלה או על הכפתור המרכזי ״הוספה״ בתפריט התחתון.",
+              "עדיין אין רשומות — לחץ על ״הוספת מזון״ למעלה או על הכפתור המרכזי ״הוספה״ בתפריט התחתון."
             )}{" "}
-            אפשר גם להשתמש בכפתור המרכזי ״הוספה״ בתפריט התחתון.
           </p>
         ) : (
           <ul className="space-y-3" data-dict-rev={dictTick}>

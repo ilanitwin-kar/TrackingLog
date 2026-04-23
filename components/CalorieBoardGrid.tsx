@@ -3,7 +3,7 @@
 import { motion } from "framer-motion";
 import { useEffect, useState } from "react";
 import { SAFE_DEFICIT_CAP_KCAL } from "@/lib/calorieAccumulation";
-import { getCalorieBoardDateSequence, getTodayKey } from "@/lib/dateKey";
+import { getDateKeysFromStartToToday, getTodayKey } from "@/lib/dateKey";
 import {
   JOURNEY_FINAL_GOLD_MESSAGE,
   JOURNEY_TAP_REVEAL_HEADING,
@@ -11,14 +11,12 @@ import {
   getDaysLeftAtSquare,
 } from "@/lib/journeyMilestones";
 import { getStoryDisplayForSquare } from "@/lib/storyReveal";
-import {
-  getDaysRemainingToGoal,
-  getTdeeKcalRoundedFromProfile,
-} from "@/lib/goalMetrics";
+import { getTdeeKcalRoundedFromProfile } from "@/lib/goalMetrics";
 import type { Gender } from "@/lib/tdee";
 import {
   getEntriesForDate,
   loadDayJournalClosedMap,
+  ensureJourneyStartDateKey,
   loadProfile,
   loadStoryRevealUnlock,
   toggleStoryRevealUnlock,
@@ -53,7 +51,6 @@ function formatDayMonth(dateKey: string): string {
 }
 
 type GridModel = {
-  daysRemaining: number;
   dateKeys: string[];
   tdeeKcal: number;
   today: string;
@@ -62,18 +59,11 @@ type GridModel = {
 };
 
 function buildGridModel(): GridModel | null {
-  const daysRemaining = getDaysRemainingToGoal();
-  if (daysRemaining == null || daysRemaining < 1) {
-    return null;
-  }
-  const dateKeys = getCalorieBoardDateSequence(daysRemaining);
-  if (dateKeys.length !== daysRemaining) {
-    return null;
-  }
   const p = loadProfile();
   const tdeeKcal = getTdeeKcalRoundedFromProfile(p);
+  const startKey = ensureJourneyStartDateKey();
+  const dateKeys = getDateKeysFromStartToToday(startKey);
   return {
-    daysRemaining,
     dateKeys,
     tdeeKcal,
     today: getTodayKey(),
@@ -117,7 +107,7 @@ export function CalorieBoardGrid({ profileRev = 0 }: { profileRev?: number }) {
 
   useEffect(() => {
     setGoldMap(loadStoryRevealUnlock());
-  }, [profileRev, board?.daysRemaining]);
+  }, [profileRev, board?.dateKeys.length]);
 
   if (board === undefined) {
     return (
@@ -142,8 +132,7 @@ export function CalorieBoardGrid({ profileRev = 0 }: { profileRev?: number }) {
     );
   }
 
-  const { dateKeys, daysRemaining, tdeeKcal, today, firstName, gender } =
-    board;
+  const { dateKeys, tdeeKcal, today, firstName, gender } = board;
 
   return (
     <section className={`space-y-4 overflow-visible ${fontBoard}`}>
@@ -157,7 +146,7 @@ export function CalorieBoardGrid({ profileRev = 0 }: { profileRev?: number }) {
         <div
           className="grid grid-cols-3 gap-2.5 overflow-visible sm:grid-cols-4 sm:gap-3"
           role="list"
-          aria-label={`מפת התקדמות, ${daysRemaining} משבצות`}
+          aria-label={`מפת התקדמות, ${dateKeys.length} משבצות`}
         >
           {dateKeys.map((dateKey, i) => {
             const isFuture = dateKey > today;
@@ -170,8 +159,8 @@ export function CalorieBoardGrid({ profileRev = 0 }: { profileRev?: number }) {
             const isLastSquare = i === dateKeys.length - 1;
             const storyText = getStoryDisplayForSquare(i, firstName, gender);
             const showStoryReveal = !isFuture && isClosed && isGold;
-            const milestoneMsg = getJourneyMilestoneMessage(daysRemaining, i);
-            const daysLeftFromEnd = getDaysLeftAtSquare(daysRemaining, i);
+            const milestoneMsg = getJourneyMilestoneMessage(dateKeys.length, i);
+            const daysLeftFromEnd = getDaysLeftAtSquare(dateKeys.length, i);
 
             const deficitRow =
               isFuture || !isClosed ? null : deficit > SAFE_DEFICIT_CAP_KCAL ? (
