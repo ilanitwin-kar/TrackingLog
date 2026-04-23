@@ -3,7 +3,7 @@
 import { motion } from "framer-motion";
 import { useEffect, useState } from "react";
 import { SAFE_DEFICIT_CAP_KCAL } from "@/lib/calorieAccumulation";
-import { getDateKeysFromStartToToday, getTodayKey } from "@/lib/dateKey";
+import { getDateKeysFromStartCount, getTodayKey } from "@/lib/dateKey";
 import {
   JOURNEY_FINAL_GOLD_MESSAGE,
   JOURNEY_TAP_REVEAL_HEADING,
@@ -11,7 +11,7 @@ import {
   getDaysLeftAtSquare,
 } from "@/lib/journeyMilestones";
 import { getStoryDisplayForSquare } from "@/lib/storyReveal";
-import { getTdeeKcalRoundedFromProfile } from "@/lib/goalMetrics";
+import { getDaysRemainingToGoal, getTdeeKcalRoundedFromProfile } from "@/lib/goalMetrics";
 import type { Gender } from "@/lib/tdee";
 import {
   getEntriesForDate,
@@ -62,7 +62,9 @@ function buildGridModel(): GridModel | null {
   const p = loadProfile();
   const tdeeKcal = getTdeeKcalRoundedFromProfile(p);
   const startKey = ensureJourneyStartDateKey();
-  const dateKeys = getDateKeysFromStartToToday(startKey);
+  const daysRemaining = getDaysRemainingToGoal();
+  if (daysRemaining == null || daysRemaining < 1) return null;
+  const dateKeys = getDateKeysFromStartCount(startKey, daysRemaining);
   return {
     dateKeys,
     tdeeKcal,

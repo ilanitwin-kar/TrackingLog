@@ -76,6 +76,53 @@ const UNITS: FoodUnit[] = [
   "יחידה",
 ];
 
+const HEB_LETTERS = [
+  "א",
+  "ב",
+  "ג",
+  "ד",
+  "ה",
+  "ו",
+  "ז",
+  "ח",
+  "ט",
+  "י",
+  "כ",
+  "ל",
+  "מ",
+  "נ",
+  "ס",
+  "ע",
+  "פ",
+  "צ",
+  "ק",
+  "ר",
+  "ש",
+  "ת",
+] as const;
+
+function normalizeTitleForIndex(title: string): string {
+  const t = title.trim();
+  // סדר טוב יותר למוצרים שנשמרים עם פריפיקס
+  if (t.startsWith("מתכון:")) return t.replace(/^מתכון:\s*/, "");
+  return t;
+}
+
+function firstHebLetter(title: string): string | null {
+  const t = normalizeTitleForIndex(title);
+  const ch = t[0] ?? "";
+  // אותיות סופיות: להשוות לצורה הרגילה כדי שהסינון יהיה צפוי
+  const mapFinal: Record<string, string> = {
+    ך: "כ",
+    ם: "מ",
+    ן: "נ",
+    ף: "פ",
+    ץ: "צ",
+  };
+  const norm = mapFinal[ch] ?? ch;
+  return (HEB_LETTERS as readonly string[]).includes(norm) ? norm : null;
+}
+
 function clampGramQty(q: number): number {
   if (!Number.isFinite(q)) return 100;
   return Math.min(5000, Math.max(1, Math.round(q)));
@@ -176,6 +223,8 @@ export default function DictionaryPage() {
   const [editError, setEditError] = useState<string | null>(null);
   const editTitleId = useId();
   const searchInputRef = useRef<HTMLInputElement>(null);
+  const [activeLetter, setActiveLetter] = useState<string | null>(null);
+  const [openSavedId, setOpenSavedId] = useState<string | null>(null);
 
   const refresh = useCallback(() => {
     setSaved(loadDictionary());
@@ -634,6 +683,48 @@ export default function DictionaryPage() {
         animate={{ opacity: 1, y: 0 }}
       >
         <h2 className="panel-title-cherry mb-3 text-lg">המילון שלי</h2>
+        <div className="mb-4">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <p className="text-[11px] font-semibold text-[var(--stem)]/70">
+              א-ת (לחצי על אות לסינון)
+            </p>
+            {activeLetter ? (
+              <button
+                type="button"
+                className="rounded-lg border border-[var(--border-cherry-soft)] bg-white px-2.5 py-1 text-[11px] font-extrabold text-[var(--cherry)] shadow-sm"
+                onClick={() => setActiveLetter(null)}
+              >
+                ניקוי סינון
+              </button>
+            ) : null}
+          </div>
+          <div className="mt-2 flex gap-1.5 overflow-x-auto pb-1 [-webkit-overflow-scrolling:touch]">
+            {HEB_LETTERS.map((l) => {
+              const on = activeLetter === l;
+              return (
+                <button
+                  key={l}
+                  type="button"
+                  className={`shrink-0 rounded-full border-2 px-3 py-1 text-xs font-extrabold shadow-sm transition ${
+                    on
+                      ? "border-[var(--border-cherry-soft)] bg-cherry-faint text-[var(--cherry)]"
+                      : "border-[var(--border-cherry-soft)] bg-white text-[var(--stem)]/85 hover:bg-[var(--cherry-muted)]"
+                  } ${debouncedQ.length >= 2 ? "opacity-50" : ""}`}
+                  disabled={debouncedQ.length >= 2}
+                  aria-pressed={on}
+                  onClick={() => setActiveLetter(l)}
+                >
+                  {l}
+                </button>
+              );
+            })}
+          </div>
+          {debouncedQ.length >= 2 ? (
+            <p className="mt-2 text-[11px] font-medium text-[var(--stem)]/60">
+              חיפוש פעיל — סינון א-ת מושבת בזמן חיפוש.
+            </p>
+          ) : null}
+        </div>
         {filteredSaved.length === 0 ? (
           <p className="text-[var(--text)]/85">
             {saved.length === 0 && rawQ.trim().length < 2
@@ -662,7 +753,17 @@ export default function DictionaryPage() {
           </p>
         ) : (
           <ul className="space-y-2">
-            {(savedHits ? savedHits.map((h) => h.item) : filteredSaved).map((d) => {
+            {(
+              (() => {
+                const base = savedHits ? savedHits.map((h) => h.item) : filteredSaved;
+                const sorted = [...base].sort((a, b) =>
+                  normalizeTitleForIndex(a.food).localeCompare(normalizeTitleForIndex(b.food), "he")
+                );
+                if (debouncedQ.length >= 2) return sorted;
+                if (!activeLetter) return sorted;
+                return sorted.filter((x) => firstHebLetter(x.food) === activeLetter);
+              })()
+            ).map((d) => {
               const preset =
                 d.mealPresetId != null
                   ? presetMap.get(d.mealPresetId)
@@ -671,6 +772,7 @@ export default function DictionaryPage() {
               const inCart = isMeal
                 ? preset != null && mealFullyInCart(preset)
                 : cartLookup.has(`dictionary:${d.id}`);
+              const isOpen = openSavedId === d.id;
               return (
                 <motion.li
                   key={d.id}
@@ -678,12 +780,17 @@ export default function DictionaryPage() {
                   className="rounded-xl border-2 border-[var(--border-cherry-soft)] bg-white px-3 py-3"
                   style={{ boxShadow: "var(--list-row-shadow)" }}
                 >
-                  <div className="flex min-w-0 flex-col gap-2">
-                    <div className="flex flex-wrap items-center gap-2">
+                  <button
+                    type="button"
+                    className="flex w-full items-center justify-between gap-3 text-right"
+                    onClick={() => setOpenSavedId((x) => (x === d.id ? null : d.id))}
+                    aria-expanded={isOpen}
+                  >
+                    <span className="flex min-w-0 flex-1 items-center gap-2">
                       <span className="text-xs" aria-hidden>
                         🍒
                       </span>
-                      <span className="min-w-0 flex-1 break-words text-base font-semibold leading-snug text-[var(--text)]">
+                      <span className="min-w-0 flex-1 break-words text-base font-extrabold leading-snug text-[var(--stem)]">
                         {savedHits
                           ? renderHighlighted(
                               d.food,
@@ -692,133 +799,149 @@ export default function DictionaryPage() {
                           : d.food}
                       </span>
                       {isMeal && (
-                        <span className="rounded-md bg-[var(--cherry-muted)] px-2 py-0.5 text-xs font-semibold text-[var(--cherry)]">
-                          ארוחה שמורה
+                        <span className="shrink-0 rounded-md bg-[var(--cherry-muted)] px-2 py-0.5 text-xs font-semibold text-[var(--cherry)]">
+                          ארוחה
                         </span>
                       )}
-                    </div>
+                    </span>
+                    <span className="shrink-0 text-xs font-bold text-[var(--stem)]/55">
+                      {isOpen ? "▲" : "▼"}
+                    </span>
+                  </button>
 
-                    {!isMeal && (
-                      <p className="text-sm text-[var(--text)]/80">
-                        {d.quantity} {d.unit}
-                        {d.lastCalories != null
-                          ? ` · קלוריות (אחרון ביומן): ${d.lastCalories}`
-                          : ""}
-                      </p>
-                    )}
-
-                    {isMeal && preset && (
-                      <ul className="space-y-1 text-sm text-[var(--text)]/90">
-                        {preset.components.map((c, i) => (
-                          <li key={`${d.id}-c-${i}`}>
-                            {c.food} — {c.quantity} {c.unit} ({c.calories} קק״ל)
-                          </li>
-                        ))}
-                      </ul>
-                    )}
-
-                    {d.caloriesPer100g != null && !isMeal && (
-                      <p className="text-xs text-[var(--text)]/70">
-                        ל־100 גרם: {Math.round(d.caloriesPer100g)} קק״ל
-                        {d.proteinPer100g != null &&
-                          d.carbsPer100g != null &&
-                          d.fatPer100g != null && (
-                            <>
-                              {" "}
-                              · ח {d.proteinPer100g.toFixed(1)} · פחם{" "}
-                              {d.carbsPer100g.toFixed(1)} · שומן{" "}
-                              {d.fatPer100g.toFixed(1)} ג׳
-                            </>
-                          )}
-                        {d.barcode ? ` · ברקוד ${d.barcode}` : ""}
-                      </p>
-                    )}
-
-                    <div className="mt-2 flex w-full max-w-full flex-wrap items-center justify-center gap-2 border-t border-[var(--border-cherry-soft)]/60 bg-gradient-to-b from-[var(--cherry-muted)]/35 to-transparent px-1 py-2.5 sm:gap-3">
-                      {!isMeal && (
-                        <button
-                          type="button"
-                          className="btn-icon-luxury flex min-w-[3.1rem] flex-col justify-center gap-0 py-1.5"
-                          title="הוספה ליומן היום לפי מה ששמור במילון (כמות ויחידה)"
-                          aria-label="יומן — הוספה ליומן היום"
-                          onClick={() => onSavedJournal(d)}
-                        >
-                          <IconCaption label="יומן">
-                            <IconPlusCircle className="h-5 w-5 sm:h-6 sm:w-6 text-[var(--stem)]" />
-                          </IconCaption>
-                        </button>
-                      )}
-                      {!isMeal && (
-                        <button
-                          type="button"
-                          className="btn-icon-luxury flex min-w-[3.1rem] flex-col justify-center gap-0 py-1.5"
-                          title="עריכת שם וכמויות"
-                          aria-label={`עריכה — עריכת «${d.food}» במילון`}
-                          onClick={() => openEdit(d)}
-                        >
-                          <IconCaption label="עריכה">
-                            <IconPencil className="h-5 w-5 sm:h-6 sm:w-6" />
-                          </IconCaption>
-                        </button>
-                      )}
-                      {preset && isMeal ? (
-                        <button
-                          type="button"
-                          className={`btn-icon-luxury flex min-w-[3.1rem] flex-col justify-center gap-0 py-1.5 transition-colors ${
-                            inCart
-                              ? "bg-[var(--cherry-muted)] ring-2 ring-[var(--border-cherry-soft)]"
-                              : ""
-                          }`}
-                          title="הוספת מרכיבי הארוחה לרשימת הקניות"
-                          aria-label="קניות — הוספת מרכיבי הארוחה לרשימת הקניות"
-                          aria-pressed={inCart}
-                          onClick={() => onCartMealPreset(preset)}
-                        >
-                          <IconCaption label="קניות">
-                            <IconCart
-                              filled={inCart}
-                              className={`h-5 w-5 sm:h-6 sm:w-6 ${
-                                inCart ? "text-[var(--cherry)]" : "text-[var(--stem)]"
-                              }`}
-                            />
-                          </IconCaption>
-                        </button>
-                      ) : !isMeal ? (
-                        <button
-                          type="button"
-                          className={`btn-icon-luxury flex min-w-[3.1rem] flex-col justify-center gap-0 py-1.5 transition-colors ${
-                            inCart
-                              ? "bg-[var(--cherry-muted)] ring-2 ring-[var(--border-cherry-soft)]"
-                              : ""
-                          }`}
-                          title="הוספה לרשימת הקניות במסך הקניות"
-                          aria-label="קניות — הוספה לרשימת קניות"
-                          aria-pressed={inCart}
-                          onClick={() => onCartDictionaryItem(d)}
-                        >
-                          <IconCaption label="קניות">
-                            <IconCart
-                              filled={inCart}
-                              className={`h-5 w-5 sm:h-6 sm:w-6 ${
-                                inCart ? "text-[var(--cherry)]" : "text-[var(--stem)]"
-                              }`}
-                            />
-                          </IconCaption>
-                        </button>
-                      ) : null}
-                      <button
-                        type="button"
-                        onClick={() => setSaved(removeDictionaryItem(d.id))}
-                        className="btn-icon-luxury btn-icon-luxury-danger flex min-w-[3.1rem] shrink-0 flex-col justify-center gap-0 py-1.5"
-                        aria-label="מחיקה — הסרה מהמילון"
-                        title="הסרה מהמילון האישי"
+                  <AnimatePresence>
+                    {isOpen && (
+                      <motion.div
+                        className="mt-3"
+                        initial={{ opacity: 0, y: -4 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        exit={{ opacity: 0, y: -4 }}
                       >
-                        <IconCaption label="מחק">
-                          <IconTrash className="h-5 w-5 sm:h-6 sm:w-6" />
-                        </IconCaption>
-                      </button>
-                    </div>
-                  </div>
+                        <div className="flex min-w-0 flex-col gap-2">
+                          {!isMeal && (
+                            <p className="text-sm text-[var(--text)]/80">
+                              {d.quantity} {d.unit}
+                              {d.lastCalories != null
+                                ? ` · קלוריות (אחרון ביומן): ${d.lastCalories}`
+                                : ""}
+                            </p>
+                          )}
+
+                          {isMeal && preset && (
+                            <ul className="space-y-1 text-sm text-[var(--text)]/90">
+                              {preset.components.map((c, i) => (
+                                <li key={`${d.id}-c-${i}`}>
+                                  {c.food} — {c.quantity} {c.unit} ({c.calories} קק״ל)
+                                </li>
+                              ))}
+                            </ul>
+                          )}
+
+                          {d.caloriesPer100g != null && !isMeal && (
+                            <p className="text-xs text-[var(--text)]/70">
+                              ל־100 גרם: {Math.round(d.caloriesPer100g)} קק״ל
+                              {d.proteinPer100g != null &&
+                                d.carbsPer100g != null &&
+                                d.fatPer100g != null && (
+                                  <>
+                                    {" "}
+                                    · ח {d.proteinPer100g.toFixed(1)} · פחם{" "}
+                                    {d.carbsPer100g.toFixed(1)} · שומן{" "}
+                                    {d.fatPer100g.toFixed(1)} ג׳
+                                  </>
+                                )}
+                              {d.barcode ? ` · ברקוד ${d.barcode}` : ""}
+                            </p>
+                          )}
+
+                          <div className="mt-2 flex w-full max-w-full flex-wrap items-center justify-center gap-2 border-t border-[var(--border-cherry-soft)]/60 bg-gradient-to-b from-[var(--cherry-muted)]/35 to-transparent px-1 py-2.5 sm:gap-3">
+                            {!isMeal && (
+                              <button
+                                type="button"
+                                className="btn-icon-luxury flex min-w-[3.1rem] flex-col justify-center gap-0 py-1.5"
+                                title="הוספה ליומן היום לפי מה ששמור במילון (כמות ויחידה)"
+                                aria-label="יומן — הוספה ליומן היום"
+                                onClick={() => onSavedJournal(d)}
+                              >
+                                <IconCaption label="יומן">
+                                  <IconPlusCircle className="h-5 w-5 sm:h-6 sm:w-6 text-[var(--stem)]" />
+                                </IconCaption>
+                              </button>
+                            )}
+                            {!isMeal && (
+                              <button
+                                type="button"
+                                className="btn-icon-luxury flex min-w-[3.1rem] flex-col justify-center gap-0 py-1.5"
+                                title="עריכת שם וכמויות"
+                                aria-label={`עריכה — עריכת «${d.food}» במילון`}
+                                onClick={() => openEdit(d)}
+                              >
+                                <IconCaption label="עריכה">
+                                  <IconPencil className="h-5 w-5 sm:h-6 sm:w-6" />
+                                </IconCaption>
+                              </button>
+                            )}
+                            {preset && isMeal ? (
+                              <button
+                                type="button"
+                                className={`btn-icon-luxury flex min-w-[3.1rem] flex-col justify-center gap-0 py-1.5 transition-colors ${
+                                  inCart
+                                    ? "bg-[var(--cherry-muted)] ring-2 ring-[var(--border-cherry-soft)]"
+                                    : ""
+                                }`}
+                                title="הוספת מרכיבי הארוחה לרשימת הקניות"
+                                aria-label="קניות — הוספת מרכיבי הארוחה לרשימת הקניות"
+                                aria-pressed={inCart}
+                                onClick={() => onCartMealPreset(preset)}
+                              >
+                                <IconCaption label="קניות">
+                                  <IconCart
+                                    filled={inCart}
+                                    className={`h-5 w-5 sm:h-6 sm:w-6 ${
+                                      inCart ? "text-[var(--cherry)]" : "text-[var(--stem)]"
+                                    }`}
+                                  />
+                                </IconCaption>
+                              </button>
+                            ) : !isMeal ? (
+                              <button
+                                type="button"
+                                className={`btn-icon-luxury flex min-w-[3.1rem] flex-col justify-center gap-0 py-1.5 transition-colors ${
+                                  inCart
+                                    ? "bg-[var(--cherry-muted)] ring-2 ring-[var(--border-cherry-soft)]"
+                                    : ""
+                                }`}
+                                title="הוספה לרשימת הקניות במסך הקניות"
+                                aria-label="קניות — הוספה לרשימת קניות"
+                                aria-pressed={inCart}
+                                onClick={() => onCartDictionaryItem(d)}
+                              >
+                                <IconCaption label="קניות">
+                                  <IconCart
+                                    filled={inCart}
+                                    className={`h-5 w-5 sm:h-6 sm:w-6 ${
+                                      inCart ? "text-[var(--cherry)]" : "text-[var(--stem)]"
+                                    }`}
+                                  />
+                                </IconCaption>
+                              </button>
+                            ) : null}
+                            <button
+                              type="button"
+                              onClick={() => setSaved(removeDictionaryItem(d.id))}
+                              className="btn-icon-luxury btn-icon-luxury-danger flex min-w-[3.1rem] shrink-0 flex-col justify-center gap-0 py-1.5"
+                              aria-label="מחיקה — הסרה מהמילון"
+                              title="הסרה מהמילון האישי"
+                            >
+                              <IconCaption label="מחק">
+                                <IconTrash className="h-5 w-5 sm:h-6 sm:w-6" />
+                              </IconCaption>
+                            </button>
+                          </div>
+                        </div>
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
                   {isMeal && preset && (
                     <button
                       type="button"
