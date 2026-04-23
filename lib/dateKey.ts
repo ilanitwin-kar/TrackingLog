@@ -52,3 +52,19 @@ export function getCalorieBoardDateSequence(dayCount: number): string[] {
   }
   return keys;
 }
+
+/** כל התאריכים מ-startKey ועד היום (כולל), מהישן לחדש */
+export function getDateKeysFromStartToToday(startKey: string): string[] {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(startKey)) return [getTodayKey()];
+  const today = getTodayKey();
+  const keys: string[] = [];
+  let k = startKey;
+  // תקרה בטיחותית (10 שנים)
+  for (let i = 0; i < 3650; i++) {
+    if (k > today) break;
+    keys.push(k);
+    if (k === today) break;
+    k = addDaysToDateKey(k, 1);
+  }
+  return keys;
+}

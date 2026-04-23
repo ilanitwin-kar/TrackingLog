@@ -1,6 +1,5 @@
 "use client";
 
-import Link from "next/link";
 import { AnimatePresence, motion } from "framer-motion";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { loadProfile, loadDictionary } from "@/lib/storage";
@@ -444,12 +443,13 @@ export default function PlannerPage() {
   return (
     <div className={`mx-auto max-w-lg px-4 py-8 pb-28 md:py-12 ${fontFood}`} dir="rtl">
       <div className="flex items-center justify-between gap-2">
-        <Link
-          href="/"
+        <button
+          type="button"
+          onClick={() => router.back()}
           className="rounded-xl border-2 border-[var(--border-cherry-soft)] bg-white px-3 py-2 text-sm font-semibold text-[var(--stem)] shadow-sm transition hover:bg-[var(--cherry-muted)]"
         >
           חזרה
-        </Link>
+        </button>
         <h1 className="panel-title-cherry text-lg">בניית תפריט</h1>
         <div className="w-[4.25rem]" aria-hidden />
       </div>

@@ -9,6 +9,7 @@ import { addRecipe, loadRecipes, removeRecipe, type SavedRecipe } from "@/lib/re
 import { fuzzySearch } from "@/lib/fuzzySearch";
 import { saveRecipeToCloud } from "@/lib/recipeCloud";
 import { rankedFuzzySearchByText, type MatchRange } from "@/lib/rankedSearch";
+import { useRouter } from "next/navigation";
 
 const fontFood =
   "font-[Calibri,'Segoe_UI','Helvetica_Neue',system-ui,sans-serif]";
@@ -100,6 +101,7 @@ function sourceIcon(src: SearchRow["source"]) {
 }
 
 export default function RecipesPage() {
+  const router = useRouter();
   const gender = loadProfile().gender;
   const [title, setTitle] = useState("");
   const [servingsText, setServingsText] = useState("1");
@@ -392,12 +394,13 @@ export default function RecipesPage() {
   return (
     <div className={`mx-auto max-w-lg px-4 py-8 pb-28 md:py-12 ${fontFood}`} dir="rtl">
       <div className="flex items-center justify-between gap-2">
-        <Link
-          href="/"
+        <button
+          type="button"
+          onClick={() => router.back()}
           className="rounded-xl border-2 border-[var(--border-cherry-soft)] bg-white px-3 py-2 text-sm font-semibold text-[var(--stem)] shadow-sm transition hover:bg-[var(--cherry-muted)]"
         >
           חזרה
-        </Link>
+        </button>
         <h1 className="panel-title-cherry text-lg">מחשבון מתכונים</h1>
         <div className="w-[4.25rem]" aria-hidden />
       </div>
