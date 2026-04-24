@@ -74,6 +74,8 @@ export type WeightEntry = {
   date: string;
 };
 
+export type WeighInFrequency = "daily" | "weekly" | "monthly";
+
 export type UserProfile = {
   email: string;
   /** שם פרטי — לפרסונליזציה (למשל בלוח המפה) */
@@ -91,6 +93,14 @@ export type UserProfile = {
   goalWeightKg: number;
   /** true רק אחרי השלמת מסך ההרשמה (TDEE) */
   onboardingComplete: boolean;
+  /** תדירות שקילה להצגת הנעה במשקל בדשבורד */
+  weighInFrequency: WeighInFrequency;
+  /** אם שבועי: 0=א׳ ... 6=ש׳ */
+  weighInWeekday: number;
+  /** אם חודשי: יום בחודש (1-28) כדי להימנע מחודשים קצרים */
+  weighInMonthDay: number;
+  /** וויזרד קצר שמופיע פעם אחת אחרי ההרשמה */
+  wizardCompleted: boolean;
 };
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -142,6 +152,50 @@ const KEYS = {
   /** המשתמש עבר ממסך הכניסה (הרשמה/התחברות) — מותר להמשיך ל־TDEE */
   welcomeLeft: "cj_welcome_left_v1",
 } as const;
+
+/**
+ * מחיקת כל הנתונים המקומיים של האפליקציה (LocalStorage).
+ * שימושי ל"מחיקת נתונים" לפני מעבר לחשבון אמיתי/ענן.
+ */
+export function clearAllLocalAppData(): void {
+  if (typeof window === "undefined") return;
+  // Core app keys
+  for (const k of Object.values(KEYS)) {
+    try {
+      localStorage.removeItem(k);
+    } catch {
+      /* ignore */
+    }
+  }
+  // Aux keys used across the app
+  const extras = [
+    "cj_weather_v1",
+    "cj_profile_avatar_data_url_v1",
+    "cj_sound_effects_enabled_v1",
+    // local auth/session
+    "cj_local_auth_v1",
+    "cj_session_v1",
+    "cj_dev_admin_session_v1",
+    "cj_staff_bypass_v1",
+    // app theme/variant
+    "cj_app_variant_v1",
+  ];
+  for (const k of extras) {
+    try {
+      localStorage.removeItem(k);
+    } catch {
+      /* ignore */
+    }
+  }
+
+  // Broadcast: profile/auth-dependent UI should refresh
+  try {
+    window.dispatchEvent(new Event("cj-profile-updated"));
+    window.dispatchEvent(new Event("cj-auth-changed"));
+  } catch {
+    /* ignore */
+  }
+}
 
 export function getJourneyStartDateKey(): string | null {
   if (typeof window === "undefined") return null;
@@ -217,6 +271,10 @@ const defaultProfile: UserProfile = {
   activity: "light",
   goalWeightKg: 62,
   onboardingComplete: false,
+  weighInFrequency: "daily",
+  weighInWeekday: 1,
+  weighInMonthDay: 1,
+  wizardCompleted: false,
 };
 
 export function getDefaultUserProfile(): UserProfile {
@@ -241,6 +299,21 @@ function normalizeLoadedProfile(parsed: Partial<UserProfile>): UserProfile {
   if (typeof parsed.deficit === "number" && Number.isFinite(parsed.deficit)) {
     deficit = Math.max(0, Math.min(500, Math.round(parsed.deficit)));
   }
+  const weighInFrequency: WeighInFrequency =
+    parsed.weighInFrequency === "weekly" || parsed.weighInFrequency === "monthly"
+      ? parsed.weighInFrequency
+      : "daily";
+  const weighInWeekdayRaw =
+    typeof parsed.weighInWeekday === "number" && Number.isFinite(parsed.weighInWeekday)
+      ? Math.floor(parsed.weighInWeekday)
+      : defaultProfile.weighInWeekday;
+  const weighInWeekday = Math.min(6, Math.max(0, weighInWeekdayRaw));
+  const weighInMonthDayRaw =
+    typeof parsed.weighInMonthDay === "number" && Number.isFinite(parsed.weighInMonthDay)
+      ? Math.floor(parsed.weighInMonthDay)
+      : defaultProfile.weighInMonthDay;
+  const weighInMonthDay = Math.min(28, Math.max(1, weighInMonthDayRaw));
+  const wizardCompleted = parsed.wizardCompleted === true;
   return {
     ...defaultProfile,
     ...parsed,
@@ -253,6 +326,10 @@ function normalizeLoadedProfile(parsed: Partial<UserProfile>): UserProfile {
     customDeficitEnabled,
     deficit,
     onboardingComplete: parsed.onboardingComplete === true,
+    weighInFrequency,
+    weighInWeekday,
+    weighInMonthDay,
+    wizardCompleted,
   };
 }
 

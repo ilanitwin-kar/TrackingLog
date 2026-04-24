@@ -70,6 +70,9 @@ export function ProfileMenu() {
   }
 
   function logout() {
+    // Important: if dev/staff bypass is active, clearing only session does not "feel" like logout.
+    clearDevAdminBypass();
+    clearStaffBypass();
     clearSession();
     setOpen(false);
     router.replace("/welcome");
@@ -220,6 +223,21 @@ export function ProfileMenu() {
                 onClick={() => setOpen(false)}
               >
                 הגדרות
+              </Link>
+
+              <Link
+                href="/privacy"
+                className={linkClass}
+                onClick={() => setOpen(false)}
+              >
+                מדיניות פרטיות
+              </Link>
+              <Link
+                href="/terms"
+                className={`${linkClass} border-b border-[var(--border-cherry-soft)]/70`}
+                onClick={() => setOpen(false)}
+              >
+                תנאי שימוש
               </Link>
 
               {(process.env.NODE_ENV === "development" ||

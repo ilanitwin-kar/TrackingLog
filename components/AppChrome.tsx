@@ -45,7 +45,8 @@ export function AppChrome({ children }: { children: React.ReactNode }) {
       pathname === "/add-food" ||
       pathname === "/add-food-ai" ||
       pathname === "/welcome" ||
-      pathname === "/pick-theme"
+      pathname === "/pick-theme" ||
+      pathname === "/wizard"
     ) {
       setHideNav(true);
       return;
@@ -63,7 +64,8 @@ export function AppChrome({ children }: { children: React.ReactNode }) {
         pathname === "/add-food" ||
         pathname === "/add-food-ai" ||
         pathname === "/welcome" ||
-        pathname === "/pick-theme"
+        pathname === "/pick-theme" ||
+        pathname === "/wizard"
       ) {
         setHideNav(true);
         return;
@@ -142,7 +144,13 @@ export function AppChrome({ children }: { children: React.ReactNode }) {
         return;
       }
 
-      window.location.replace("/tdee");
+      // Onboarding is now handled by /wizard. Avoid redirect loop when already there.
+      if (pathname === "/wizard") {
+        setRegOk(true);
+        setRegReady(true);
+        return;
+      }
+      window.location.replace("/wizard");
       return;
     } catch (e) {
       console.error("[AppChrome] gate", e);
