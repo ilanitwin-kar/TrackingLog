@@ -33,6 +33,7 @@ import {
   getJournalStreakDays,
   isFoodStarred,
   loadDayJournalClosedMap,
+  loadWeights,
   loadProfile,
   saveDayJournalClosedMap,
   saveDayLogEntries,
@@ -53,6 +54,8 @@ import { weeklyCalorieSavingsClosedDays } from "@/lib/weeklyCalorieSavings";
 import { loadDayLogs } from "@/lib/storage";
 import { CelebrationConfetti } from "./Fireworks";
 import { useAppVariant } from "./useAppVariant";
+import { QuickWeightModal } from "./QuickWeightModal";
+import { QuickStepsModal } from "./QuickStepsModal";
 import {
   IconBookmark,
   IconDuplicate,
@@ -461,6 +464,14 @@ export function HomeClient({ mode = "dashboard" }: { mode?: "dashboard" | "journ
     Record<string, boolean>
   >({});
 
+  const [quickWeightOpen, setQuickWeightOpen] = useState(false);
+  const [quickStepsOpen, setQuickStepsOpen] = useState(false);
+  const [weightToast, setWeightToast] = useState<{
+    show: boolean;
+    fade: boolean;
+    message: string;
+  }>({ show: false, fade: false, message: "" });
+
   useEffect(() => {
     setJournalClosedMap(loadDayJournalClosedMap());
   }, []);
@@ -680,6 +691,61 @@ export function HomeClient({ mode = "dashboard" }: { mode?: "dashboard" | "journ
     () => Math.max(0, Math.round(overGoalKcal) - walkBurnKcal),
     [overGoalKcal, walkBurnKcal]
   );
+
+  const weightDue = useMemo(() => {
+    if (!profile || !isViewingToday) return false;
+    try {
+      // Baseline row may be created lazily; do not require it.
+      const today = getTodayKey();
+      const weights = loadWeights();
+      const hasToday = weights.some((w) => w && w.date === today);
+      if (hasToday) return false;
+      const freq = profile.weighInFrequency ?? "daily";
+      if (freq === "daily") return true;
+      const d = new Date(`${today}T12:00:00`);
+      if (Number.isNaN(d.getTime())) return false;
+      if (freq === "weekly") {
+        const wd = typeof profile.weighInWeekday === "number" ? profile.weighInWeekday : 1;
+        return d.getDay() === Math.min(6, Math.max(0, Math.floor(wd)));
+      }
+      if (freq === "monthly") {
+        const md =
+          typeof profile.weighInMonthDay === "number" ? profile.weighInMonthDay : 1;
+        return d.getDate() === Math.min(28, Math.max(1, Math.floor(md)));
+      }
+      return true;
+    } catch {
+      return false;
+    }
+  }, [profile, isViewingToday]);
+
+  const nextStep = useMemo(() => {
+    if (!profile) return null as null | "weight" | "walk" | "food";
+    if (weightDue) return "weight";
+    if (netOverKcal > 0) return "walk";
+    return "food";
+  }, [profile, weightDue, netOverKcal]);
+
+  function triggerWeightToast(prevKg: number | null, newKg: number) {
+    if (prevKg == null) return;
+    const delta = prevKg - newKg;
+    if (!Number.isFinite(delta) || delta <= 0.05) return;
+    const lines = [
+      "אלופה! צעד קטן — תוצאה גדולה.",
+      "איזה יופי! ההתמדה שלך מנצחת.",
+      "וואו, ירידה מדויקת. ממשיכים ככה!",
+      "כל הכבוד! זה בדיוק הכיוון.",
+    ];
+    const line = lines[Math.floor(Math.random() * lines.length)]!;
+    const msg = `ירדת ${Math.round(delta * 10) / 10} ק״ג מאז השקילה האחרונה. ${line}`;
+    setWeightToast({ show: true, fade: false, message: msg });
+    window.setTimeout(() => {
+      setWeightToast((t) => (t.show ? { ...t, fade: true } : t));
+      window.setTimeout(() => {
+        setWeightToast({ show: false, fade: false, message: "" });
+      }, 500);
+    }, 2500);
+  }
 
   const insightBubbleText = useMemo(
     () => resolveHomeInsightBubbleText(gender, isViewingToday, netOverKcal),
@@ -1251,6 +1317,7 @@ export function HomeClient({ mode = "dashboard" }: { mode?: "dashboard" | "journ
             {Math.round(overGoalKcal) > 0 ||
             (exerciseDay?.reportedSteps ?? 0) > 0 ? (
               <div
+                id="cj-steps-card"
                 className="mt-2 border-t border-[var(--border-cherry-soft)]/60 pt-2"
                 onClick={(e) => e.stopPropagation()}
                 onKeyDown={(e) => e.stopPropagation()}
@@ -1295,7 +1362,7 @@ export function HomeClient({ mode = "dashboard" }: { mode?: "dashboard" | "journ
 
         {dailyMotivationLineWithWeather ? (
           <p
-            className="mx-auto max-w-md text-center text-sm font-medium leading-relaxed text-[var(--stem)]/90"
+            className="mx-auto max-w-md text-center text-sm font-extrabold leading-relaxed text-[var(--stem)]/90"
             role="status"
           >
             {dailyMotivationLineWithWeather}
@@ -1335,6 +1402,54 @@ export function HomeClient({ mode = "dashboard" }: { mode?: "dashboard" | "journ
             );
           })}
         </div>
+
+        {profile && nextStep ? (
+          <div className="rounded-2xl border-2 border-[var(--border-cherry-soft)] bg-white/90 px-4 py-4 shadow-[0_8px_24px_var(--panel-shadow-soft)]">
+            <div className="flex items-start gap-3" dir="rtl">
+              <div
+                className="flex size-11 shrink-0 items-center justify-center rounded-2xl bg-[var(--cherry-muted)] text-2xl shadow-sm"
+                aria-hidden
+              >
+                {nextStep === "weight" ? "⚖️" : nextStep === "walk" ? "🚶‍♀️" : "➕"}
+              </div>
+              <div className="min-w-0 flex-1">
+                <h2 className="text-lg font-extrabold tracking-tight text-[var(--cherry)]">
+                  הצעד הבא שלך
+                </h2>
+                <p className="mt-2 text-sm font-semibold leading-relaxed text-[var(--stem)]/80">
+                  {nextStep === "weight"
+                    ? "בואי נמדוד נקודת אמת — זה לוקח 10 שניות. אחר כך תראי את התוצאות הרבה יותר ברור."
+                    : nextStep === "walk"
+                      ? "לא נלחצים—מאזנים. הליכה קצרה עכשיו יכולה לסגור את הפער של היום."
+                      : "כל רישום קטן בונה דיוק. הוסיפי את מה שאכלת עכשיו—ונתקדם משם."}
+                </p>
+                <button
+                  type="button"
+                  className="btn-stem mt-3 w-full rounded-xl py-2.5 text-sm font-extrabold"
+                  onClick={() => {
+                    if (nextStep === "weight") {
+                      setQuickWeightOpen(true);
+                      return;
+                    }
+                    if (nextStep === "walk") {
+                      setQuickStepsOpen(true);
+                      return;
+                    }
+                    router.push(
+                      `/add-food?from=journal&date=${encodeURIComponent(viewDateKey)}&meal=snack`
+                    );
+                  }}
+                >
+                  {nextStep === "weight"
+                    ? "הזיני משקל יומי"
+                    : nextStep === "walk"
+                      ? "קיזוז בהליכה"
+                      : "הוסיפי מזון"}
+                </button>
+              </div>
+            </div>
+          </div>
+        ) : null}
 
         <div className="rounded-2xl border-2 border-[var(--border-cherry-soft)] bg-white/90 px-4 py-4 shadow-[0_8px_24px_var(--panel-shadow-soft)]">
           <div className="flex items-start gap-3" dir="rtl">
@@ -1387,6 +1502,53 @@ export function HomeClient({ mode = "dashboard" }: { mode?: "dashboard" | "journ
             <span className="font-extrabold">סיכום יומי</span>
           </Link>
         </nav>
+
+        {profile ? (
+          <QuickWeightModal
+            open={quickWeightOpen}
+            profile={profile}
+            onClose={(result) => {
+              setQuickWeightOpen(false);
+              if (!result.ok) return;
+              triggerWeightToast(result.prevKg, result.newKg);
+            }}
+          />
+        ) : null}
+
+        {profile ? (
+          <QuickStepsModal
+            open={quickStepsOpen}
+            initialSteps={stepsDraft}
+            onClose={() => setQuickStepsOpen(false)}
+            onSave={(steps) => {
+              setQuickStepsOpen(false);
+              setStepsDraft(String(steps));
+              void (async () => {
+                try {
+                  await saveExerciseActivityDay(getTodayKey(), steps);
+                  setExerciseDay({
+                    reportedSteps: steps,
+                    updatedAt: new Date().toISOString(),
+                  });
+                } finally {
+                  /* ignore */
+                }
+              })();
+            }}
+          />
+        ) : null}
+
+        {weightToast.show ? (
+          <div
+            className={`fixed bottom-24 left-3 right-3 z-[410] mx-auto max-w-md rounded-2xl border-2 border-[var(--border-cherry-soft)] bg-white/95 px-4 py-3 text-center text-sm font-extrabold text-[var(--cherry)] shadow-[0_10px_30px_rgba(0,0,0,0.14)] transition-opacity ${
+              weightToast.fade ? "opacity-0" : "opacity-100"
+            }`}
+            dir="rtl"
+            role="status"
+          >
+            {weightToast.message}
+          </div>
+        ) : null}
       </header>
       )}
 

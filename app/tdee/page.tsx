@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { motion } from "framer-motion";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   type UserProfile,
@@ -104,6 +104,7 @@ function parseOrNull(s: string): number | null {
 
 export default function TdeePage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [p, setP] = useState<UserProfile | null>(null);
   const [ageText, setAgeText] = useState("");
   const [heightText, setHeightText] = useState("");
@@ -122,24 +123,9 @@ export default function TdeePage() {
   useEffect(() => {
     const loaded = loadProfile();
     const registered = loaded.onboardingComplete === true;
-
     if (!registered) {
-      // On first entry: show empty fields (no "0" and no defaults).
-      setP({
-        ...loaded,
-        age: 0,
-        heightCm: 0,
-        weightKg: 0,
-        goalWeightKg: 0,
-        nutritionGoal: loaded.nutritionGoal ?? "weight_loss",
-        customDeficitEnabled: false,
-        deficit: 0,
-      });
-      setAgeText("");
-      setHeightText("");
-      setWeightText("");
-      setGoalWeightText("");
-      setDeficitText("");
+      // Onboarding is now done via the wizard. Keep TDEE for post-registration edits.
+      router.replace("/wizard");
       return;
     }
 
@@ -215,7 +201,8 @@ export default function TdeePage() {
     saveProfile(next);
     ensureBaselineWeightRowFromProfile();
     setP(next);
-    router.replace("/");
+    const from = searchParams.get("from");
+    router.replace(from === "wizard" ? "/wizard" : "/");
   }
 
   function fieldWrapClass(id: TdeeFieldId): string {
