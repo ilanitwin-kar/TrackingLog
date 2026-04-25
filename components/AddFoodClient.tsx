@@ -3,7 +3,14 @@
 import { AnimatePresence, motion } from "framer-motion";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { useEffect, useId, useMemo, useRef, useState } from "react";
+import {
+  useEffect,
+  useId,
+  useMemo,
+  useRef,
+  useState,
+  type MouseEvent as ReactMouseEvent,
+} from "react";
 import { BarcodeScanModal } from "@/components/BarcodeScanModal";
 import { IconCaption } from "@/components/IconCaption";
 import { IconPlusCircle, IconScanBarcode, IconVerified } from "@/components/Icons";
@@ -156,6 +163,139 @@ function mealLabelHe(m: MealSlot): string {
   }
 }
 
+function addFoodSourceBadge(src: HomeSuggestRow["source"]) {
+  const s = src ?? "local";
+  if (s === "local") {
+    return {
+      label: "מאגר אינטליגנציה קלורית",
+      verified: true,
+      border: "border-[#e6c65c]/80",
+      bg: "bg-[#fff9e6]",
+      text: "text-[#b8860b]",
+    };
+  }
+  if (s === "israelMoH") {
+    return {
+      label: "משרד הבריאות",
+      verified: true,
+      border: "border-[#2e7d32]/40",
+      bg: "bg-[#e8f5e9]",
+      text: "text-[#1b5e20]",
+    };
+  }
+  if (s === "usda") {
+    return {
+      label: "USDA",
+      verified: true,
+      border: "border-[#1565c0]/40",
+      bg: "bg-[#e3f2fd]",
+      text: "text-[#0d47a1]",
+    };
+  }
+  if (s === "openFoodFacts") {
+    return {
+      label: "Open Food Facts",
+      verified: false,
+      border: "border-[var(--border-cherry-soft)]",
+      bg: "bg-white",
+      text: "text-[var(--stem)]",
+    };
+  }
+  return {
+    label: "AI",
+    verified: false,
+    border: "border-[var(--border-cherry-soft)]",
+    bg: "bg-white",
+    text: "text-[var(--cherry)]",
+  };
+}
+
+function AddFoodSearchResultRow({
+  row,
+  gender,
+  quickAddId,
+  onOpenPick,
+  onQuickAdd,
+}: {
+  row: HomeSuggestRow;
+  gender: "female" | "male";
+  quickAddId: string | null;
+  onOpenPick: (row: HomeSuggestRow, e: ReactMouseEvent) => void;
+  onQuickAdd: (row: HomeSuggestRow) => void;
+}) {
+  const src = row.source ?? "local";
+  const badge = addFoodSourceBadge(src);
+  const qk = `${src}-${row.id}`;
+
+  return (
+    <li className="flex items-stretch gap-1.5">
+      <button
+        type="button"
+        className="suggestion-item flex min-w-0 flex-1 flex-col items-stretch gap-0.5 rounded-lg px-3 py-2.5 text-right transition hover:bg-[var(--cherry-muted)]"
+        onClick={(e) => onOpenPick(row, e)}
+      >
+        <span className="flex flex-wrap items-center justify-end gap-x-2 gap-y-1 font-semibold text-[var(--stem)]">
+          <span>{row.name}</span>
+          <span
+            className={`inline-flex items-center gap-1 rounded-md border px-2 py-0.5 ${badge.border} ${badge.bg}`}
+            title={badge.label}
+          >
+            {badge.verified ? (
+              <>
+                <span className="text-sm font-bold leading-none text-[#d4a017]" aria-hidden>
+                  ✓
+                </span>
+                <IconVerified className="h-3.5 w-3.5 shrink-0 text-[#16a34a]" />
+              </>
+            ) : null}
+            <span className={`text-[10px] font-extrabold tracking-wide ${badge.text}`}>
+              {badge.label}
+            </span>
+          </span>
+        </span>
+        {row.category != null ? (
+          <span className="text-[11px] text-[var(--cherry)]/65">{row.category}</span>
+        ) : null}
+        {row.calories != null ? (
+          <span className="text-[11px] text-[var(--cherry)]/75">
+            קלוריות: {Math.round(row.calories)} · חלבון: {row.protein ?? "—"} · פחמימות:{" "}
+            {row.carbs ?? "—"} · שומן: {row.fat ?? "—"}{" "}
+            <span className="text-[var(--cherry)]/55">(ל־100 ג׳)</span>
+          </span>
+        ) : null}
+      </button>
+      <button
+        type="button"
+        className={`flex min-w-[3.35rem] shrink-0 flex-col items-center justify-center rounded-lg border-2 border-[var(--border-cherry-soft)] bg-white px-0.5 py-1 shadow-sm transition hover:bg-[var(--cherry-muted)] active:scale-[0.98] ${
+          quickAddId === qk ? "ring-2 ring-[var(--stem)]" : ""
+        }`}
+        aria-label={`הוספת «${row.name}» ליומן`}
+        title="הוספה ליומן"
+        onClick={() => onQuickAdd(row)}
+      >
+        <IconCaption label="הוספה">
+          {quickAddId === qk ? (
+            <span className="text-lg font-extrabold text-[var(--stem)]" aria-hidden>
+              ✓
+            </span>
+          ) : (
+            <IconPlusCircle
+              className={`h-6 w-6 sm:h-7 sm:w-7 ${
+                gender === "male" ? "text-[#1e3a5f]" : "text-[var(--cherry)]"
+              }`}
+            />
+          )}
+        </IconCaption>
+      </button>
+    </li>
+  );
+}
+
+function entryVerifiedForQuickAdd(src: HomeSuggestRow["source"]): boolean {
+  const s = src ?? "local";
+  return s === "local" || s === "israelMoH" || s === "usda";
+}
+
 export function AddFoodClient({
   screen = "search",
 }: {
@@ -171,7 +311,9 @@ export function AddFoodClient({
   const [food, setFood] = useState("");
 
   const [debouncedFoodSearch, setDebouncedFoodSearch] = useState("");
-  const [homeLocalRows, setHomeLocalRows] = useState<HomeSuggestRow[]>([]);
+  const [intelRows, setIntelRows] = useState<HomeSuggestRow[]>([]);
+  const [mohRows, setMohRows] = useState<HomeSuggestRow[]>([]);
+  const [usdaRows, setUsdaRows] = useState<HomeSuggestRow[]>([]);
   const [homeSearchLoading, setHomeSearchLoading] = useState(false);
   const [worldRows, setWorldRows] = useState<HomeSuggestRow[]>([]);
   const [worldSearchLoading, setWorldSearchLoading] = useState(false);
@@ -551,7 +693,9 @@ export function AddFoodClient({
 
   useEffect(() => {
     if (food.trim().length < 2) {
-      setHomeLocalRows([]);
+      setIntelRows([]);
+      setMohRows([]);
+      setUsdaRows([]);
       setHomeSearchLoading(false);
       setWorldRows([]);
       setWorldSearchLoading(false);
@@ -568,7 +712,9 @@ export function AddFoodClient({
 
   useEffect(() => {
     if (debouncedFoodSearch.length < 2) {
-      setHomeLocalRows([]);
+      setIntelRows([]);
+      setMohRows([]);
+      setUsdaRows([]);
       setHomeSearchLoading(false);
       setWorldRows([]);
       setWorldSearchLoading(false);
@@ -578,14 +724,24 @@ export function AddFoodClient({
     setHomeSearchLoading(true);
     void (async () => {
       try {
-        const params = new URLSearchParams({
+        const paramsIntel = new URLSearchParams({
           q: debouncedFoodSearch,
           limit: "20",
         });
-        const resL = await fetch(`/api/home-smart-search?${params}`, {
-          signal: ac.signal,
+        const paramsGov = new URLSearchParams({
+          q: debouncedFoodSearch,
+          pageSize: "18",
         });
+        const [resL, resI, resU] = await Promise.all([
+          fetch(`/api/home-smart-search?${paramsIntel}`, { signal: ac.signal }),
+          fetch(`/api/israel-food-search?${paramsGov}`, { signal: ac.signal }),
+          fetch(`/api/usda-food-search?${paramsGov}`, { signal: ac.signal }),
+        ]);
         if (ac.signal.aborted) return;
+
+        const intel: HomeSuggestRow[] = [];
+        const moh: HomeSuggestRow[] = [];
+        const usda: HomeSuggestRow[] = [];
 
         if (resL.ok) {
           const data = (await resL.json()) as {
@@ -600,24 +756,43 @@ export function AddFoodClient({
             }>;
           };
           const items = data.items ?? [];
-          const mapped = items.map((i) => ({
-            id: i.id,
-            name: i.name,
-            verified: true,
-            source: "local" as const,
-            category: i.category,
-            calories: i.calories,
-            protein: i.protein,
-            fat: i.fat,
-            carbs: i.carbs,
-          }));
-          setHomeLocalRows(sortHomeLocalRows(mapped, debouncedFoodSearch));
-        } else {
-          setHomeLocalRows([]);
+          for (const i of items) {
+            intel.push({
+              id: i.id,
+              name: i.name,
+              verified: true,
+              source: "local",
+              category: i.category,
+              calories: i.calories,
+              protein: i.protein,
+              fat: i.fat,
+              carbs: i.carbs,
+            });
+          }
         }
+
+        if (resI.ok) {
+          const data = (await resI.json()) as { items?: HomeSuggestRow[] };
+          for (const row of data.items ?? []) {
+            if (row?.id && row.name) moh.push(row);
+          }
+        }
+
+        if (resU.ok) {
+          const data = (await resU.json()) as { items?: HomeSuggestRow[] };
+          for (const row of data.items ?? []) {
+            if (row?.id && row.name) usda.push(row);
+          }
+        }
+
+        setIntelRows(sortHomeLocalRows(intel, debouncedFoodSearch));
+        setMohRows(sortHomeLocalRows(moh, debouncedFoodSearch));
+        setUsdaRows(sortHomeLocalRows(usda, debouncedFoodSearch));
       } catch {
         if (!ac.signal.aborted) {
-          setHomeLocalRows([]);
+          setIntelRows([]);
+          setMohRows([]);
+          setUsdaRows([]);
         }
       } finally {
         if (!ac.signal.aborted) setHomeSearchLoading(false);
@@ -681,18 +856,11 @@ export function AddFoodClient({
     return () => ac.abort();
   }, [debouncedFoodSearch]);
 
-  const mergedSuggestRows = useMemo(() => {
-    const local: HomeSuggestRow[] = homeLocalRows.map((r) => ({
-      ...r,
-      source: r.source ?? "local",
-    }));
-    const world: HomeSuggestRow[] = worldRows.map((r) => ({
-      ...r,
-      source: r.source ?? "openFoodFacts",
-    }));
-    const out: HomeSuggestRow[] = [...local, ...world];
-    return out;
-  }, [homeLocalRows, worldRows]);
+  const totalSearchHits =
+    intelRows.length +
+    mohRows.length +
+    usdaRows.length +
+    worldRows.length;
 
   useEffect(() => {
     if (!dictFeedback) return;
@@ -797,7 +965,9 @@ export function AddFoodClient({
     setPickUnitsText("1");
     setFood("");
     setDebouncedFoodSearch("");
-    setHomeLocalRows([]);
+    setIntelRows([]);
+    setMohRows([]);
+    setUsdaRows([]);
     setWorldRows([]);
     setHomeSearchLoading(false);
     setWorldSearchLoading(false);
@@ -842,7 +1012,8 @@ export function AddFoodClient({
       fatG: optionalMacroGram(f100 > 0 ? f100 * factor : undefined),
       verified:
         row.verified === true &&
-        (row.source ?? "local") !== "openFoodFacts",
+        (row.source ?? "local") !== "openFoodFacts" &&
+        (row.source ?? "local") !== "ai",
     };
   }
 
@@ -1149,7 +1320,7 @@ export function AddFoodClient({
       quantity: qty,
       unit,
       createdAt: new Date().toISOString(),
-      verified: (row.source ?? "local") === "local",
+      verified: entryVerifiedForQuickAdd(row.source),
       meal,
       ...(row.protein != null ? { proteinG: Math.round(row.protein * factor * 10) / 10 } : {}),
       ...(row.carbs != null ? { carbsG: Math.round(row.carbs * factor * 10) / 10 } : {}),
@@ -1332,59 +1503,6 @@ export function AddFoodClient({
                   </div>
                 </div>
               </label>
-
-              {recentPicks.length > 0 && (
-                <div className="mt-3">
-                  <p className="mb-2 text-sm font-extrabold text-[var(--cherry)]">
-                    נבחרו לאחרונה
-                  </p>
-                  <ul className="space-y-2">
-                    {recentPicks.map((r) => {
-                      const { qtyLine, kcal } = recentPickQtyAndKcal(r);
-                      const qk = `${r.source ?? "local"}-${r.id}`;
-                      return (
-                        <li
-                          key={`${r.id}-${r.name}`}
-                          className="flex items-stretch gap-2 rounded-xl border-2 border-[var(--border-cherry-soft)] bg-white shadow-sm"
-                        >
-                          <button
-                            type="button"
-                            className="flex min-w-0 flex-1 flex-col items-stretch gap-0.5 px-3 py-2.5 text-start transition hover:bg-[var(--cherry-muted)]/45"
-                            onClick={() => openPickModalFromRow(r)}
-                          >
-                            <span className="text-sm font-extrabold leading-snug text-[var(--stem)]">
-                              {r.name}
-                            </span>
-                            <span className="text-xs font-semibold tabular-nums text-[var(--stem)]/75">
-                              {qtyLine} · {kcal} קק״ל
-                            </span>
-                          </button>
-                          <button
-                            type="button"
-                            className={`flex w-[3.25rem] shrink-0 flex-col items-center justify-center border-s-2 border-[var(--border-cherry-soft)]/60 bg-[var(--cherry-muted)]/25 transition hover:bg-[var(--cherry-muted)]/55 active:scale-[0.98] ${
-                              quickAddId === qk ? "ring-2 ring-inset ring-[var(--stem)]" : ""
-                            }`}
-                            title={gf(gender, "הוספה מהירה ליומן", "הוספה מהירה ליומן")}
-                            aria-label={gf(gender, "הוספה מהירה ליומן", "הוספה מהירה ליומן")}
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              quickAddRowToJournal(r);
-                            }}
-                          >
-                            {quickAddId === qk ? (
-                              <span className="text-lg font-extrabold text-[var(--cherry)]" aria-hidden>
-                                ✓
-                              </span>
-                            ) : (
-                              <IconPlusCircle className="h-6 w-6 text-[var(--cherry)]" />
-                            )}
-                          </button>
-                        </li>
-                      );
-                    })}
-                  </ul>
-                </div>
-              )}
             </div>
 
             <div className="mt-3 rounded-xl border border-[var(--border-cherry-soft)] bg-white/90 p-2 shadow-sm">
@@ -1411,12 +1529,10 @@ export function AddFoodClient({
               )}
 
               {showResultsPanel ? (
-                <div>
-                  <p className="px-2 pb-2 text-sm font-bold text-[var(--cherry)]">
-                    תוצאות חיפוש (מאוחד)
-                  </p>
-
-                  {searchPanelSync && (homeSearchLoading || worldSearchLoading) && mergedSuggestRows.length === 0 ? (
+                <div className="space-y-4">
+                  {searchPanelSync &&
+                  (homeSearchLoading || worldSearchLoading) &&
+                  totalSearchHits === 0 ? (
                     <div className="flex items-center gap-2 px-2 py-2 text-sm text-[var(--stem)]" role="status">
                       <span
                         className="inline-block size-4 animate-spin rounded-full border-2 border-[var(--border-cherry-soft)] border-t-[var(--cherry)]"
@@ -1424,86 +1540,141 @@ export function AddFoodClient({
                       />
                       טוען…
                     </div>
-                  ) : searchPanelSync && mergedSuggestRows.length === 0 ? (
-                    <p className="px-2 py-1 text-xs text-[var(--cherry)]/65">לא נמצאו תוצאות.</p>
-                  ) : (
-                    <ul className="space-y-1">
-                      {mergedSuggestRows.map((s) => {
-                        const src = s.source ?? "local";
-                        const isVerified = src === "local";
-                        const badge = isVerified
-                          ? { label: "מאומת", bg: "bg-[#fff9e6]", border: "border-[#e6c65c]/80", text: "text-[#b8860b]" }
-                          : src === "openFoodFacts"
-                            ? { label: "עולמי", bg: "bg-white", border: "border-[var(--border-cherry-soft)]", text: "text-[var(--stem)]" }
-                            : { label: "AI", bg: "bg-white", border: "border-[var(--border-cherry-soft)]", text: "text-[var(--cherry)]" };
+                  ) : null}
 
-                        return (
-                          <li key={`${src}-${s.id}`} className="flex items-stretch gap-1.5">
-                            <button
-                              type="button"
-                              className="suggestion-item flex min-w-0 flex-1 flex-col items-stretch gap-0.5 rounded-lg px-3 py-2.5 text-right transition hover:bg-[var(--cherry-muted)]"
-                              onClick={(e) => openPickModal(s, e)}
-                            >
-                              <span className="flex flex-wrap items-center justify-end gap-x-2 gap-y-1 font-semibold text-[var(--stem)]">
-                                <span>{s.name}</span>
-                                <span
-                                  className={`inline-flex items-center gap-1 rounded-md border px-2 py-0.5 ${badge.border} ${badge.bg}`}
-                                  title={badge.label}
-                                >
-                                  {isVerified ? (
-                                    <>
-                                      <span className="text-sm font-bold leading-none text-[#d4a017]" aria-hidden>
-                                        ✓
-                                      </span>
-                                      <IconVerified className="h-3.5 w-3.5 shrink-0 text-[#16a34a]" />
-                                    </>
-                                  ) : null}
-                                  <span className={`text-[10px] font-extrabold tracking-wide ${badge.text}`}>
-                                    {badge.label}
-                                  </span>
-                                </span>
-                              </span>
-                              {s.category != null ? (
-                                <span className="text-[11px] text-[var(--cherry)]/65">{s.category}</span>
-                              ) : null}
-                              {s.calories != null ? (
-                                <span className="text-[11px] text-[var(--cherry)]/75">
-                                  קלוריות: {Math.round(s.calories)} · חלבון: {s.protein ?? "—"} · פחמימות:{" "}
-                                  {s.carbs ?? "—"} · שומן: {s.fat ?? "—"}{" "}
-                                  <span className="text-[var(--cherry)]/55">(ל־100 ג׳)</span>
-                                </span>
-                              ) : null}
-                            </button>
-                            <button
-                              type="button"
-                              className={`flex min-w-[3.35rem] shrink-0 flex-col items-center justify-center rounded-lg border-2 border-[var(--border-cherry-soft)] bg-white px-0.5 py-1 shadow-sm transition hover:bg-[var(--cherry-muted)] active:scale-[0.98] ${
-                                quickAddId === `${src}-${s.id}` ? "ring-2 ring-[var(--stem)]" : ""
-                              }`}
-                              aria-label={`הוספת «${s.name}» ליומן`}
-                              title="הוספה ליומן"
-                              onClick={() => quickAddRowToJournal(s)}
-                            >
-                              <IconCaption label="הוספה">
-                                {quickAddId === `${src}-${s.id}` ? (
-                                  <span className="text-lg font-extrabold text-[var(--stem)]" aria-hidden>
-                                    ✓
-                                  </span>
-                                ) : (
-                                  <IconPlusCircle
-                                    className={`h-6 w-6 sm:h-7 sm:w-7 ${
-                                      gender === "male"
-                                        ? "text-[#1e3a5f]"
-                                        : "text-[var(--cherry)]"
-                                    }`}
-                                  />
-                                )}
-                              </IconCaption>
-                            </button>
-                          </li>
-                        );
-                      })}
-                    </ul>
-                  )}
+                  {searchPanelSync && !homeSearchLoading && !worldSearchLoading && totalSearchHits === 0 ? (
+                    <p className="px-2 py-1 text-xs text-[var(--cherry)]/65">לא נמצאו תוצאות.</p>
+                  ) : null}
+
+                  <div>
+                    <p className="px-2 pb-0.5 text-sm font-extrabold text-[var(--cherry)]">
+                      אינטליגנציה קלורית
+                    </p>
+                    <p className="px-2 pb-2 text-[11px] font-medium text-[var(--stem)]/60">
+                      חיפוש חכם — מאגר אינטליגנציה קלורית ומילון
+                    </p>
+                    {searchPanelSync && homeSearchLoading && intelRows.length === 0 ? (
+                      <div className="flex items-center gap-2 px-2 py-2 text-sm text-[var(--stem)]" role="status">
+                        <span
+                          className="inline-block size-4 animate-spin rounded-full border-2 border-[var(--border-cherry-soft)] border-t-[var(--cherry)]"
+                          aria-hidden
+                        />
+                        טוען…
+                      </div>
+                    ) : intelRows.length === 0 ? (
+                      <p className="px-2 py-1 text-xs text-[var(--cherry)]/65">אין התאמות במאגר אינטליגנציה קלורית.</p>
+                    ) : (
+                      <ul className="space-y-1">
+                        {intelRows.map((s) => (
+                          <AddFoodSearchResultRow
+                            key={`local-${s.id}`}
+                            row={s}
+                            gender={gender}
+                            quickAddId={quickAddId}
+                            onOpenPick={openPickModal}
+                            onQuickAdd={quickAddRowToJournal}
+                          />
+                        ))}
+                      </ul>
+                    )}
+                  </div>
+
+                  <div className="border-t border-[var(--border-cherry-soft)]/80 pt-3">
+                    <p className="px-2 pb-0.5 text-sm font-extrabold text-[var(--cherry)]">
+                      משרד הבריאות (ישראל)
+                    </p>
+                    <p className="px-2 pb-2 text-[11px] font-medium text-[var(--stem)]/60">
+                      טבלת הרכב המזון — data.gov.il
+                    </p>
+                    {searchPanelSync && homeSearchLoading && mohRows.length === 0 ? (
+                      <div className="flex items-center gap-2 px-2 py-2 text-sm text-[var(--stem)]" role="status">
+                        <span
+                          className="inline-block size-4 animate-spin rounded-full border-2 border-[var(--border-cherry-soft)] border-t-[var(--cherry)]"
+                          aria-hidden
+                        />
+                        טוען…
+                      </div>
+                    ) : mohRows.length === 0 ? (
+                      <p className="px-2 py-1 text-xs text-[var(--cherry)]/65">אין התאמות במאגר משרד הבריאות.</p>
+                    ) : (
+                      <ul className="space-y-1">
+                        {mohRows.map((s) => (
+                          <AddFoodSearchResultRow
+                            key={`moh-${s.id}`}
+                            row={s}
+                            gender={gender}
+                            quickAddId={quickAddId}
+                            onOpenPick={openPickModal}
+                            onQuickAdd={quickAddRowToJournal}
+                          />
+                        ))}
+                      </ul>
+                    )}
+                  </div>
+
+                  <div className="border-t border-[var(--border-cherry-soft)]/80 pt-3">
+                    <p className="px-2 pb-0.5 text-sm font-extrabold text-[var(--cherry)]">USDA</p>
+                    <p className="px-2 pb-2 text-[11px] font-medium text-[var(--stem)]/60">
+                      FoodData Central — ארה״ב
+                    </p>
+                    {searchPanelSync && homeSearchLoading && usdaRows.length === 0 ? (
+                      <div className="flex items-center gap-2 px-2 py-2 text-sm text-[var(--stem)]" role="status">
+                        <span
+                          className="inline-block size-4 animate-spin rounded-full border-2 border-[var(--border-cherry-soft)] border-t-[var(--cherry)]"
+                          aria-hidden
+                        />
+                        טוען…
+                      </div>
+                    ) : usdaRows.length === 0 ? (
+                      <p className="px-2 py-1 text-xs text-[var(--cherry)]/65">אין התאמות ב-USDA.</p>
+                    ) : (
+                      <ul className="space-y-1">
+                        {usdaRows.map((s) => (
+                          <AddFoodSearchResultRow
+                            key={`usda-${s.id}`}
+                            row={s}
+                            gender={gender}
+                            quickAddId={quickAddId}
+                            onOpenPick={openPickModal}
+                            onQuickAdd={quickAddRowToJournal}
+                          />
+                        ))}
+                      </ul>
+                    )}
+                  </div>
+
+                  <div className="border-t border-[var(--border-cherry-soft)]/80 pt-3">
+                    <p className="px-2 pb-0.5 text-sm font-extrabold text-[var(--cherry)]">
+                      Open Food Facts
+                    </p>
+                    <p className="px-2 pb-2 text-[11px] font-medium text-[var(--stem)]/60">
+                      מאגר עולמי — מוצרים וברקוד
+                    </p>
+                    {searchPanelSync && worldSearchLoading && worldRows.length === 0 ? (
+                      <div className="flex items-center gap-2 px-2 py-2 text-sm text-[var(--stem)]" role="status">
+                        <span
+                          className="inline-block size-4 animate-spin rounded-full border-2 border-[var(--border-cherry-soft)] border-t-[var(--cherry)]"
+                          aria-hidden
+                        />
+                        טוען…
+                      </div>
+                    ) : worldRows.length === 0 ? (
+                      <p className="px-2 py-1 text-xs text-[var(--cherry)]/65">אין תוצאות במאגר העולמי.</p>
+                    ) : (
+                      <ul className="space-y-1">
+                        {worldRows.map((s) => (
+                          <AddFoodSearchResultRow
+                            key={`off-${s.id}`}
+                            row={s}
+                            gender={gender}
+                            quickAddId={quickAddId}
+                            onOpenPick={openPickModal}
+                            onQuickAdd={quickAddRowToJournal}
+                          />
+                        ))}
+                      </ul>
+                    )}
+                  </div>
                 </div>
               ) : (
                 <p className="py-8 text-center text-sm text-[var(--cherry)]/70">
@@ -1511,6 +1682,59 @@ export function AddFoodClient({
                 </p>
               )}
             </div>
+
+            {recentPicks.length > 0 && (
+              <div className="mt-3">
+                <p className="mb-2 text-sm font-extrabold text-[var(--cherry)]">
+                  נבחרו לאחרונה
+                </p>
+                <ul className="space-y-2">
+                  {recentPicks.map((r) => {
+                    const { qtyLine, kcal } = recentPickQtyAndKcal(r);
+                    const qk = `${r.source ?? "local"}-${r.id}`;
+                    return (
+                      <li
+                        key={`${r.id}-${r.name}`}
+                        className="flex items-stretch gap-2 rounded-xl border-2 border-[var(--border-cherry-soft)] bg-white shadow-sm"
+                      >
+                        <button
+                          type="button"
+                          className="flex min-w-0 flex-1 flex-col items-stretch gap-0.5 px-3 py-2.5 text-start transition hover:bg-[var(--cherry-muted)]/45"
+                          onClick={() => openPickModalFromRow(r)}
+                        >
+                          <span className="text-sm font-extrabold leading-snug text-[var(--stem)]">
+                            {r.name}
+                          </span>
+                          <span className="text-xs font-semibold tabular-nums text-[var(--stem)]/75">
+                            {qtyLine} · {kcal} קק״ל
+                          </span>
+                        </button>
+                        <button
+                          type="button"
+                          className={`flex w-[3.25rem] shrink-0 flex-col items-center justify-center border-s-2 border-[var(--border-cherry-soft)]/60 bg-[var(--cherry-muted)]/25 transition hover:bg-[var(--cherry-muted)]/55 active:scale-[0.98] ${
+                            quickAddId === qk ? "ring-2 ring-inset ring-[var(--stem)]" : ""
+                          }`}
+                          title={gf(gender, "הוספה מהירה ליומן", "הוספה מהירה ליומן")}
+                          aria-label={gf(gender, "הוספה מהירה ליומן", "הוספה מהירה ליומן")}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            quickAddRowToJournal(r);
+                          }}
+                        >
+                          {quickAddId === qk ? (
+                            <span className="text-lg font-extrabold text-[var(--cherry)]" aria-hidden>
+                              ✓
+                            </span>
+                          ) : (
+                            <IconPlusCircle className="h-6 w-6 text-[var(--cherry)]" />
+                          )}
+                        </button>
+                      </li>
+                    );
+                  })}
+                </ul>
+              </div>
+            )}
           </>
         )}
 

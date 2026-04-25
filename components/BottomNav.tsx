@@ -297,7 +297,7 @@ export function BottomNav() {
                 id={subtitleId}
                 className="mt-2 text-center text-sm leading-relaxed text-[var(--text)]/75"
               >
-                חיפוש במאגרים שלך ובמאגר עולמי, עם מסך מלא שנוח לחיפוש.
+                חיפוש במאגר אינטליגנציה קלורית, במילון האישי ובמאגר עולמי, עם מסך מלא שנוח לחיפוש.
               </p>
               <p className="mt-2 text-center text-xs font-medium text-[var(--text)]/55">
                 נרשם לתאריך:{" "}

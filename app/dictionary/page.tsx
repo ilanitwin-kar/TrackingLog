@@ -671,8 +671,8 @@ export default function DictionaryPage() {
         <p className="mt-1 text-[11px] font-medium text-[var(--stem)]/65">
           {gf(
             gender,
-            "אותו שדה: למעלה המילון האישי, למטה מאגר פנימי + Open Food Facts (כמו בחיפוש המאוחד בבית).",
-            "אותו שדה: למעלה המילון האישי, למטה מאגר פנימי + Open Food Facts (כמו בחיפוש המאוחד בבית)."
+            "אותו שדה: למעלה המילון האישי, למטה מאגר אינטליגנציה קלורית ו־Open Food Facts (כמו בחיפוש המאוחד בבית).",
+            "אותו שדה: למעלה המילון האישי, למטה מאגר אינטליגנציה קלורית ו־Open Food Facts (כמו בחיפוש המאוחד בבית)."
           )}
         </p>
       </label>
@@ -736,14 +736,14 @@ export default function DictionaryPage() {
               : saved.length === 0 && rawQ.trim().length >= 2
                 ? gf(
                     gender,
-                    "המילון האישי עדיין ריק — בדקי למטה במאגר הפנימי, או שמרי מזון מהיומן/ממגלה המזונות.",
-                    "המילון האישי עדיין ריק — בדוק למטה במאגר הפנימי, או שמור מזון מהיומן/ממגלה המזונות."
+                    "המילון האישי עדיין ריק — בדקי למטה במאגר אינטליגנציה קלורית, או שמרי מזון מהיומן/ממגלה המזונות.",
+                    "המילון האישי עדיין ריק — בדוק למטה במאגר אינטליגנציה קלורית, או שמור מזון מהיומן/ממגלה המזונות."
                   )
               : rawQ.trim().length >= 2
                 ? gf(
                     gender,
-                    "אין התאמה במילון האישי לחיפוש הזה — בדקי למטה במאגר הפנימי.",
-                    "אין התאמה במילון האישי לחיפוש הזה — בדוק למטה במאגר הפנימי."
+                    "אין התאמה במילון האישי לחיפוש הזה — בדקי למטה במאגר אינטליגנציה קלורית.",
+                    "אין התאמה במילון האישי לחיפוש הזה — בדוק למטה במאגר אינטליגנציה קלורית."
                   )
                 : gf(
                     gender,
@@ -970,39 +970,43 @@ export default function DictionaryPage() {
         animate={{ opacity: 1, y: 0 }}
         transition={{ delay: 0.03 }}
       >
-        <h2 className="panel-title-cherry mb-1 text-lg">מחוץ למילון (פנימי + עולמי)</h2>
+        <h2 className="panel-title-cherry mb-1 text-lg">מחוץ למילון (אינטליגנציה קלורית + עולמי)</h2>
         <p className="mb-3 text-xs text-[var(--stem)]/65">
           {gf(
             gender,
-            "מאגר פנימי מאומת ו־Open Food Facts — אותו חיפוש כמו בשדה החיפוש למעלה.",
-            "מאגר פנימי מאומת ו־Open Food Facts — אותו חיפוש כמו בשדה החיפוש למעלה."
+            "מאגר אינטליגנציה קלורית מאומת ו־Open Food Facts — אותו חיפוש כמו בשדה החיפוש למעלה.",
+            "מאגר אינטליגנציה קלורית מאומת ו־Open Food Facts — אותו חיפוש כמו בשדה החיפוש למעלה."
           )}
         </p>
         {debouncedQ.length < 2 ? (
           <p className="text-sm text-[var(--text)]/85">
             {gf(
               gender,
-              "כשמקלידים לפחות 2 תווים בשדה למעלה — יוצגו כאן תוצאות מהמאגר הפנימי ומהעולם.",
-              "כשמקלידים לפחות 2 תווים בשדה למעלה — יוצגו כאן תוצאות מהמאגר הפנימי ומהעולם."
+              "כשמקלידים לפחות 2 תווים בשדה למעלה — יוצגו כאן תוצאות ממאגר אינטליגנציה קלורית ומהעולם.",
+              "כשמקלידים לפחות 2 תווים בשדה למעלה — יוצגו כאן תוצאות ממאגר אינטליגנציה קלורית ומהעולם."
             )}
           </p>
         ) : extSearchLoading ? (
           <p className="text-center text-sm text-[var(--cherry)]/80">
-            {gf(gender, "טוען מאגר פנימי ו־Open Food Facts…", "טוען מאגר פנימי ו־Open Food Facts…")}
+            {gf(
+              gender,
+              "טוען מאגר אינטליגנציה קלורית ו־Open Food Facts…",
+              "טוען מאגר אינטליגנציה קלורית ו־Open Food Facts…"
+            )}
           </p>
         ) : explorerRows.length === 0 && offRows.length === 0 ? (
           <p className="text-sm text-[var(--text)]/85">
             {gf(
               gender,
-              "לא נמצאו פריטים במאגר הפנימי או ב־Open Food Facts לחיפוש הזה.",
-              "לא נמצאו פריטים במאגר הפנימי או ב־Open Food Facts לחיפוש הזה."
+              "לא נמצאו פריטים במאגר אינטליגנציה קלורית או ב־Open Food Facts לחיפוש הזה.",
+              "לא נמצאו פריטים במאגר אינטליגנציה קלורית או ב־Open Food Facts לחיפוש הזה."
             )}
           </p>
         ) : (
           <>
             {explorerRows.length > 0 && (
               <>
-                <h3 className="mb-2 text-sm font-extrabold text-[var(--stem)]">מאגר פנימי</h3>
+                <h3 className="mb-2 text-sm font-extrabold text-[var(--stem)]">מאגר אינטליגנציה קלורית</h3>
                 <ul className="mb-5 space-y-2">
                   {(explorerHits ? explorerHits.map((h) => h.item) : explorerRows).map((row) => {
                     void explorerUiTick;
@@ -1018,7 +1022,7 @@ export default function DictionaryPage() {
                           <p className="flex flex-wrap items-center gap-1.5 font-semibold text-[var(--stem)]">
                             <span
                               className="inline-flex shrink-0 items-center gap-1"
-                              title="מאגר פנימי מאומת"
+                              title="מאגר אינטליגנציה קלורית מאומת"
                             >
                               <IconVerified className="h-4 w-4 text-[#d4a017]" />
                               <span className="text-[10px] font-bold text-[var(--stem)]/90" aria-hidden>

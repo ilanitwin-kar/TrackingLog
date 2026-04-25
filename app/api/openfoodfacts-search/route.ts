@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 
 export const dynamic = "force-dynamic";
 
+/** מזהה לבקשות ל־Open Food Facts (נדרש כדי שלא ייחסמו בקשות). */
 const USER_AGENT = "CalorieJournal/1.0 (contact via app maintainer)";
 
 type OffNutriments = Record<string, unknown>;
@@ -33,11 +34,48 @@ function kcalPer100g(n: OffNutriments): number | null {
   return null;
 }
 
-function parseProductsPayload(data: unknown): unknown[] {
-  if (typeof data !== "object" || data === null) return [];
+/** מנקה תווים שעלולים לשבור את מנתח Lucene של Search-a-licious. */
+function sanitizeSearchQuery(q: string): string {
+  return q
+    .replace(/["\\]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, 120);
+}
+
+function parseSearchALiciousHits(data: unknown): unknown[] | null {
+  if (typeof data !== "object" || data === null) return null;
   const d = data as Record<string, unknown>;
-  const products = d.products;
-  return Array.isArray(products) ? products : [];
+  if (Array.isArray(d.errors) && d.errors.length > 0) return null;
+  const hits = d.hits;
+  if (!Array.isArray(hits)) return null;
+  return hits;
+}
+
+function pickOffDisplayName(p: Record<string, unknown>): string {
+  const tryField = (v: unknown): string => {
+    if (typeof v === "string") {
+      const t = v.trim();
+      if (t) return t;
+    }
+    if (typeof v === "object" && v !== null && !Array.isArray(v)) {
+      const o = v as Record<string, unknown>;
+      for (const lang of ["he", "iw", "en"]) {
+        const x = o[lang];
+        if (typeof x === "string" && x.trim()) return x.trim();
+      }
+      for (const x of Object.values(o)) {
+        if (typeof x === "string" && x.trim()) return x.trim();
+      }
+    }
+    return "";
+  };
+
+  for (const key of ["product_name", "product_name_en", "generic_name"] as const) {
+    const t = tryField(p[key]);
+    if (t) return t;
+  }
+  return "";
 }
 
 function mapProductsToItems(products: unknown[]): Array<{
@@ -60,9 +98,7 @@ function mapProductsToItems(products: unknown[]): Array<{
   for (const raw of products) {
     if (typeof raw !== "object" || raw === null) continue;
     const p = raw as Record<string, unknown>;
-    const name = String(
-      p.product_name ?? p.product_name_en ?? p.generic_name ?? ""
-    ).trim();
+    const name = pickOffDisplayName(p);
     if (!name) continue;
     const nut = (p.nutriments ?? {}) as OffNutriments;
     const kcal = kcalPer100g(nut);
@@ -104,6 +140,32 @@ async function fetchSearchJson(url: string): Promise<unknown | null> {
   }
 }
 
+/**
+ * חיפוש טקסט ב־Open Food Facts דרך Search-a-licious (Elasticsearch).
+ * ה־API הישן ‎/api/v2/search?search_terms=…‎ לא מיישם חיפוש טקסט — מחזיר דף כמעט אקראי
+ * (אותו count ~מיליונים ותוצאות לא קשורות). ראו מסמכי OFF ו־search.openfoodfacts.org/docs
+ */
+async function fetchOpenFoodFactsTextSearch(
+  q: string,
+  pageSize: number
+): Promise<unknown[] | null> {
+  const safe = sanitizeSearchQuery(q);
+  if (safe.length < 2) return null;
+
+  const params = new URLSearchParams({
+    q: safe,
+    page_size: String(pageSize),
+    /** עברית + אנגלית — שמות מוצרים מקומיים ומילוליים ביחד */
+    langs: "he,en",
+    fields: "code,product_name,product_name_en,generic_name,nutriments",
+  });
+
+  const url = `https://search.openfoodfacts.org/search?${params.toString()}`;
+  const data = await fetchSearchJson(url);
+  if (data == null) return null;
+  return parseSearchALiciousHits(data);
+}
+
 export async function GET(req: Request) {
   const { searchParams } = new URL(req.url);
   const q = (searchParams.get("q") ?? "").trim();
@@ -116,27 +178,9 @@ export async function GET(req: Request) {
     Math.max(4, Number.isFinite(pageSizeRaw) ? pageSizeRaw : 50)
   );
 
-  const enc = encodeURIComponent(q);
-  // Prefer Israel products when possible (as requested).
-  // OFF supports both CGI search and v2. We try v2 first with countries_tags.
-  const israelTag = encodeURIComponent("en:israel");
-
-  const tryUrls = [
-    `https://world.openfoodfacts.org/api/v2/search?search_terms=${enc}&page_size=${pageSize}&countries_tags=${israelTag}&fields=code,product_name,product_name_en,generic_name,nutriments`,
-    `https://world.openfoodfacts.net/api/v2/search?search_terms=${enc}&page_size=${pageSize}&countries_tags=${israelTag}&fields=code,product_name,product_name_en,generic_name,nutriments`,
-    // Fallback to general search if Israel-filtered yields no results.
-    `https://world.openfoodfacts.org/api/v2/search?search_terms=${enc}&page_size=${pageSize}&fields=code,product_name,product_name_en,generic_name,nutriments`,
-    `https://world.openfoodfacts.net/api/v2/search?search_terms=${enc}&page_size=${pageSize}&fields=code,product_name,product_name_en,generic_name,nutriments`,
-    // Legacy CGI endpoints (some deployments are flaky).
-    `https://world.openfoodfacts.org/cgi/search.pl?action=process&search_terms=${enc}&json=true&page_size=${pageSize}&sort_by=unique_scans_n`,
-    `https://world.openfoodfacts.net/cgi/search.pl?action=process&search_terms=${enc}&json=true&page_size=${pageSize}&sort_by=unique_scans_n`,
-  ];
-
-  for (const url of tryUrls) {
-    const data = await fetchSearchJson(url);
-    if (data == null) continue;
-    const products = parseProductsPayload(data);
-    const items = mapProductsToItems(products);
+  const hits = await fetchOpenFoodFactsTextSearch(q, pageSize);
+  if (hits && hits.length > 0) {
+    const items = mapProductsToItems(hits);
     if (items.length > 0) {
       return NextResponse.json({ items });
     }

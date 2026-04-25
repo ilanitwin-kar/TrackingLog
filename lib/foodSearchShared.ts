@@ -8,7 +8,7 @@ export type HomeSuggestRow = {
   protein?: number;
   fat?: number;
   carbs?: number;
-  source?: "local" | "openFoodFacts" | "ai";
+  source?: "local" | "openFoodFacts" | "ai" | "israelMoH" | "usda";
 };
 
 /** Lower = better. Tier: word-start → after-space substring → any partial. */

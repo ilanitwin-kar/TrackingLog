@@ -627,7 +627,11 @@ export default function PlannerPage() {
               value={q}
               onChange={(e) => setQ(e.target.value)}
               className="input-luxury-search w-full"
-              placeholder={gf(gender, "חפשי במילון/מאגר/עולמי…", "חפש במילון/מאגר/עולמי…")}
+              placeholder={gf(
+                gender,
+                "חפשי במילון / מאגר אינטליגנציה קלורית / עולמי…",
+                "חפש במילון / מאגר אינטליגנציה קלורית / עולמי…"
+              )}
               inputMode="search"
               enterKeyHint="search"
               autoComplete="off"

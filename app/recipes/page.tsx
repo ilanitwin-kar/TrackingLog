@@ -439,7 +439,9 @@ export default function RecipesPage() {
         </div>
 
         <div className="mt-4 rounded-2xl border-2 border-[var(--border-cherry-soft)] bg-white p-3">
-          <p className="text-sm font-extrabold text-[var(--stem)]">חיפוש מרכיב (פנימי → עולמי → AI)</p>
+          <p className="text-sm font-extrabold text-[var(--stem)]">
+            חיפוש מרכיב (מאגר אינטליגנציה קלורית → עולמי → AI)
+          </p>
           <input
             ref={qRef}
             value={q}

@@ -293,7 +293,7 @@ export default function ExplorerPage() {
                     <p className="flex flex-wrap items-center gap-1.5 font-semibold text-[var(--stem)]">
                       <span
                         className="inline-flex shrink-0 items-center gap-1"
-                        title="מאומת מהמאגר המקומי"
+                        title="מאומת ממאגר אינטליגנציה קלורית"
                       >
                         <IconVerified className="h-4 w-4 text-[#d4a017]" />
                         <span className="text-[10px] font-bold text-[var(--stem)]/90">
