@@ -42,36 +42,29 @@ export function AppChrome({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     if (
-      pathname === "/add-food" ||
-      pathname === "/add-food-ai" ||
       pathname === "/welcome" ||
       pathname === "/pick-theme" ||
-      pathname === "/wizard"
+      pathname === "/wizard" ||
+      pathname === "/tdee"
     ) {
       setHideNav(true);
       return;
     }
-    if (pathname !== "/tdee") {
-      setHideNav(false);
-      return;
-    }
-    setHideNav(!loadProfile().onboardingComplete);
+    setHideNav(false);
   }, [pathname]);
 
   useEffect(() => {
     const sync = () => {
       if (
-        pathname === "/add-food" ||
-        pathname === "/add-food-ai" ||
         pathname === "/welcome" ||
         pathname === "/pick-theme" ||
-        pathname === "/wizard"
+        pathname === "/wizard" ||
+        pathname === "/tdee"
       ) {
         setHideNav(true);
         return;
       }
-      if (pathname !== "/tdee") return;
-      setHideNav(!loadProfile().onboardingComplete);
+      setHideNav(false);
     };
     window.addEventListener("cj-profile-updated", sync);
     return () => window.removeEventListener("cj-profile-updated", sync);

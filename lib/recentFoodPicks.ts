@@ -44,7 +44,16 @@ export function loadRecentFoodPicks(): HomeSuggestRow[] {
           protein: typeof r.protein === "number" ? r.protein : undefined,
           fat: typeof r.fat === "number" ? r.fat : undefined,
           carbs: typeof r.carbs === "number" ? r.carbs : undefined,
-          source: r.source === "openFoodFacts" ? "openFoodFacts" : "local",
+          source:
+            r.source === "openFoodFacts"
+              ? "openFoodFacts"
+              : r.source === "israelMoH"
+                ? "israelMoH"
+                : r.source === "usda"
+                  ? "usda"
+                  : r.source === "ai"
+                    ? "ai"
+                    : "local",
         })
       );
     }

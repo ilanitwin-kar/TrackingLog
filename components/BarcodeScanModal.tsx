@@ -93,7 +93,7 @@ export function BarcodeScanModal({
                 result?: { name: string } | null;
               };
               if (!res.ok || !data.result?.name) {
-                setErrorMessage("לא נמצא במאגר המקומי");
+                setErrorMessage("לא נמצא במאגר אינטליגנציה קלורית");
                 setPhase("error");
                 return;
               }
@@ -189,7 +189,7 @@ export function BarcodeScanModal({
                   aria-hidden
                 />
                 <p className="text-sm font-medium text-[var(--cherry)]">
-                  מחפשת במאגר המקומי…
+                  מחפשת במאגר אינטליגנציה קלורית…
                 </p>
               </div>
             )}

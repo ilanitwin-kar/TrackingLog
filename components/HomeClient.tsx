@@ -409,6 +409,32 @@ type WeatherLocalStorageV1 = {
   data?: Partial<WeatherClientState> & Record<string, unknown>;
 };
 
+const WEATHER_BACKGROUND_REFRESH_AFTER_MS = 60 * 60 * 1000;
+
+function parseWeatherCachePayload(
+  raw: string
+): { ts: number; state: WeatherClientState } | null {
+  try {
+    const parsed = JSON.parse(raw) as WeatherLocalStorageV1;
+    const ts = Number(parsed?.ts);
+    if (!Number.isFinite(ts)) return null;
+    const d = parsed?.data;
+    if (!d || typeof d !== "object") return null;
+    if (typeof d.tempC !== "number") return null;
+    return {
+      ts,
+      state: {
+        tempC: d.tempC,
+        description: String(d.description ?? ""),
+        isRain: Boolean(d.isRain),
+        isHot: Boolean(d.isHot),
+      },
+    };
+  } catch {
+    return null;
+  }
+}
+
 export function HomeClient({ mode = "dashboard" }: { mode?: "dashboard" | "journal" }) {
   const gender = loadProfile().gender;
   const appVariant = useAppVariant();
@@ -643,24 +669,73 @@ export function HomeClient({ mode = "dashboard" }: { mode?: "dashboard" | "journ
 
   useEffect(() => {
     if (typeof window === "undefined") return;
-    try {
-      const raw = localStorage.getItem("cj_weather_v1");
-      if (!raw) return;
-      const parsed = JSON.parse(raw) as WeatherLocalStorageV1;
-      const ts = Number(parsed?.ts);
-      if (!Number.isFinite(ts) || Date.now() - ts > 60 * 60 * 1000) return;
-      const d = parsed?.data;
-      if (!d || typeof d !== "object") return;
-      if (typeof d.tempC !== "number") return;
-      setWeather({
-        tempC: d.tempC,
-        description: String(d.description ?? ""),
-        isRain: Boolean(d.isRain),
-        isHot: Boolean(d.isHot),
-      });
-    } catch {
-      /* ignore */
-    }
+    const raw = localStorage.getItem("cj_weather_v1");
+    if (!raw) return;
+    const parsed = parseWeatherCachePayload(raw);
+    if (!parsed) return;
+    setWeather(parsed.state);
+  }, []);
+
+  /** ריענון שקט כשהמטמון ישן — רק אם הרשאת מיקום כבר granted (בלי חלון הרשאה באמצע הבית). */
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const raw = localStorage.getItem("cj_weather_v1");
+    if (!raw) return;
+    const parsed = parseWeatherCachePayload(raw);
+    if (!parsed) return;
+    if (Date.now() - parsed.ts <= WEATHER_BACKGROUND_REFRESH_AFTER_MS) return;
+    if (!("geolocation" in navigator) || !window.isSecureContext) return;
+
+    let cancelled = false;
+    (async () => {
+      try {
+        const permissionState =
+          "permissions" in navigator && navigator.permissions?.query
+            ? await navigator.permissions
+                .query({ name: "geolocation" as PermissionName })
+                .then((x) => x.state)
+                .catch(() => "" as const)
+            : "";
+        if (permissionState !== "granted") return;
+
+        const pos = await new Promise<GeolocationPosition>((resolve, reject) => {
+          navigator.geolocation.getCurrentPosition(resolve, reject, {
+            enableHighAccuracy: false,
+            timeout: 15_000,
+            maximumAge: 5 * 60 * 1000,
+          });
+        });
+        if (cancelled) return;
+        const res = await fetch(
+          `/api/weather?lat=${encodeURIComponent(pos.coords.latitude)}&lon=${encodeURIComponent(pos.coords.longitude)}`
+        );
+        const data = (await res.json()) as {
+          ok?: boolean;
+          tempC?: number;
+          description?: string;
+          isRain?: boolean;
+          isHot?: boolean;
+        };
+        if (!data?.ok || typeof data.tempC !== "number") return;
+        if (cancelled) return;
+        const next: WeatherClientState = {
+          tempC: data.tempC,
+          description: String(data.description ?? ""),
+          isRain: Boolean(data.isRain),
+          isHot: Boolean(data.isHot),
+        };
+        setWeather(next);
+        localStorage.setItem(
+          "cj_weather_v1",
+          JSON.stringify({ ts: Date.now(), data: next })
+        );
+      } catch {
+        /* ignore */
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   const dailyMotivationLineWithWeather = useMemo(() => {
@@ -1922,7 +1997,7 @@ export function HomeClient({ mode = "dashboard" }: { mode?: "dashboard" | "journ
                             {item.verified && (
                               <span
                                 className="inline-flex shrink-0 items-center gap-1"
-                                title="מאומת מהמאגר"
+                                title="מאומת ממאגר אינטליגנציה קלורית"
                               >
                                 <IconVerified className="h-4 w-4 text-[var(--stem)]" />
                                 <span className="text-[10px] font-bold text-[var(--text)]/80">

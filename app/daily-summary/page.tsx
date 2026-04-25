@@ -6,8 +6,19 @@ import { Pie, PieChart, ResponsiveContainer, Cell } from "recharts";
 import { BackToMenuButton } from "@/components/BackToMenuButton";
 import { InfoCard } from "@/components/InfoCard";
 import { dailyMacroTargetsGramsForProfile } from "@/lib/macroTargets";
-import { getTodayKey } from "@/lib/dateKey";
-import { getEntriesForDate, loadProfile, type LogEntry } from "@/lib/storage";
+import {
+  addDaysToDateKey,
+  getCalendarWeekDateKeys,
+  getTodayKey,
+} from "@/lib/dateKey";
+import {
+  getEntriesForDate,
+  getJourneyStartDateKey,
+  loadDayLogs,
+  loadProfile,
+  type LogEntry,
+} from "@/lib/storage";
+import { gf } from "@/lib/hebrewGenderUi";
 import { dailyCalorieTarget } from "@/lib/tdee";
 
 function clampPct(n: number): number {
@@ -19,10 +30,52 @@ function sum(entries: LogEntry[], key: "proteinG" | "carbsG" | "fatG"): number {
   return entries.reduce((s, e) => s + (typeof e[key] === "number" ? (e[key] as number) : 0), 0);
 }
 
+function maxDateKey(a: string, b: string): string {
+  return a >= b ? a : b;
+}
+
+function getMonthRangeKeys(todayKey: string): { startKey: string; endKey: string; keys: string[] } {
+  const m = todayKey.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!m) return { startKey: todayKey, endKey: todayKey, keys: [todayKey] };
+  const year = Number(m[1]);
+  const month = Number(m[2]); // 1-12
+  const startKey = `${m[1]}-${m[2]}-01`;
+  const lastDay = new Date(year, month, 0).getDate(); // last day of this month
+  const endKey = `${m[1]}-${m[2]}-${String(lastDay).padStart(2, "0")}`;
+  const keys: string[] = [];
+  let k = startKey;
+  for (let i = 0; i < 40; i++) {
+    keys.push(k);
+    if (k === endKey) break;
+    k = addDaysToDateKey(k, 1);
+  }
+  return { startKey, endKey, keys };
+}
+
+function formatHeMonthTitle(dateKey: string): string {
+  const d = new Date(`${dateKey}T12:00:00`);
+  return d.toLocaleDateString("he-IL", { month: "long", year: "numeric" });
+}
+
+type ScopedPeriod = {
+  label: string;
+  title: string;
+  totalDays: number;
+  totalTarget: number;
+  totalConsumed: number;
+  remaining: number;
+  over: number;
+  days: { dateKey: string; consumed: number; diff: number }[];
+  keys?: string[];
+  pastKeys?: string[];
+};
+
 export default function DailySummaryPage() {
   const profile = loadProfile();
   const gender = profile.gender;
   const [rev, setRev] = useState(0);
+  const [scope, setScope] = useState<"day" | "week" | "month">("day");
+  const brandName = gender === "male" ? "Blue" : "Cherry";
 
   const dateKey = getTodayKey();
 
@@ -45,12 +98,103 @@ export default function DailySummaryPage() {
 
   const computedTarget: number = dailyCalorieTarget(profile);
 
+  const dayLogs = useMemo(() => {
+    void rev;
+    return loadDayLogs();
+  }, [rev]);
+
+  const weekKeys = useMemo(() => getCalendarWeekDateKeys(dateKey), [dateKey]);
+  const monthRange = useMemo(() => getMonthRangeKeys(dateKey), [dateKey]);
+  const monthKeys = monthRange.keys;
+  const journeyStartKey = useMemo(() => getJourneyStartDateKey(), [rev]);
+
   const consumedKcal = useMemo(
     () => entries.reduce((s, e) => s + e.calories, 0),
     [entries]
   );
   const remaining = Math.max(0, computedTarget - consumedKcal);
   const over = Math.max(0, consumedKcal - computedTarget);
+
+  const scoped: ScopedPeriod = useMemo(() => {
+    if (scope === "day") {
+      return {
+        label: "היום",
+        title: "מאזן היום",
+        totalDays: 1,
+        totalTarget: computedTarget,
+        totalConsumed: consumedKcal,
+        remaining: Math.max(0, computedTarget - consumedKcal),
+        over: Math.max(0, consumedKcal - computedTarget),
+        days: [{ dateKey, consumed: consumedKcal, diff: computedTarget - consumedKcal }],
+      };
+    }
+
+    const baseKeys =
+      scope === "week" ? weekKeys : monthKeys;
+    const periodTitle =
+      scope === "week"
+        ? "מאזן השבוע (א׳–ש׳)"
+        : `מאזן החודש (${formatHeMonthTitle(dateKey)})`;
+    const startKey = journeyStartKey
+      ? maxDateKey(journeyStartKey, baseKeys[0] ?? dateKey)
+      : (baseKeys[0] ?? dateKey);
+    const keys = baseKeys.filter((k) => k >= startKey);
+    const pastKeys = keys.filter((k) => k <= dateKey);
+
+    const days = keys.map((k) => {
+      const list = dayLogs[k] ?? [];
+      const consumed = list.reduce((s, e) => s + e.calories, 0);
+      const diff = computedTarget - consumed;
+      return { dateKey: k, consumed, diff };
+    });
+    const totalConsumed = pastKeys.reduce((s, k) => {
+      const list = dayLogs[k] ?? [];
+      return s + list.reduce((ss, e) => ss + e.calories, 0);
+    }, 0);
+    const totalTarget = computedTarget * keys.length;
+    const remaining = Math.max(0, totalTarget - totalConsumed);
+    const over = Math.max(0, totalConsumed - totalTarget);
+
+    return {
+      label: scope === "week" ? "השבוע" : "החודש",
+      title: periodTitle,
+      totalDays: keys.length,
+      totalTarget,
+      totalConsumed,
+      remaining,
+      over,
+      days,
+      keys,
+      pastKeys,
+    };
+  }, [
+    scope,
+    computedTarget,
+    consumedKcal,
+    dateKey,
+    weekKeys,
+    monthKeys,
+    dayLogs,
+    journeyStartKey,
+  ]);
+
+  function fixSuggestion(remainingKcal: number, overKcal: number, periodDays: number): string {
+    if (overKcal <= 0) {
+      return gf(
+        gender,
+        "את מאוזנת מול היעד — המשיכי ככה. אם בא לך, נסי לשמור על עוד יום “סגור” אחד בתקופה.",
+        "אתה מאוזן מול היעד — המשך ככה. אם בא לך, נסה לשמור על עוד יום “סגור” אחד בתקופה."
+      );
+    }
+    const over = Math.abs(Math.round(overKcal));
+    const divisor = Math.max(2, Math.min(4, periodDays));
+    const per = Math.ceil(over / divisor);
+    return gf(
+      gender,
+      `את מעל היעד בכ־${over.toLocaleString("he-IL")} קק״ל. כדי לאזן, מספיק לקזז כ־${per.toLocaleString("he-IL")} קק״ל ב־${divisor} ימים הקרובים (או לפזר איך שנוח).`,
+      `אתה מעל היעד בכ־${over.toLocaleString("he-IL")} קק״ל. כדי לאזן, מספיק לקזז כ־${per.toLocaleString("he-IL")} קק״ל ב־${divisor} ימים הקרובים (או לפזר איך שנוח).`
+    );
+  }
 
   const macroGoals = useMemo(
     () =>
@@ -81,6 +225,35 @@ export default function DailySummaryPage() {
 
   // colors are driven by CSS vars (Cherry/Blueberry)
 
+  const periodMacros = useMemo(() => {
+    if (scope === "day") return null;
+    const pastKeys = scoped.pastKeys;
+    if (!pastKeys || pastKeys.length < 1) return null;
+
+    let p = 0;
+    let c = 0;
+    let f = 0;
+    for (const k of pastKeys) {
+      const list = dayLogs[k] ?? [];
+      for (const e of list) {
+        if (typeof e.proteinG === "number") p += e.proteinG;
+        if (typeof e.carbsG === "number") c += e.carbsG;
+        if (typeof e.fatG === "number") f += e.fatG;
+      }
+    }
+    const totalDays = scoped.totalDays;
+    const goals = {
+      proteinG: macroGoals.proteinG * totalDays,
+      carbsG: macroGoals.carbsG * totalDays,
+      fatG: macroGoals.fatG * totalDays,
+    };
+    return {
+      protein: { val: p, goal: goals.proteinG },
+      carbs: { val: c, goal: goals.carbsG },
+      fat: { val: f, goal: goals.fatG },
+    };
+  }, [scope, scoped, dayLogs, macroGoals]);
+
   const proteinTop = useMemo(() => {
     return [...entries]
       .filter((e) => typeof e.proteinG === "number" && (e.proteinG ?? 0) > 0)
@@ -99,19 +272,47 @@ export default function DailySummaryPage() {
         initial={{ opacity: 0, y: -8 }}
         animate={{ opacity: 1, y: 0 }}
       >
-        סיכום יומי
+        סיכום
       </motion.h1>
+
+      <div className="mb-5 flex flex-wrap justify-center gap-2">
+        {(
+          [
+            ["day", "יום"],
+            ["week", "שבוע"],
+            ["month", "חודש"],
+          ] as const
+        ).map(([id, label]) => {
+          const on = scope === id;
+          return (
+            <button
+              key={id}
+              type="button"
+              className={`rounded-full border-2 px-4 py-2 text-xs font-extrabold transition ${
+                on
+                  ? "border-[var(--border-cherry-soft)] bg-cherry-faint text-[var(--cherry)]"
+                  : "border-[var(--border-cherry-soft)] bg-white text-[var(--stem)]/85 hover:bg-[var(--cherry-muted)]"
+              }`}
+              onClick={() => setScope(id)}
+              aria-pressed={on}
+            >
+              {label}
+            </button>
+          );
+        })}
+      </div>
 
       <motion.div initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }}>
         <InfoCard
           gender={gender}
           icon={gender === "male" ? "🫐" : "🍒"}
-          title="Cherry / Blue — הסיכום שלך"
+          title={`${brandName} — הסיכום שלך`}
           body="גרף הטבעת מציג צריכה מול יעד, ופסי המאקרו מתעדכנים אוטומטית לפי מה שהזנת ביומן."
           className="mb-5"
         />
       </motion.div>
 
+      {scope === "day" ? (
       <motion.section
         className="glass-panel mb-5 p-4"
         initial={{ opacity: 0, y: 8 }}
@@ -160,16 +361,136 @@ export default function DailySummaryPage() {
           </div>
         </div>
       </motion.section>
+      ) : null}
 
-      <motion.section
-        className="glass-panel mb-5 space-y-3 p-4"
-        initial={{ opacity: 0, y: 8 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 0.03 }}
-      >
-        <p className="text-center text-sm font-extrabold text-[var(--cherry)]">
-          מאקרו היום
-        </p>
+      {scope !== "day" ? (
+        <motion.section
+          className="glass-panel mb-5 p-4"
+          initial={{ opacity: 0, y: 8 }}
+          animate={{ opacity: 1, y: 0 }}
+        >
+          <p className="text-center text-lg font-extrabold text-[var(--cherry)]">
+            {scoped.title}
+          </p>
+
+          <div className="mx-auto mt-4 w-full max-w-md">
+            <div className="relative mx-auto h-[240px] w-full">
+              <ResponsiveContainer width="100%" height="100%">
+                <PieChart>
+                  <Pie
+                    data={
+                      scoped.over > 0
+                        ? [
+                            { name: "נצרכו", value: scoped.totalTarget },
+                            { name: "חריגה", value: scoped.over },
+                          ]
+                        : [
+                            { name: "נצרכו", value: scoped.totalConsumed },
+                            { name: "נותרו", value: scoped.remaining },
+                          ]
+                    }
+                    dataKey="value"
+                    nameKey="name"
+                    innerRadius={72}
+                    outerRadius={100}
+                    paddingAngle={2}
+                    isAnimationActive
+                  >
+                    {(scoped.over > 0
+                      ? [
+                          { name: "נצרכו", value: scoped.totalTarget },
+                          { name: "חריגה", value: scoped.over },
+                        ]
+                      : [
+                          { name: "נצרכו", value: scoped.totalConsumed },
+                          { name: "נותרו", value: scoped.remaining },
+                        ]
+                    ).map((d, idx) => (
+                      <Cell
+                        key={`${d.name}-${idx}`}
+                        fill={
+                          d.name === "חריגה"
+                            ? "#b91c1c"
+                            : d.name === "נותרו"
+                              ? "rgba(15,23,42,0.08)"
+                              : "var(--cherry)"
+                        }
+                      />
+                    ))}
+                  </Pie>
+                </PieChart>
+              </ResponsiveContainer>
+              <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center text-center">
+                <p className="text-xs font-bold text-[var(--stem)]/75">
+                  {scoped.over > 0 ? "מעל היעד" : `נותרו בתקציב ${scoped.label}`}
+                </p>
+                <p className="mt-1 text-4xl font-black tabular-nums text-[var(--cherry)]">
+                  {scoped.over > 0 ? `+${Math.round(scoped.over)}` : Math.round(scoped.remaining)}
+                </p>
+                <p className="text-sm font-semibold text-[var(--stem)]">קק״ל</p>
+                <p className="mt-2 text-xs font-medium tabular-nums text-[var(--stem)]/80">
+                  {Math.round(scoped.totalConsumed).toLocaleString("he-IL")} /{" "}
+                  {Math.round(scoped.totalTarget).toLocaleString("he-IL")} קק״ל
+                </p>
+              </div>
+            </div>
+          </div>
+
+          {periodMacros ? (
+            <div className="mt-5 space-y-2">
+              <p className="text-center text-sm font-extrabold text-[var(--cherry)]">
+                מאקרו ל{scope === "week" ? "שבוע" : "חודש"}
+              </p>
+              {(
+                [
+                  ["protein", "חלבון", periodMacros.protein.val, periodMacros.protein.goal] as const,
+                  ["carbs", "פחמימות", periodMacros.carbs.val, periodMacros.carbs.goal] as const,
+                  ["fat", "שומן", periodMacros.fat.val, periodMacros.fat.goal] as const,
+                ] as const
+              ).map(([key, label, val, goal]) => {
+                const pct = clampPct(goal > 0 ? (val / goal) * 100 : 0);
+                return (
+                  <div
+                    key={key}
+                    className="w-full rounded-2xl border-2 border-[var(--border-cherry-soft)] bg-white/90 px-3 py-3 text-start shadow-sm"
+                  >
+                    <div className="flex items-center justify-between gap-2">
+                      <p className="text-sm font-bold text-[var(--stem)]">{label}</p>
+                      <p className="text-sm font-extrabold tabular-nums text-[var(--cherry)]">
+                        {Math.round(val)}ג / {Math.round(goal)}ג
+                      </p>
+                    </div>
+                    <div className="mt-2 h-2.5 overflow-hidden rounded-full bg-[#f0f0f0]">
+                      <div
+                        className="h-full rounded-full bg-[var(--cherry)] transition-[width] duration-500 ease-out"
+                        style={{ width: `${pct}%` }}
+                      />
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          ) : null}
+
+          <div className="mt-4 rounded-2xl border-2 border-[var(--border-cherry-soft)] bg-white/90 px-4 py-3 text-right shadow-sm">
+            <p className="text-sm font-extrabold text-[var(--cherry)]">מה עושים עכשיו?</p>
+            <p className="mt-1 text-sm leading-relaxed text-[var(--text)]/85">
+              {fixSuggestion(scoped.remaining, scoped.over, scoped.totalDays)}
+            </p>
+          </div>
+        </motion.section>
+      ) : null}
+
+      {scope === "day" ? (
+        <motion.section
+          className="glass-panel mb-5 space-y-3 p-4"
+          initial={{ opacity: 0, y: 8 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.03 }}
+        >
+          <p className="text-center text-sm font-extrabold text-[var(--cherry)]">
+            מאקרו היום
+          </p>
 
         {(
           [
@@ -233,7 +554,8 @@ export default function DailySummaryPage() {
             בקרוב: פירוט קליקבילי גם ל{focusMacro === "carbs" ? "פחמימות" : "שומן"}.
           </div>
         )}
-      </motion.section>
+        </motion.section>
+      ) : null}
 
       <motion.section
         className="glass-panel p-4"
@@ -242,31 +564,49 @@ export default function DailySummaryPage() {
         transition={{ delay: 0.05 }}
       >
         <p className="text-center text-sm font-extrabold text-[var(--cherry)]">
-          התחזית של {gender === "male" ? "Blue" : "Cherry"}
+          התחזית של {brandName}
         </p>
         <p className="mt-2 text-center text-sm leading-relaxed text-[var(--stem)]/85">
           {(() => {
             const hour = new Date().getHours();
-            const dayPct =
-              computedTarget > 0 ? Math.round((consumedKcal / computedTarget) * 100) : 0;
-            if (over > 0) {
+            const active =
+              scope === "day"
+                ? {
+                    label: "היום",
+                    target: computedTarget,
+                    consumed: consumedKcal,
+                    remaining,
+                    over,
+                  }
+                : {
+                    label: scoped.label,
+                    target: scoped.totalTarget,
+                    consumed: scoped.totalConsumed,
+                    remaining: Math.round(scoped.remaining),
+                    over: scoped.over,
+                  };
+            const pct =
+              active.target > 0 ? Math.round((active.consumed / active.target) * 100) : 0;
+            if (active.over > 0) {
               return gender === "male"
                 ? "נראה שהיום חרגנו קצת, לא נורא! מחר יום חדש של אוכמניות. אולי נסגור ערב קל יותר."
                 : "נראה שהיום חרגנו קצת, לא נורא! מחר יום חדש של דובדבנים. אולי נסגרי ערב קלילה יותר.";
             }
-            if (hour >= 18 && remaining > 0) {
+            if (hour >= 18 && active.remaining > 0) {
+              const periodText =
+                scope === "day" ? "" : scope === "week" ? " לשבוע הזה" : " לחודש הזה";
               return gender === "male"
-                ? `נשארו לך עוד ${remaining} קלוריות — ואתה מנהל את היום כמו מקצוען. 🫐`
-                : `נשאר לך עוד ${remaining} קלוריות — ואת מנהלת את היום כמו מקצוענית. 🍒`;
+                ? `נשארו לך עוד ${active.remaining} קלוריות${periodText} — ואתה מנהל את זה כמו מקצוען. 🫐`
+                : `נשאר לך עוד ${active.remaining} קלוריות${periodText} — ואת מנהלת את זה כמו מקצוענית. 🍒`;
             }
-            if (dayPct >= 80) {
+            if (pct >= 80) {
               return gender === "male"
                 ? `בקצב הזה אתה בדרך מדויקת ליעד היום. עוד קצת וסגרת יום חזק 🫐`
                 : `בקצב הזה את בדרך מדויקת ליעד היום. עוד קצת וסגרת יום מושלם 🍒`;
             }
             return gender === "male"
-              ? "Blue איתך — תוסיף עוד ארוחה אחת חכמה ותראה את הגרף קופץ יפה."
-              : "Cherry איתך — עוד בחירה חכמה והיום נראה אפילו יותר נוצץ.";
+              ? `${brandName} איתך — תוסיף עוד ארוחה אחת חכמה ותראה את הגרף קופץ יפה.`
+              : `${brandName} איתך — עוד בחירה חכמה והיום נראה אפילו יותר נוצץ.`;
           })()}
         </p>
       </motion.section>

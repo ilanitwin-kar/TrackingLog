@@ -27,25 +27,165 @@ export function layeredSearchScore(
   const qStrip = stripPunctuationForSearch(rawQuery);
   if (qStrip.length < 2) return -1;
 
-  const tokens = n.split(/[\s,]+/).filter(Boolean);
-  const firstWord = tokens[0] ?? "";
+  // Names sometimes include multiple aliases separated by commas:
+  // "בשר עוף, שוק" — searching "שוק עוף" should match across aliases too.
+  const parts = n.split(/\s*,\s*/).map((x) => x.trim()).filter(Boolean);
 
-  const exactStartWordOrLine = firstWord === q || n === q;
+  const isLetter = (ch: string | undefined) => !!ch && /\p{L}/u.test(ch);
+  const hasWordBoundaryMatch = (hay: string, needle: string) => {
+    if (!needle) return false;
+    const idx = hay.indexOf(needle);
+    if (idx < 0) return false;
+    const before = hay[idx - 1];
+    const after = hay[idx + needle.length];
+    return !isLetter(before) && !isLetter(after);
+  };
 
-  if (exactStartWordOrLine) {
-    return 1_000_000 - n.length;
+  const collapseTypos = (s: string) => s.replace(/יי+/g, "י").replace(/וו+/g, "ו");
+  const q2 = collapseTypos(q);
+  const qWords = q2.split(/\s+/).filter(Boolean);
+  const tokenVariants = (t: string): string[] => {
+    const x = collapseTypos(t);
+    const out = new Set<string>([t, x]);
+    const stripSuffix = (s: string, suffix: string) => {
+      if (s.length <= suffix.length + 2) return;
+      if (!s.endsWith(suffix)) return;
+      out.add(s.slice(0, -suffix.length));
+    };
+    for (const base of [t, x]) {
+      stripSuffix(base, "יות");
+      stripSuffix(base, "ים");
+      stripSuffix(base, "ות");
+      stripSuffix(base, "ייה");
+      stripSuffix(base, "יה");
+      stripSuffix(base, "ה");
+      stripSuffix(base, "ת");
+    }
+    return [...out].filter((v) => v && v.length >= 3);
+  };
+  if (qWords.length >= 2) {
+    // Cross-alias match: allow words to appear across comma-separated parts.
+    const joined = parts.length ? parts.join(" ") : n;
+    let ok = true;
+    let sumIdx = 0;
+    for (const w of qWords) {
+      const isDigits = /^\d+$/.test(w);
+      const idx = isDigits
+        ? (() => {
+            const re = new RegExp(`(?<!\\d)${w}(?!\\d)`, "u");
+            const m = re.exec(joined);
+            return m ? m.index : -1;
+          })()
+        : (() => {
+            let best = -1;
+            for (const v of tokenVariants(w)) {
+              const i = joined.indexOf(v);
+              if (i >= 0 && (best < 0 || i < best)) best = i;
+            }
+            return best;
+          })();
+      if (idx < 0) {
+        ok = false;
+        break;
+      }
+      sumIdx += idx;
+    }
+    if (ok) {
+      // Stronger than boundary/single-word matches, weaker than exact line/prefix.
+      // Prefer earlier occurrences and shorter strings implicitly via sumIdx.
+      return 420_000 - sumIdx;
+    }
+
+    // Space/punctuation-insensitive variant
+    const joinedStrip = stripPunctuationForSearch(joined);
+    let okStrip = true;
+    let sumIdxStrip = 0;
+    for (const w of qWords) {
+      const wStrip = stripPunctuationForSearch(w);
+      if (!wStrip) continue;
+      const isDigits = /^\d+$/.test(wStrip);
+      const idx = isDigits
+        ? (() => {
+            const re = new RegExp(`(?<!\\d)${wStrip}(?!\\d)`, "u");
+            const m = re.exec(joinedStrip);
+            return m ? m.index : -1;
+          })()
+        : joinedStrip.indexOf(wStrip);
+      if (idx < 0) {
+        okStrip = false;
+        break;
+      }
+      sumIdxStrip += idx;
+    }
+    if (okStrip) {
+      return 400_000 - sumIdxStrip;
+    }
   }
 
-  if (n.startsWith(q)) {
-    return 500_000 + q.length * 100 - n.length;
+  let best = -1;
+  for (const part of parts.length ? parts : [n]) {
+    const tokens = part.split(/[\s]+/).filter(Boolean);
+    const firstWord = tokens[0] ?? "";
+
+    const exactStartWordOrLine = firstWord === q || part === q;
+
+    if (exactStartWordOrLine) {
+      best = Math.max(best, 1_000_000 - part.length);
+      continue;
+    }
+
+    if (part.startsWith(q)) {
+      best = Math.max(best, 500_000 + q.length * 100 - part.length);
+      continue;
+    }
+
+    // Multi-word in a single alias part (rare but possible)
+    if (qWords.length >= 2) {
+      let ok = true;
+      let sumIdx = 0;
+      for (const w of qWords) {
+        const isDigits = /^\d+$/.test(w);
+        const idx = isDigits
+          ? (() => {
+              const re = new RegExp(`(?<!\\d)${w}(?!\\d)`, "u");
+              const m = re.exec(part);
+              return m ? m.index : -1;
+            })()
+          : (() => {
+              let best = -1;
+              for (const v of tokenVariants(w)) {
+                const i = part.indexOf(v);
+                if (i >= 0 && (best < 0 || i < best)) best = i;
+              }
+              return best;
+            })();
+        if (idx < 0) {
+          ok = false;
+          break;
+        }
+        sumIdx += idx;
+      }
+      if (ok) {
+        best = Math.max(best, 360_000 - sumIdx);
+        continue;
+      }
+    }
+
+    // Prefer boundary matches when possible (avoid "שוק" → "שוקו" outranking "שוק עוף").
+    if (hasWordBoundaryMatch(part, q)) {
+      const idx = part.indexOf(q);
+      best = Math.max(best, 220_000 - idx);
+      continue;
+    }
+
+    if (nStrip.includes(qStrip)) {
+      const idx = nStrip.indexOf(qStrip);
+      best = Math.max(best, 100_000 - idx);
+      continue;
+    }
   }
 
-  if (nStrip.includes(qStrip)) {
-    const idx = nStrip.indexOf(qStrip);
-    return 100_000 - idx;
-  }
-
-  return -1;
+  return best;
 }
 
 export type FoodDbRow = {

@@ -109,10 +109,10 @@ export function BottomNav() {
               <li key={href} className="flex min-w-0 justify-center">
                 <Link
                   href={href}
-                  className={`relative flex min-h-[2.75rem] min-w-0 max-w-full flex-row items-center justify-center gap-1 rounded-xl py-1 pe-1 ps-1 text-[9px] font-medium leading-tight transition-colors sm:min-h-0 sm:gap-1.5 sm:py-1.5 sm:text-[10px] sm:font-medium ${
+                  className={`relative flex min-h-[2.75rem] min-w-0 max-w-full flex-row items-center justify-center gap-1 rounded-xl py-1 pe-1 ps-1 text-[11px] font-extrabold leading-tight tracking-tight transition-colors sm:min-h-0 sm:gap-1.5 sm:py-1.5 sm:text-[12px] ${
                     active
                       ? "text-[var(--cherry)]"
-                      : "text-[var(--stem)]/85 hover:text-[var(--cherry)]"
+                      : "text-[var(--cherry)]/70 hover:text-[var(--cherry)]"
                   }`}
                 >
                   {active && (
@@ -126,7 +126,7 @@ export function BottomNav() {
                       }}
                     />
                   )}
-                  <span className="max-w-[3.2rem] text-end leading-[1.15] sm:max-w-[4rem]">
+                  <span className="max-w-[3.6rem] text-end leading-[1.05] sm:max-w-[4.4rem]">
                     {label}
                   </span>
                   <motion.span
@@ -225,10 +225,10 @@ export function BottomNav() {
               <li key={href} className="flex min-w-0 justify-center">
                 <Link
                   href={href}
-                  className={`relative flex min-h-[2.75rem] min-w-0 max-w-full flex-row items-center justify-center gap-1 rounded-xl py-1 pe-1 ps-1 text-[9px] font-medium leading-tight transition-colors sm:min-h-0 sm:gap-1.5 sm:py-1.5 sm:text-[10px] sm:font-medium ${
+                  className={`relative flex min-h-[2.75rem] min-w-0 max-w-full flex-row items-center justify-center gap-1 rounded-xl py-1 pe-1 ps-1 text-[11px] font-extrabold leading-tight tracking-tight transition-colors sm:min-h-0 sm:gap-1.5 sm:py-1.5 sm:text-[12px] ${
                     active
                       ? "text-[var(--cherry)]"
-                      : "text-[var(--stem)]/85 hover:text-[var(--cherry)]"
+                      : "text-[var(--cherry)]/70 hover:text-[var(--cherry)]"
                   }`}
                 >
                   {active && (
@@ -242,7 +242,7 @@ export function BottomNav() {
                       }}
                     />
                   )}
-                  <span className="max-w-[3.2rem] text-end leading-[1.15] sm:max-w-[4rem]">
+                  <span className="max-w-[3.6rem] text-end leading-[1.05] sm:max-w-[4.4rem]">
                     {label}
                   </span>
                   <motion.span
@@ -297,7 +297,7 @@ export function BottomNav() {
                 id={subtitleId}
                 className="mt-2 text-center text-sm leading-relaxed text-[var(--text)]/75"
               >
-                חיפוש במאגרים שלך ובמאגר עולמי, עם מסך מלא שנוח לחיפוש.
+                חיפוש במאגר אינטליגנציה קלורית, במילון האישי ובמאגר עולמי, עם מסך מלא שנוח לחיפוש.
               </p>
               <p className="mt-2 text-center text-xs font-medium text-[var(--text)]/55">
                 נרשם לתאריך:{" "}

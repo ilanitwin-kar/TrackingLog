@@ -9,6 +9,7 @@ type WeatherOut = {
   description?: string;
   isRain?: boolean;
   isHot?: boolean;
+  reason?: string;
 };
 
 function clamp(n: number, lo: number, hi: number): number {
@@ -28,7 +29,12 @@ type OpenWeatherApiResponse = {
 
 export async function GET(req: Request) {
   const key = process.env.OPENWEATHER_API_KEY?.trim() ?? "";
-  if (!key) return NextResponse.json({ ok: false } satisfies WeatherOut);
+  if (!key) {
+    return NextResponse.json({
+      ok: false,
+      reason: "missing_api_key",
+    } satisfies WeatherOut);
+  }
 
   const { searchParams } = new URL(req.url);
   const lat = Number(searchParams.get("lat"));
