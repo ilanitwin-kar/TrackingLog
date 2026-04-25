@@ -407,6 +407,103 @@ input[type="checkbox"] {
     pointer-events: none;
   }
 
+  .notebook-paper {
+    border-radius: 1rem;
+    border: 2px solid var(--border-cherry-soft);
+    background-color: rgba(255, 255, 255, 0.92);
+    box-shadow: var(--page-hero-combined-shadow);
+    padding: 0.75rem;
+  }
+
+  .notebook-list {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  .notebook-row {
+    border-radius: 0.7rem;
+    padding: 0.62rem 0.5rem;
+    background-color: rgba(255, 255, 255, 0.92);
+    border: 2px solid var(--border-cherry-soft);
+    box-shadow: var(--list-row-shadow);
+  }
+
+  .handwriting-food-name {
+    font-family:
+      "Segoe Print",
+      "Segoe Script",
+      "Comic Sans MS",
+      "Bradley Hand",
+      "Snell Roundhand",
+      system-ui,
+      sans-serif;
+    letter-spacing: 0.015em;
+  }
+
+  .stamp-action {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    padding: 0.3rem 0.45rem;
+    border-radius: 9999px;
+    border: 1.5px solid rgba(240, 214, 222, 0.9);
+    background: rgba(255, 255, 255, 0.65);
+    box-shadow: 0 1px 6px rgba(0, 0, 0, 0.04);
+    transition: transform 0.08s ease, filter 0.12s ease;
+    color: rgba(20, 20, 20, 0.78);
+  }
+
+  .stamp-action:hover {
+    filter: brightness(1.03);
+  }
+
+  .stamp-action:active {
+    transform: translateY(1px);
+  }
+
+  .stamp-action-on {
+    outline: 2px solid rgba(245, 200, 212, 0.9);
+    outline-offset: 1px;
+  }
+
+  .stamp-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .stamp-label {
+    font-size: 10px;
+    font-weight: 800;
+    color: currentColor;
+    line-height: 1;
+  }
+
+  .stamp-journal {
+    border-color: color-mix(in srgb, var(--cherry) 38%, transparent);
+    background: color-mix(in srgb, var(--cherry-muted) 70%, white);
+    color: var(--cherry);
+  }
+
+  .stamp-shop {
+    border-color: color-mix(in srgb, var(--stem) 38%, transparent);
+    background: color-mix(in srgb, var(--stem) 12%, white);
+    color: var(--stem);
+  }
+
+  .stamp-edit {
+    border-color: var(--border-cherry-soft);
+    background: color-mix(in srgb, var(--cherry-muted) 45%, white);
+    color: color-mix(in srgb, var(--cherry) 72%, black);
+  }
+
+  .stamp-delete {
+    border-color: color-mix(in srgb, var(--cherry) 46%, transparent);
+    background: color-mix(in srgb, var(--cherry-muted) 60%, white);
+    color: var(--cherry);
+  }
+
   .luxury-hero-title {
     color: var(--ui-page-heading);
     font-weight: 800;

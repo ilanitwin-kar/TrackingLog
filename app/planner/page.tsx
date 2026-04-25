@@ -12,6 +12,7 @@ import { addSavedMenu } from "@/lib/menuStorage";
 import { loadPlannerState, savePlannerState, clearPlannerState, type PlannerItem, type PlannerMealSlot } from "@/lib/plannerStorage";
 import { fuzzySearch } from "@/lib/fuzzySearch";
 import { rankedFuzzySearchByText, type MatchRange } from "@/lib/rankedSearch";
+import { matchesAllQueryWords } from "@/lib/foodSearchRules";
 
 const fontFood =
   "font-[Calibri,'Segoe_UI','Helvetica_Neue',system-ui,sans-serif]";
@@ -199,6 +200,8 @@ export default function PlannerPage() {
       carbsPer100g: d.carbsPer100g ?? 0,
       fatPer100g: d.fatPer100g ?? 0,
     }));
+    const strict = all.filter((r) => matchesAllQueryWords(r.name, t)).slice(0, 8);
+    if (strict.length > 0) return strict;
     return fuzzySearch(all, t, { keys: ["name"], limit: 8 });
   }, [debouncedQ]);
 
@@ -423,15 +426,30 @@ export default function PlannerPage() {
     }
   }
 
-  const results = useMemo(
-    () =>
-      rankedFuzzySearchByText(combinedRows, debouncedQ, {
-        getText: (r) => r.name,
-        getKey: (r) => r.id,
-        limit: 18,
-      }),
-    [combinedRows, debouncedQ]
-  );
+  const strictResults = useMemo(() => {
+    const t = debouncedQ.trim();
+    if (t.length < 2) return [];
+    const strictCombined = combinedRows.filter((r) => matchesAllQueryWords(r.name, t));
+    return rankedFuzzySearchByText(strictCombined, t, {
+      getText: (r) => r.name,
+      getKey: (r) => r.id,
+      limit: 18,
+    });
+  }, [combinedRows, debouncedQ]);
+
+  const fuzzyExtraResults = useMemo(() => {
+    const t = debouncedQ.trim();
+    if (t.length < 2) return [];
+    // Mode B: only if strict results are scarce, fill with fuzzy matches.
+    if (strictResults.length >= 8) return [];
+    const seen = new Set(strictResults.map((h) => h.item.id));
+    const fuzzy = rankedFuzzySearchByText(combinedRows, t, {
+      getText: (r) => r.name,
+      getKey: (r) => r.id,
+      limit: 18,
+    });
+    return fuzzy.filter((h) => !seen.has(h.item.id)).slice(0, 18 - strictResults.length);
+  }, [combinedRows, debouncedQ, strictResults]);
 
   return (
     <div className={`mx-auto max-w-lg px-4 py-8 pb-28 md:py-12 ${fontFood}`} dir="rtl">
@@ -651,9 +669,9 @@ export default function PlannerPage() {
           </div>
           {loading && debouncedQ.length >= 2 ? (
             <p className="mt-2 text-center text-sm text-[var(--cherry)]/80">טוען תוצאות…</p>
-          ) : results.length > 0 ? (
+          ) : strictResults.length > 0 ? (
             <ul className="mt-3 space-y-2">
-              {results.map((h) => (
+              {strictResults.map((h) => (
                 <li key={h.item.id} className="flex items-stretch gap-2 rounded-2xl border-2 border-[var(--border-cherry-soft)] bg-white px-3 py-2.5">
                   <button type="button" className="min-w-0 flex-1 text-start" onClick={() => addFromRow(h.item)}>
                     <p className="flex items-center gap-2 break-words text-sm font-extrabold text-[var(--stem)]">
@@ -674,6 +692,34 @@ export default function PlannerPage() {
                 </li>
               ))}
             </ul>
+          ) : fuzzyExtraResults.length > 0 ? (
+            <div className="mt-3">
+              <p className="mb-2 text-xs font-extrabold text-[var(--stem)]/70">
+                תוצאות נוספות (דומה בכתיב)
+              </p>
+              <ul className="space-y-2">
+                {fuzzyExtraResults.map((h) => (
+                  <li key={h.item.id} className="flex items-stretch gap-2 rounded-2xl border-2 border-[var(--border-cherry-soft)] bg-white px-3 py-2.5">
+                    <button type="button" className="min-w-0 flex-1 text-start" onClick={() => addFromRow(h.item)}>
+                      <p className="flex items-center gap-2 break-words text-sm font-extrabold text-[var(--stem)]">
+                        <span className="text-xs" aria-hidden>
+                          {sourceIcon(h.item.source)}
+                        </span>
+                        <span className="min-w-0 flex-1 break-words">{renderHighlighted(h.item.name, h.ranges)}</span>
+                      </p>
+                      <p className="mt-0.5 text-[11px] text-[var(--stem)]/65">ל־100ג׳ {Math.round(h.item.caloriesPer100g)} קק״ל</p>
+                    </button>
+                    <button
+                      type="button"
+                      className="rounded-xl bg-[var(--cherry)] px-3 py-2 text-xs font-extrabold text-white shadow-sm transition hover:brightness-105"
+                      onClick={() => addFromRow(h.item)}
+                    >
+                      הוסף
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            </div>
           ) : debouncedQ.length >= 2 ? (
             <p className="mt-3 text-sm text-[var(--stem)]/75">אין תוצאות — אפשר להוסיף פריט משלך.</p>
           ) : null}

@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { normalizeSearchText, stripPunctuationForSearch } from "@/lib/foodSearchRank";
 import { loadFoodDb, searchFoodDb, type FoodDbRow } from "@/lib/foodDb";
+import { matchesAllQueryWords } from "@/lib/foodSearchRules";
 
 export const dynamic = "force-dynamic";
 
@@ -101,8 +102,9 @@ export async function GET(req: Request) {
 
   // 1) Strict ranked search (prefix/contains tiers)
   const strict = searchFoodDb(q, { limit: Math.max(limit, 25) });
-  const seen = new Set(strict.map((r) => r.id));
-  let items = [...strict];
+  const strictFiltered = strict.filter((r) => matchesAllQueryWords(r.name ?? "", q));
+  const seen = new Set(strictFiltered.map((r) => r.id));
+  let items = [...strictFiltered];
 
   // 2) Fuzzy fill for typos (only if needed)
   if (items.length < limit) {
@@ -121,6 +123,7 @@ export async function GET(req: Request) {
     }
     scored.sort((a, b) => a.score - b.score);
     for (const s of scored.slice(0, limit - items.length)) {
+      if (!matchesAllQueryWords(s.r.name ?? "", q)) continue;
       seen.add(s.r.id);
       items.push(s.r);
     }
@@ -174,6 +177,7 @@ export async function GET(req: Request) {
       scored.sort((a, b) => b.sim - a.sim);
       for (const s of scored.slice(0, limit - items.length)) {
         if (s.sim < 0.35) break;
+        if (!matchesAllQueryWords(s.r.name ?? "", q)) continue;
         seen.add(s.r.id);
         items.push(s.r);
       }

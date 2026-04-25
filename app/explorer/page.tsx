@@ -129,7 +129,7 @@ export default function ExplorerPage() {
       const res = await fetch(`/api/food-explorer?${params}`);
       if (!res.ok) return;
       const data = (await res.json()) as { items: FoodItem[] };
-      setItems((prev) => [...prev, ...data.items]);
+      setItems((prev) => [...prev, ...(data.items ?? [])]);
       setPage(next);
     } finally {
       setLoadingMore(false);

@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { matchesAllQueryWords } from "@/lib/foodSearchRules";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 30;
@@ -116,7 +117,7 @@ export async function GET(req: Request) {
     const items: IsraelFoodSearchItem[] = [];
     for (const rec of records) {
       const row = mapRecord(rec);
-      if (row) items.push(row);
+      if (row && matchesAllQueryWords(row.name ?? "", q)) items.push(row);
     }
 
     return NextResponse.json({ items });

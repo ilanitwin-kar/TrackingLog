@@ -10,6 +10,7 @@ import { fuzzySearch } from "@/lib/fuzzySearch";
 import { saveRecipeToCloud } from "@/lib/recipeCloud";
 import { rankedFuzzySearchByText, type MatchRange } from "@/lib/rankedSearch";
 import { useRouter } from "next/navigation";
+import { matchesAllQueryWords } from "@/lib/foodSearchRules";
 
 const fontFood =
   "font-[Calibri,'Segoe_UI','Helvetica_Neue',system-ui,sans-serif]";
@@ -195,6 +196,8 @@ export default function RecipesPage() {
       carbsPer100g: d.carbsPer100g ?? 0,
       fatPer100g: d.fatPer100g ?? 0,
     }));
+    const strict = all.filter((r) => matchesAllQueryWords(r.name, t)).slice(0, 8);
+    if (strict.length > 0) return strict;
     return fuzzySearch(all, t, { keys: ["name"], limit: 8 });
   }, [debouncedQ]);
 
@@ -229,47 +232,44 @@ export default function RecipesPage() {
           const ex = (await exRes.json()) as {
             items?: Array<{ id: string; name: string; calories: number; protein: number; carbs: number; fat: number }>;
           };
-          setExplorerRows(
-            (ex.items ?? []).slice(0, 18).map((r) => ({
+          const mapped = (ex.items ?? []).slice(0, 18).map((r) => ({
               id: `explorer:${r.id}`,
               name: r.name,
-              source: "explorer",
+              source: "explorer" as const,
               caloriesPer100g: r.calories,
               proteinPer100g: r.protein,
               carbsPer100g: r.carbs,
               fatPer100g: r.fat,
-            }))
-          );
+            }));
+          setExplorerRows(mapped);
         } else setExplorerRows([]);
         if (offRes.ok) {
           const off = (await offRes.json()) as {
             items?: Array<{ id: string; name: string; calories: number; protein: number; carbs: number; fat: number }>;
           };
-          setOffRows(
-            (off.items ?? []).slice(0, 10).map((r) => ({
+          const mapped = (off.items ?? []).slice(0, 10).map((r) => ({
               id: `off:${r.id}`,
               name: r.name,
-              source: "openFoodFacts",
+              source: "openFoodFacts" as const,
               caloriesPer100g: r.calories,
               proteinPer100g: r.protein,
               carbsPer100g: r.carbs,
               fatPer100g: r.fat,
-            }))
-          );
+            }));
+          setOffRows(mapped);
         } else setOffRows([]);
         if (aiRes.ok) {
           const ai = (await aiRes.json()) as { items?: Array<{ name: string; caloriesPer100g: number; proteinPer100g: number; carbsPer100g: number; fatPer100g: number }> };
-          setAiRows(
-            (ai.items ?? []).slice(0, 8).map((r, idx) => ({
+          const mapped = (ai.items ?? []).slice(0, 8).map((r, idx) => ({
               id: `ai:${idx}:${r.name}`,
               name: r.name,
-              source: "ai",
+              source: "ai" as const,
               caloriesPer100g: r.caloriesPer100g,
               proteinPer100g: r.proteinPer100g,
               carbsPer100g: r.carbsPer100g,
               fatPer100g: r.fatPer100g,
-            }))
-          );
+            }));
+          setAiRows(mapped.filter((r) => matchesAllQueryWords(r.name ?? "", debouncedQ)));
         } else setAiRows([]);
       } catch {
         if (!ac.signal.aborted) {

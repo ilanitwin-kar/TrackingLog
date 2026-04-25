@@ -236,8 +236,8 @@ export function dictionarySavedFilterLabel(gender: Gender): string {
 export function dictionarySavedFilterPlaceholder(gender: Gender): string {
   return gf(
     gender,
-    "חיפוש במילון, במאגר אינטליגנציה קלורית וב־Open Food Facts (לפחות 2 אותיות)…",
-    "חיפוש במילון, במאגר אינטליגנציה קלורית וב־Open Food Facts (לפחות 2 אותיות)…"
+    "הוסיפי מוצרים למילון שלך (לפחות 2 אותיות)…",
+    "הוסף מוצרים למילון שלך (לפחות 2 אותיות)…"
   );
 }
 

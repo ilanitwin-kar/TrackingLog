@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { matchesAllQueryWords } from "@/lib/foodSearchRules";
 
 export const dynamic = "force-dynamic";
 
@@ -180,7 +181,9 @@ export async function GET(req: Request) {
 
   const hits = await fetchOpenFoodFactsTextSearch(q, pageSize);
   if (hits && hits.length > 0) {
-    const items = mapProductsToItems(hits);
+    const items = mapProductsToItems(hits).filter((r) =>
+      matchesAllQueryWords(r.name ?? "", q)
+    );
     if (items.length > 0) {
       return NextResponse.json({ items });
     }

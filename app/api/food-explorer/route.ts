@@ -5,6 +5,7 @@ import {
   searchFoodDb,
   type FoodDbRow,
 } from "@/lib/foodDb";
+import { matchesAllQueryWords } from "@/lib/foodSearchRules";
 
 export const dynamic = "force-dynamic";
 
@@ -55,6 +56,10 @@ export async function GET(req: Request) {
     if (category && category !== "הכל") {
       rows = rows.filter((r) => r.category === category);
     }
+  }
+
+  if (q.length >= 2) {
+    rows = rows.filter((r) => matchesAllQueryWords(r.name ?? "", q));
   }
 
   rows = sortRows(rows, sort);

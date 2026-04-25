@@ -9,14 +9,15 @@ import {
   useRef,
   useState,
 } from "react";
+import { flushSync } from "react-dom";
 import {
   type DictionaryItem,
   type FoodUnit,
   type LogEntry,
   type MealPreset,
   applyMealPresetToToday,
-  getEntriesForDate,
   isExplorerFoodInDictionary,
+  getEntriesForDate,
   loadDictionary,
   loadMealPresets,
   loadProfile,
@@ -25,31 +26,23 @@ import {
   saveDayLogEntries,
   toggleExplorerFoodInDictionary,
 } from "@/lib/storage";
+import { addToShopping, loadShoppingFoodIds } from "@/lib/explorerStorage";
 import {
-  addToShopping,
-  loadShoppingFoodIds,
-} from "@/lib/explorerStorage";
-import { IconCaption } from "@/components/IconCaption";
-import {
-  IconCart,
   IconPencil,
   IconTrash,
   IconPlusCircle,
   IconVerified,
 } from "@/components/Icons";
-import { InfoCard } from "@/components/InfoCard";
-import { emitMealLoggedFeedback } from "@/lib/feedbackEvents";
 import {
   dictionaryEditFoodError,
-  dictionaryHeading,
   dictionaryIntroBody,
-  dictionaryIntroTitle,
   dictionarySavedFilterPlaceholder,
   gf,
 } from "@/lib/hebrewGenderUi";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { rankedFuzzySearchByText, type MatchRange } from "@/lib/rankedSearch";
+import { matchesAllQueryWords } from "@/lib/foodSearchRules";
 import { getTodayKey } from "@/lib/dateKey";
 
 const fontFood =
@@ -64,6 +57,48 @@ type ExplorerFoodRow = {
   carbs: number;
   category: string;
 };
+
+function StampAction({
+  label,
+  tone,
+  pressed,
+  onClick,
+  children,
+}: {
+  label: string;
+  tone: "journal" | "shop" | "edit" | "delete";
+  pressed?: boolean;
+  onClick: () => void;
+  children: React.ReactNode;
+}) {
+  const toneCls =
+    tone === "journal"
+      ? "stamp-journal"
+      : tone === "shop"
+        ? "stamp-shop"
+        : tone === "edit"
+          ? "stamp-edit"
+          : "stamp-delete";
+  return (
+    <button
+      type="button"
+      className={`stamp-action ${toneCls} ${pressed ? "stamp-action-on" : ""}`}
+      onClick={(e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        onClick();
+      }}
+      aria-pressed={pressed}
+      title={label}
+      aria-label={label}
+    >
+      <span className="stamp-icon" aria-hidden>
+        {children}
+      </span>
+      <span className="stamp-label">{label}</span>
+    </button>
+  );
+}
 
 const UNITS: FoodUnit[] = [
   "גרם",
@@ -180,11 +215,6 @@ function fmtMacroG(n: number | undefined): string {
   return n.toFixed(1);
 }
 
-function clampJournalQty(q: number, unit: FoodUnit): number {
-  if (unit === "גרם") return clampGramQty(q);
-  return clampOtherQty(q);
-}
-
 function sortSavedByQuery(items: DictionaryItem[], query: string): DictionaryItem[] {
   const q = query.trim().toLowerCase();
   if (q.length < 2) return items;
@@ -226,9 +256,7 @@ export default function DictionaryPage() {
   const [offRows, setOffRows] = useState<ExplorerFoodRow[]>([]);
   const [extSearchLoading, setExtSearchLoading] = useState(false);
   const [explorerUiTick, setExplorerUiTick] = useState(0);
-  const [appliedMealId, setAppliedMealId] = useState<string | null>(null);
   const [shopTick, setShopTick] = useState(0);
-  const [shopToast, setShopToast] = useState(false);
   const [editTarget, setEditTarget] = useState<DictionaryItem | null>(null);
   const [editFood, setEditFood] = useState("");
   const [editQtyText, setEditQtyText] = useState("1");
@@ -239,6 +267,17 @@ export default function DictionaryPage() {
   const searchInputRef = useRef<HTMLInputElement>(null);
   const [activeLetter, setActiveLetter] = useState<string | null>(null);
   const [openSavedId, setOpenSavedId] = useState<string | null>(null);
+  const [dictTab, setDictTab] = useState<"all" | "foods" | "meals">("all");
+  const [justAddedId, setJustAddedId] = useState<string | null>(null);
+  const justAddedTimerRef = useRef<number | null>(null);
+  const [exportOpen, setExportOpen] = useState(false);
+  const [exportSelectMode, setExportSelectMode] = useState(false);
+  const [exportSelectedIds, setExportSelectedIds] = useState<Set<string>>(
+    () => new Set()
+  );
+  const isSearching = rawQ.trim().length >= 2;
+  const [showSearchFab, setShowSearchFab] = useState(false);
+  const [helpOpen, setHelpOpen] = useState(false);
 
   const refresh = useCallback(() => {
     setSaved(loadDictionary());
@@ -257,7 +296,12 @@ export default function DictionaryPage() {
     return () => window.removeEventListener("focus", onFocus);
   }, [refresh]);
 
-  const filteredSaved = useMemo(() => sortSavedByQuery(saved, rawQ), [saved, rawQ]);
+  const filteredSaved = useMemo(() => {
+    const t = rawQ.trim();
+    if (t.length < 2) return sortSavedByQuery(saved, t);
+    const strict = saved.filter((d) => matchesAllQueryWords(d.food, t));
+    return sortSavedByQuery(strict, t);
+  }, [saved, rawQ]);
 
   const savedHits = useMemo(() => {
     const q = rawQ.trim();
@@ -291,6 +335,222 @@ export default function DictionaryPage() {
       threshold: 0.34,
     });
   }, [offRows, debouncedQ]);
+
+  const visibleSaved = useMemo(() => {
+    const base = savedHits ? savedHits.map((h) => h.item) : filteredSaved;
+    const tabbed = base.filter((d) => {
+      if (dictTab === "meals") return d.mealPresetId != null;
+      if (dictTab === "foods") return d.mealPresetId == null;
+      return true;
+    });
+    const sorted = [...tabbed].sort((a, b) =>
+      normalizeTitleForIndex(a.food).localeCompare(
+        normalizeTitleForIndex(b.food),
+        "he"
+      )
+    );
+    if (debouncedQ.length >= 2) return sorted;
+    if (!activeLetter) return sorted;
+    return sorted.filter((x) => firstHebLetter(x.food) === activeLetter);
+  }, [savedHits, filteredSaved, dictTab, debouncedQ, activeLetter]);
+
+  const exportItems = useMemo(() => {
+    if (exportSelectMode && exportSelectedIds.size > 0) {
+      const set = exportSelectedIds;
+      return saved.filter((x) => set.has(x.id));
+    }
+    return visibleSaved;
+  }, [exportSelectMode, exportSelectedIds, saved, visibleSaved]);
+
+  const externalResultsTitle = "תוצאות חיפוש";
+
+  function downloadTextFile(filename: string, mime: string, content: string) {
+    const blob = new Blob([content], { type: mime });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1500);
+  }
+
+  function csvEscape(v: unknown): string {
+    const s = v == null ? "" : String(v);
+    if (/[",\n\r]/.test(s)) return `"${s.replace(/"/g, '""')}"`;
+    return s;
+  }
+
+  function buildDictionaryCsv(items: DictionaryItem[]): string {
+    const headers = [
+      "id",
+      "food",
+      "quantity",
+      "unit",
+      "gramsPerUnit",
+      "lastCalories",
+      "caloriesPer100g",
+      "proteinPer100g",
+      "carbsPer100g",
+      "fatPer100g",
+      "barcode",
+      "source",
+      "mealPresetId",
+      "mealName",
+      "mealComponentsJson",
+    ];
+    const rows = items.map((d) => {
+      const preset = d.mealPresetId ? presetMap.get(d.mealPresetId) : undefined;
+      const mealName = preset?.name ?? "";
+      const mealComponentsJson = preset
+        ? JSON.stringify(preset.components)
+        : "";
+      const cells = [
+        d.id,
+        d.food,
+        d.quantity,
+        d.unit,
+        d.gramsPerUnit ?? "",
+        d.lastCalories ?? "",
+        d.caloriesPer100g ?? "",
+        d.proteinPer100g ?? "",
+        d.carbsPer100g ?? "",
+        d.fatPer100g ?? "",
+        d.barcode ?? "",
+        d.source ?? "",
+        d.mealPresetId ?? "",
+        mealName,
+        mealComponentsJson,
+      ];
+      return cells.map(csvEscape).join(",");
+    });
+    return [headers.join(","), ...rows].join("\n");
+  }
+
+  function exportJson() {
+    const presetsUsed = new Map<string, MealPreset>();
+    for (const d of exportItems) {
+      if (!d.mealPresetId) continue;
+      const p = presetMap.get(d.mealPresetId);
+      if (p) presetsUsed.set(p.id, p);
+    }
+    const filename = `calorie-journal-dictionary-${new Date().toISOString().slice(0, 10)}.json`;
+    const payload = {
+      version: 1,
+      exportedAt: new Date().toISOString(),
+      scope: exportSelectMode && exportSelectedIds.size > 0 ? "selected" : "visible",
+      filters: {
+        tab: dictTab,
+        letter: activeLetter,
+        query: rawQ.trim(),
+      },
+      items: exportItems,
+      mealPresets: Array.from(presetsUsed.values()),
+    };
+    downloadTextFile(
+      filename,
+      "application/json;charset=utf-8",
+      JSON.stringify(payload, null, 2)
+    );
+  }
+
+  function exportCsv() {
+    const csv = buildDictionaryCsv(exportItems);
+    const filename = `calorie-journal-dictionary-${new Date().toISOString().slice(0, 10)}.csv`;
+    downloadTextFile(
+      filename,
+      "text/csv;charset=utf-8",
+      csv
+    );
+  }
+
+  function exportPdf() {
+    const title =
+      exportSelectMode && exportSelectedIds.size > 0
+        ? "המילון שלי — נבחרים"
+        : "המילון שלי — מסונן";
+    const safe = (s: string) =>
+      s
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;");
+    const rowsHtml = exportItems
+      .map((d) => {
+        const preset = d.mealPresetId ? presetMap.get(d.mealPresetId) : undefined;
+        const mealBlock = preset
+          ? `<div class="meal">
+              <div class="meal-title">ארוחה: ${safe(preset.name)}</div>
+              <ul class="meal-list">
+                ${preset.components
+                  .map(
+                    (c) =>
+                      `<li>${safe(c.food)} — ${c.quantity} ${safe(
+                        c.unit
+                      )} (${c.calories} קק״ל)</li>`
+                  )
+                  .join("")}
+              </ul>
+            </div>`
+          : "";
+        const macros =
+          d.proteinPer100g != null ||
+          d.carbsPer100g != null ||
+          d.fatPer100g != null
+            ? ` · ח ${d.proteinPer100g ?? ""} · פחם ${d.carbsPer100g ?? ""} · שומן ${
+                d.fatPer100g ?? ""
+              }`
+            : "";
+        const cals100 =
+          d.caloriesPer100g != null ? `ל־100 גרם: ${d.caloriesPer100g} קק״ל` : "";
+        const barcode = d.barcode ? ` · ברקוד ${safe(d.barcode)}` : "";
+        const source = d.source ? ` · מקור: ${safe(d.source)}` : "";
+        return `<div class="row">
+          <div class="name">${safe(d.food)}</div>
+          <div class="meta">כמות ברירת מחדל: ${d.quantity} ${safe(
+          d.unit
+        )}${d.gramsPerUnit ? ` · ${d.gramsPerUnit} גרם ליחידה` : ""}</div>
+          <div class="meta">${safe(cals100)}${safe(macros)}${barcode}${source}</div>
+          ${mealBlock}
+        </div>`;
+      })
+      .join("");
+    const html = `<!doctype html>
+      <html dir="rtl" lang="he">
+      <head>
+        <meta charset="utf-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1" />
+        <title>${safe(title)}</title>
+        <style>
+          body{font-family:Calibri,Segoe UI,Arial,sans-serif; margin:24px; color:#111;}
+          h1{margin:0 0 6px 0; font-size:20px;}
+          .sub{font-size:12px; color:#444; margin-bottom:14px;}
+          .row{border:1px solid #ddd; border-radius:10px; padding:12px 12px; margin:0 0 10px 0;}
+          .name{font-weight:800; font-size:16px; margin-bottom:4px;}
+          .meta{font-size:12px; color:#333; margin-top:2px; line-height:1.35;}
+          .meal{margin-top:8px; padding-top:8px; border-top:1px dashed #ddd;}
+          .meal-title{font-weight:800; font-size:12px; color:#222; margin-bottom:6px;}
+          .meal-list{margin:0; padding:0 16px 0 0; font-size:12px; color:#333;}
+        </style>
+      </head>
+      <body>
+        <h1>${safe(title)}</h1>
+        <div class="sub">נוצר בתאריך: ${safe(
+          new Date().toLocaleString("he-IL")
+        )} · פריטים: ${exportItems.length}</div>
+        ${rowsHtml || `<div class="sub">אין פריטים לייצוא.</div>`}
+        <script>
+          setTimeout(() => { window.print(); }, 250);
+        </script>
+      </body>
+      </html>`;
+    const w = window.open("", "_blank");
+    if (!w) return;
+    w.document.open();
+    w.document.write(html);
+    w.document.close();
+  }
 
   useEffect(() => {
     const t = rawQ.trim();
@@ -348,17 +608,16 @@ export default function DictionaryPage() {
               carbs: number;
             }>;
           };
-          setOffRows(
-            (offData.items ?? []).map((r) => ({
-              id: r.id,
-              name: r.name,
-              calories: r.calories,
-              protein: r.protein,
-              fat: r.fat,
-              carbs: r.carbs,
-              category: "Open Food Facts",
-            }))
-          );
+          const mapped = (offData.items ?? []).map((r) => ({
+            id: r.id,
+            name: r.name,
+            calories: r.calories,
+            protein: r.protein,
+            fat: r.fat,
+            carbs: r.carbs,
+            category: "Open Food Facts",
+          }));
+          setOffRows(mapped);
         } else {
           setOffRows([]);
         }
@@ -374,17 +633,47 @@ export default function DictionaryPage() {
     return () => ac.abort();
   }, [debouncedQ]);
 
-  const cartLookup = useMemo(() => {
+  useMemo(() => {
+    // keep shopping ids cache fresh for other screens; this screen doesn't show shopping actions
     void shopTick;
     void explorerUiTick;
     return new Set(loadShoppingFoodIds());
   }, [shopTick, explorerUiTick]);
 
   useEffect(() => {
-    if (!shopToast) return;
-    const t = window.setTimeout(() => setShopToast(false), 2200);
-    return () => window.clearTimeout(t);
-  }, [shopToast]);
+    return () => {
+      if (justAddedTimerRef.current) window.clearTimeout(justAddedTimerRef.current);
+    };
+  }, []);
+
+  useEffect(() => {
+    const onScroll = () => {
+      setShowSearchFab(window.scrollY > 520);
+    };
+    onScroll();
+    window.addEventListener("scroll", onScroll, { passive: true });
+    return () => window.removeEventListener("scroll", onScroll);
+  }, []);
+
+  function flashAdded(id: string) {
+    setJustAddedId(id);
+    if (justAddedTimerRef.current) window.clearTimeout(justAddedTimerRef.current);
+    justAddedTimerRef.current = window.setTimeout(() => setJustAddedId(null), 900);
+  }
+
+  function onExplorerDictionary(row: ExplorerFoodRow) {
+    toggleExplorerFoodInDictionary({
+      id: row.id,
+      name: row.name,
+      calories: row.calories,
+      protein: row.protein,
+      fat: row.fat,
+      carbs: row.carbs,
+    });
+    setExplorerUiTick((x) => x + 1);
+    refresh();
+    flashAdded(row.id);
+  }
 
   function onCartDictionaryItem(d: DictionaryItem) {
     const k100 =
@@ -401,41 +690,12 @@ export default function DictionaryPage() {
       fat: d.fatPer100g,
     });
     setShopTick((x) => x + 1);
-    if (added) setShopToast(true);
-  }
-
-  function onExplorerDictionary(row: ExplorerFoodRow) {
-    toggleExplorerFoodInDictionary({
-      id: row.id,
-      name: row.name,
-      calories: row.calories,
-      protein: row.protein,
-      fat: row.fat,
-      carbs: row.carbs,
-    });
-    setExplorerUiTick((x) => x + 1);
-    refresh();
-  }
-
-  function onExplorerJournal(row: ExplorerFoodRow) {
-    const dateKey = getTodayKey();
-    const existing = getEntriesForDate(dateKey);
-    const entry = {
-      id: `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
-      food: row.name,
-      calories: Math.max(1, Math.round(row.calories)),
-      quantity: 100,
-      unit: "גרם" as const,
-      createdAt: new Date().toISOString(),
-      verified: true,
-      proteinG: Math.round(row.protein * 10) / 10,
-      carbsG: Math.round(row.carbs * 10) / 10,
-      fatG: Math.round(row.fat * 10) / 10,
-    };
-    saveDayLogEntries(dateKey, [entry, ...existing]);
-    emitMealLoggedFeedback(
-      gf(gender, "נוסף ליומן היום.", "נוסף ליומן היום.")
-    );
+    if (added) {
+      // re-use the existing toast UX (no dedicated toast component)
+      setJustAddedId(`shop:${d.id}`);
+      if (justAddedTimerRef.current) window.clearTimeout(justAddedTimerRef.current);
+      justAddedTimerRef.current = window.setTimeout(() => setJustAddedId(null), 900);
+    }
   }
 
   function onSavedJournal(d: DictionaryItem) {
@@ -446,7 +706,6 @@ export default function DictionaryPage() {
       d.caloriesPer100g != null && Number.isFinite(d.caloriesPer100g)
         ? Math.max(0, d.caloriesPer100g)
         : null;
-
     const p100 =
       d.proteinPer100g != null && Number.isFinite(d.proteinPer100g)
         ? Math.max(0, d.proteinPer100g)
@@ -465,14 +724,11 @@ export default function DictionaryPage() {
         ? d.gramsPerUnit
         : null;
     const totalG = servingTotalGrams(d.quantity, d.unit, gPerU);
-    const qty = clampJournalQty(d.quantity, d.unit);
 
     let calories: number;
     let proteinG: number | undefined;
     let carbsG: number | undefined;
     let fatG: number | undefined;
-    let unit: FoodUnit = d.unit;
-    let quantity = qty;
 
     if (k100 != null && totalG != null && totalG > 0) {
       const factor = totalG / 100;
@@ -480,19 +736,13 @@ export default function DictionaryPage() {
       if (p100 != null) proteinG = Math.round(p100 * factor * 10) / 10;
       if (c100 != null) carbsG = Math.round(c100 * factor * 10) / 10;
       if (f100 != null) fatG = Math.round(f100 * factor * 10) / 10;
-    } else if (
-      d.lastCalories != null &&
-      Number.isFinite(d.lastCalories) &&
-      d.lastCalories > 0
-    ) {
+    } else if (d.lastCalories != null && Number.isFinite(d.lastCalories) && d.lastCalories > 0) {
       calories = Math.max(1, Math.round(d.lastCalories));
     } else if (k100 != null) {
       calories = Math.max(1, Math.round(k100));
       if (p100 != null) proteinG = Math.round(p100 * 10) / 10;
       if (c100 != null) carbsG = Math.round(c100 * 10) / 10;
       if (f100 != null) fatG = Math.round(f100 * 10) / 10;
-      unit = "גרם";
-      quantity = 100;
     } else {
       calories = 1;
     }
@@ -501,45 +751,28 @@ export default function DictionaryPage() {
       id: `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
       food: d.food,
       calories,
-      quantity,
-      unit,
+      quantity: d.quantity,
+      unit: d.unit,
       createdAt: new Date().toISOString(),
       verified: false,
       ...(proteinG != null ? { proteinG } : {}),
       ...(carbsG != null ? { carbsG } : {}),
       ...(fatG != null ? { fatG } : {}),
     };
-
     saveDayLogEntries(dateKey, [entry, ...existing]);
-    emitMealLoggedFeedback(gf(gender, "נוסף ליומן היום.", "נוסף ליומן היום."));
-  }
-
-  function onExplorerCart(row: ExplorerFoodRow) {
-    const added = addToShopping({
-      foodId: row.id,
-      name: row.name,
-      category: row.category,
-      calories: row.calories,
-      protein: row.protein,
-      carbs: row.carbs,
-      fat: row.fat,
-    });
-    setShopTick((x) => x + 1);
-    if (added) setShopToast(true);
+    setJustAddedId(`journal:${d.id}`);
+    if (justAddedTimerRef.current) window.clearTimeout(justAddedTimerRef.current);
+    justAddedTimerRef.current = window.setTimeout(() => setJustAddedId(null), 900);
   }
 
   function applyPreset(preset: MealPreset) {
     applyMealPresetToToday(preset);
-    emitMealLoggedFeedback(
-      gf(
-        gender,
-        `הארוחה «${preset.name}» נוספה ליומן היום`,
-        `הארוחה «${preset.name}» נוספה ליומן היום`
-      )
-    );
-    setAppliedMealId(preset.id);
-    window.setTimeout(() => setAppliedMealId(null), 2500);
+    setJustAddedId(`journal:meal:${preset.id}`);
+    if (justAddedTimerRef.current) window.clearTimeout(justAddedTimerRef.current);
+    justAddedTimerRef.current = window.setTimeout(() => setJustAddedId(null), 900);
   }
+
+  // Dictionary screen is focused on saving foods; no journal/shopping actions here.
 
   function openEdit(d: DictionaryItem) {
     setEditError(null);
@@ -631,81 +864,348 @@ export default function DictionaryPage() {
         initial={{ opacity: 0, y: -8 }}
         animate={{ opacity: 1, y: 0 }}
       >
-        {dictionaryHeading(gender)}
+        <span className="inline-flex items-center justify-center gap-2">
+          <span>המילון האישי שלי</span>
+          <button
+            type="button"
+            className="inline-flex h-8 w-8 items-center justify-center rounded-full border-2 border-[var(--border-cherry-soft)] bg-white text-base font-extrabold text-[var(--cherry)] shadow-sm transition hover:bg-[var(--cherry-muted)]"
+            aria-label="הסבר"
+            title="הסבר"
+            onClick={() => setHelpOpen((x) => !x)}
+          >
+            ?
+          </button>
+        </span>
       </motion.h1>
 
-      <motion.div initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }}>
-        <InfoCard
-          gender={gender}
-          icon="📖"
-          title={dictionaryIntroTitle()}
-          body={dictionaryIntroBody(gender)}
-          className="mb-5"
-        />
-      </motion.div>
+      {helpOpen ? (
+        <motion.div
+          className="mb-5 rounded-2xl border-2 border-[var(--border-cherry-soft)] bg-white/90 px-4 py-3 text-right shadow-[0_8px_24px_var(--panel-shadow-soft)]"
+          initial={{ opacity: 0, y: 6 }}
+          animate={{ opacity: 1, y: 0 }}
+        >
+          <p className="text-sm leading-relaxed text-[var(--text)]/85">
+            {dictionaryIntroBody(gender)}
+          </p>
+        </motion.div>
+      ) : null}
 
-      {appliedMealId && (
-        <p className="mb-4 rounded-xl border border-[var(--border-cherry-soft)] bg-cherry-faint py-2 text-center text-sm font-semibold text-[var(--cherry)]">
-          נוסף ליומן היום
-        </p>
+      <div className="sticky top-0 z-40 -mx-4 mb-5 border-b border-[var(--border-cherry-soft)]/70 bg-white/90 px-4 pb-4 pt-3 backdrop-blur">
+        <label className="block">
+          <div className="relative">
+            <input
+              ref={searchInputRef}
+              type="text"
+              inputMode="search"
+              enterKeyHint="search"
+              value={rawQ}
+              onChange={(e) => setRawQ(e.target.value)}
+              placeholder={dictionarySavedFilterPlaceholder(gender)}
+              className="input-luxury-search w-full pe-14"
+              autoComplete="off"
+              autoCorrect="off"
+              autoCapitalize="none"
+              spellCheck={false}
+            />
+            {rawQ.trim() ? (
+              <button
+                type="button"
+                className="absolute end-2 top-1/2 -translate-y-1/2 rounded-lg border-2 border-[var(--border-cherry-soft)] bg-white px-3 py-2 text-xs font-extrabold text-[var(--stem)] shadow-sm transition hover:bg-[var(--cherry-muted)]"
+                onClick={() => {
+                  setRawQ("");
+                  setOpenSavedId(null);
+                  setActiveLetter(null);
+                  setDictTab("all");
+                  queueMicrotask(() => searchInputRef.current?.focus());
+                }}
+                aria-label="ניקוי חיפוש"
+                title="ניקוי חיפוש"
+              >
+                ×
+              </button>
+            ) : null}
+          </div>
+        </label>
+      </div>
+
+      {showSearchFab ? (
+        <button
+          type="button"
+          className="fixed bottom-24 end-3 z-50 grid h-12 w-12 place-items-center rounded-full border-2 border-[var(--border-cherry-soft)] bg-white text-lg font-extrabold text-[var(--stem)] shadow-brand-cta transition hover:bg-[var(--cherry-muted)]"
+          onClick={() => {
+            setOpenSavedId(null);
+            setExportOpen(false);
+            window.scrollTo({ top: 0, behavior: "smooth" });
+            setTimeout(() => searchInputRef.current?.focus(), 250);
+          }}
+          aria-label="חיפוש חדש"
+          title="חיפוש חדש"
+        >
+          🔎
+        </button>
+      ) : null}
+
+      {isSearching && (
+        <motion.section
+          className="glass-panel mt-4 p-4"
+          initial={{ opacity: 0, y: 8 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.03 }}
+        >
+          <h2 className="panel-title-cherry mb-1 text-lg">{externalResultsTitle}</h2>
+          {debouncedQ.length < 2 ? null : extSearchLoading ? (
+            <p className="text-center text-sm text-[var(--cherry)]/80">
+              {gf(gender, "טוען תוצאות…", "טוען תוצאות…")}
+            </p>
+          ) : explorerRows.length === 0 && offRows.length === 0 ? (
+            <p className="text-sm text-[var(--text)]/85">
+              {gf(gender, "לא נמצאו פריטים לחיפוש הזה.", "לא נמצאו פריטים לחיפוש הזה.")}
+            </p>
+          ) : (
+            <>
+              {explorerRows.length > 0 && (
+                <>
+                  <h3 className="mb-2 text-sm font-extrabold text-[var(--stem)]">
+                    מאגר אינטליגנציה קלורית
+                  </h3>
+                  <ul className="mb-5 space-y-2">
+                    {(explorerHits ? explorerHits.map((h) => h.item) : explorerRows).map((row) => {
+                      void explorerUiTick;
+                      const inDict = isExplorerFoodInDictionary(row.id);
+                      return (
+                        <li
+                          key={`ex-${row.id}-${row.name}`}
+                          className="flex flex-wrap items-start gap-2 rounded-2xl border-2 border-[var(--border-cherry-soft)] bg-gradient-to-b from-white to-[var(--welcome-gradient-to)] px-3 py-3"
+                          style={{ boxShadow: "var(--explorer-bubble-shadow)" }}
+                        >
+                          <div className="min-w-0 flex-1">
+                            <p className="flex flex-wrap items-center gap-1.5 font-semibold text-[var(--cherry)]">
+                              <span
+                                className="inline-flex shrink-0 items-center gap-1"
+                                title="מאגר אינטליגנציה קלורית מאומת"
+                              >
+                                <IconVerified className="h-4 w-4 text-[#d4a017]" />
+                                <span
+                                  className="text-[10px] font-bold text-[var(--stem)]/90"
+                                  aria-hidden
+                                >
+                                  🔎
+                                </span>
+                              </span>
+                              <span>
+                                {explorerHits
+                                  ? renderHighlighted(
+                                      row.name,
+                                      explorerHits.find((x) => x.item.id === row.id)?.ranges ?? []
+                                    )
+                                  : row.name}
+                              </span>
+                            </p>
+                            <p className="mt-0.5 text-xs text-[var(--cherry)]/75">{row.category}</p>
+                            <p className="mt-1 text-sm leading-relaxed text-[var(--stem)]/95">
+                              <span className="font-semibold">קלוריות</span>{" "}
+                              {Math.round(row.calories)} (ל־100 גרם) ·{" "}
+                              <span className="font-semibold">חלבון</span> {row.protein} ·{" "}
+                              <span className="font-semibold">פחמימות</span> {row.carbs} ·{" "}
+                              <span className="font-semibold">שומן</span> {row.fat}
+                            </p>
+                          </div>
+                          <div className="flex shrink-0">
+                            <button
+                              type="button"
+                              className={`btn-icon-luxury min-w-[3.25rem] flex-col justify-center gap-0.5 py-2 transition-colors ${
+                                inDict || justAddedId === row.id
+                                  ? "bg-[var(--cherry-muted)] ring-2 ring-[var(--border-cherry-soft)]"
+                                  : ""
+                              }`}
+                              title={inDict ? "כבר במילון" : "הוספה למילון"}
+                              aria-label={inDict ? "כבר במילון" : "הוספה למילון"}
+                              aria-pressed={inDict || justAddedId === row.id}
+                              onClick={() => onExplorerDictionary(row)}
+                            >
+                              <span className="inline-flex flex-col items-center">
+                                {inDict || justAddedId === row.id ? (
+                                  <span
+                                    className="text-xl font-extrabold text-[var(--stem)]"
+                                    aria-hidden
+                                  >
+                                    ✓
+                                  </span>
+                                ) : (
+                                  <IconPlusCircle className="h-7 w-7 text-[var(--stem)]" />
+                                )}
+                              </span>
+                            </button>
+                          </div>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                </>
+              )}
+              {offRows.length > 0 && (
+                <>
+                  <h3 className="mb-2 text-sm font-extrabold text-[var(--stem)]">
+                    Open Food Facts
+                  </h3>
+                  <ul className="space-y-2">
+                    {(offHits ? offHits.map((h) => h.item) : offRows).map((row) => {
+                      void explorerUiTick;
+                      const inDict = isExplorerFoodInDictionary(row.id);
+                      return (
+                        <li
+                          key={`off-${row.id}-${row.name}`}
+                          className="flex flex-wrap items-start gap-2 rounded-2xl border-2 border-[var(--border-cherry-soft)] bg-gradient-to-b from-white to-[var(--welcome-gradient-to)] px-3 py-3"
+                          style={{ boxShadow: "var(--explorer-bubble-shadow)" }}
+                        >
+                          <div className="min-w-0 flex-1">
+                            <p className="flex flex-wrap items-center gap-1.5 font-semibold text-[var(--cherry)]">
+                              <span
+                                className="text-[10px] font-bold text-[var(--stem)]/90"
+                                aria-hidden
+                              >
+                                🌐
+                              </span>
+                              <span>
+                                {offHits
+                                  ? renderHighlighted(
+                                      row.name,
+                                      offHits.find((x) => x.item.id === row.id)?.ranges ?? []
+                                    )
+                                  : row.name}
+                              </span>
+                            </p>
+                            <p className="mt-0.5 text-xs text-[var(--cherry)]/75">{row.category}</p>
+                            <p className="mt-1 text-sm leading-relaxed text-[var(--stem)]/95">
+                              <span className="font-semibold">קלוריות</span>{" "}
+                              {Math.round(row.calories)} (ל־100 גרם) ·{" "}
+                              <span className="font-semibold">חלבון</span> {row.protein} ·{" "}
+                              <span className="font-semibold">פחמימות</span> {row.carbs} ·{" "}
+                              <span className="font-semibold">שומן</span> {row.fat}
+                            </p>
+                          </div>
+                          <div className="flex shrink-0">
+                            <button
+                              type="button"
+                              className={`btn-icon-luxury min-w-[3.25rem] flex-col justify-center gap-0.5 py-2 transition-colors ${
+                                inDict || justAddedId === row.id
+                                  ? "bg-[var(--cherry-muted)] ring-2 ring-[var(--border-cherry-soft)]"
+                                  : ""
+                              }`}
+                              title={inDict ? "כבר במילון" : "הוספה למילון"}
+                              aria-label={inDict ? "כבר במילון" : "הוספה למילון"}
+                              aria-pressed={inDict || justAddedId === row.id}
+                              onClick={() => onExplorerDictionary(row)}
+                            >
+                              <span className="inline-flex flex-col items-center">
+                                {inDict || justAddedId === row.id ? (
+                                  <span
+                                    className="text-xl font-extrabold text-[var(--stem)]"
+                                    aria-hidden
+                                  >
+                                    ✓
+                                  </span>
+                                ) : (
+                                  <IconPlusCircle className="h-7 w-7 text-[var(--stem)]" />
+                                )}
+                              </span>
+                            </button>
+                          </div>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                </>
+              )}
+            </>
+          )}
+        </motion.section>
       )}
 
-      <label className="mb-5 block">
-        <span className="mb-1 block text-xs font-semibold text-[var(--cherry)]">
-          חיפוש
-        </span>
-        <input
-          ref={searchInputRef}
-          type="text"
-          inputMode="search"
-          enterKeyHint="search"
-          value={rawQ}
-          onChange={(e) => setRawQ(e.target.value)}
-          placeholder={dictionarySavedFilterPlaceholder(gender)}
-          className="input-luxury-search w-full"
-          autoComplete="off"
-          autoCorrect="off"
-          autoCapitalize="none"
-          spellCheck={false}
-        />
-        <p className="mt-1 text-[11px] font-medium text-[var(--stem)]/65">
-          {gf(
-            gender,
-            "אותו שדה: למעלה המילון האישי, למטה מאגר אינטליגנציה קלורית ו־Open Food Facts (כמו בחיפוש המאוחד בבית).",
-            "אותו שדה: למעלה המילון האישי, למטה מאגר אינטליגנציה קלורית ו־Open Food Facts (כמו בחיפוש המאוחד בבית)."
-          )}
-        </p>
-      </label>
-
       <motion.section
-        className="glass-panel p-4"
+        className={`glass-panel p-4 ${isSearching ? "mt-4" : ""}`}
         initial={{ opacity: 0, y: 8 }}
         animate={{ opacity: 1, y: 0 }}
       >
-        <h2 className="panel-title-cherry mb-3 text-lg">המילון שלי</h2>
+        <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+          <h2 className="panel-title-cherry text-lg">המילון שלי</h2>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              className={`rounded-lg border-2 px-3 py-2 text-xs font-extrabold shadow-sm transition ${
+                exportSelectMode
+                  ? "border-[var(--border-cherry-soft)] bg-cherry-faint text-[var(--cherry)]"
+                  : "border-[var(--border-cherry-soft)] bg-white text-[var(--stem)]/85 hover:bg-[var(--cherry-muted)]"
+              }`}
+              onClick={() => {
+                setExportSelectMode((x) => !x);
+                setExportSelectedIds(new Set());
+                setOpenSavedId(null);
+              }}
+              aria-pressed={exportSelectMode}
+            >
+              {exportSelectMode ? "סיום בחירה" : "בחירת פריטים לייצוא"}
+            </button>
+            <button
+              type="button"
+              className="rounded-lg border-2 border-[var(--border-cherry-soft)] bg-white px-3 py-2 text-xs font-extrabold text-[var(--stem)] shadow-sm transition hover:bg-[var(--cherry-muted)]"
+              onClick={() => setExportOpen(true)}
+            >
+              ייצוא
+            </button>
+          </div>
+        </div>
+        <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+          <div className="flex flex-wrap gap-2">
+            {(
+              [
+                ["all", "הכל"],
+                ["foods", "מוצרים"],
+                ["meals", "ארוחות"],
+              ] as const
+            ).map(([id, label]) => {
+              const on = dictTab === id;
+              return (
+                <button
+                  key={id}
+                  type="button"
+                  className={`rounded-full border-2 px-3 py-1.5 text-xs font-extrabold transition-colors ${
+                    on
+                      ? "border-[var(--border-cherry-soft)] bg-cherry-faint text-[var(--cherry)]"
+                      : "border-[var(--border-cherry-soft)] bg-white text-[var(--stem)]/85 hover:bg-[var(--cherry-muted)]"
+                  }`}
+                  onClick={() => setDictTab(id)}
+                  aria-pressed={on}
+                >
+                  {label}
+                </button>
+              );
+            })}
+          </div>
+          {activeLetter ? (
+            <button
+              type="button"
+              className="rounded-lg border border-[var(--border-cherry-soft)] bg-white px-2.5 py-1 text-[11px] font-extrabold text-[var(--cherry)] shadow-sm"
+              onClick={() => setActiveLetter(null)}
+            >
+              ניקוי אות
+            </button>
+          ) : null}
+        </div>
         <div className="mb-4">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <p className="text-[11px] font-semibold text-[var(--stem)]/70">
               א-ת (לחצי על אות לסינון)
             </p>
-            {activeLetter ? (
-              <button
-                type="button"
-                className="rounded-lg border border-[var(--border-cherry-soft)] bg-white px-2.5 py-1 text-[11px] font-extrabold text-[var(--cherry)] shadow-sm"
-                onClick={() => setActiveLetter(null)}
-              >
-                ניקוי סינון
-              </button>
-            ) : null}
           </div>
-          <div className="mt-2 flex gap-1.5 overflow-x-auto pb-1 [-webkit-overflow-scrolling:touch]">
+          <div className="mt-2 grid grid-cols-11 gap-1">
             {HEB_LETTERS.map((l) => {
               const on = activeLetter === l;
               return (
                 <button
                   key={l}
                   type="button"
-                  className={`shrink-0 rounded-full border-2 px-3 py-1 text-xs font-extrabold shadow-sm transition ${
+                  className={`rounded-lg border-2 py-2 text-xs font-extrabold shadow-sm transition ${
                     on
                       ? "border-[var(--border-cherry-soft)] bg-cherry-faint text-[var(--cherry)]"
                       : "border-[var(--border-cherry-soft)] bg-white text-[var(--stem)]/85 hover:bg-[var(--cherry-muted)]"
@@ -719,11 +1219,6 @@ export default function DictionaryPage() {
               );
             })}
           </div>
-          {debouncedQ.length >= 2 ? (
-            <p className="mt-2 text-[11px] font-medium text-[var(--stem)]/60">
-              חיפוש פעיל — סינון א-ת מושבת בזמן חיפוש.
-            </p>
-          ) : null}
         </div>
         {filteredSaved.length === 0 ? (
           <p className="text-[var(--text)]/85">
@@ -752,43 +1247,57 @@ export default function DictionaryPage() {
                   )}
           </p>
         ) : (
-          <ul className="space-y-2">
-            {(
-              (() => {
-                const base = savedHits ? savedHits.map((h) => h.item) : filteredSaved;
-                const sorted = [...base].sort((a, b) =>
-                  normalizeTitleForIndex(a.food).localeCompare(normalizeTitleForIndex(b.food), "he")
-                );
-                if (debouncedQ.length >= 2) return sorted;
-                if (!activeLetter) return sorted;
-                return sorted.filter((x) => firstHebLetter(x.food) === activeLetter);
-              })()
-            ).map((d) => {
+          <div className="notebook-paper">
+          <ul className="notebook-list space-y-2">
+            {visibleSaved.map((d) => {
               const preset =
                 d.mealPresetId != null
                   ? presetMap.get(d.mealPresetId)
                   : undefined;
               const isMeal = Boolean(d.mealPresetId && preset);
-              const inCart = !isMeal && cartLookup.has(`dictionary:${d.id}`);
               const isOpen = openSavedId === d.id;
+              const isSelected = exportSelectedIds.has(d.id);
               return (
-                <motion.li
-                  key={d.id}
-                  layout
-                  className="rounded-xl border-2 border-[var(--border-cherry-soft)] bg-white px-3 py-3"
-                  style={{ boxShadow: "var(--list-row-shadow)" }}
-                >
-                  <button
-                    type="button"
-                    className="flex w-full items-center justify-between gap-3 text-right"
-                    onClick={() => setOpenSavedId((x) => (x === d.id ? null : d.id))}
-                    aria-expanded={isOpen}
-                  >
-                    <span className="flex min-w-0 flex-1 items-center gap-2">
+                <motion.li key={d.id} layout className="notebook-row">
+                  <div className="flex items-start justify-between gap-3">
+                    {exportSelectMode ? (
+                      <button
+                        type="button"
+                        className="mt-1 shrink-0 rounded-md border-2 border-[var(--border-cherry-soft)] bg-white p-1 shadow-sm"
+                        onPointerDown={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          flushSync(() => {
+                            setExportSelectedIds((prev) => {
+                              const next = new Set(prev);
+                              if (next.has(d.id)) next.delete(d.id);
+                              else next.add(d.id);
+                              return next;
+                            });
+                          });
+                        }}
+                        aria-label="בחירת פריט לייצוא"
+                        title="בחירת פריט לייצוא"
+                      >
+                        <input
+                          type="checkbox"
+                          className="h-4 w-4 accent-[var(--cherry)]"
+                          checked={isSelected}
+                          readOnly
+                          aria-hidden
+                        />
+                      </button>
+                    ) : null}
+                    <button
+                      type="button"
+                      className="flex min-w-0 flex-1 items-center gap-2 text-right"
+                      onClick={() => setOpenSavedId((x) => (x === d.id ? null : d.id))}
+                      aria-expanded={isOpen}
+                    >
                       <span className="text-xs" aria-hidden>
                         🍒
                       </span>
-                      <span className="min-w-0 flex-1 break-words text-base font-extrabold leading-snug text-[var(--stem)]">
+                      <span className="min-w-0 flex-1 break-words text-base font-extrabold leading-snug text-[var(--cherry)]">
                         {savedHits
                           ? renderHighlighted(
                               d.food,
@@ -801,11 +1310,27 @@ export default function DictionaryPage() {
                           ארוחה
                         </span>
                       )}
-                    </span>
-                    <span className="shrink-0 text-xs font-bold text-[var(--stem)]/55">
-                      {isOpen ? "▲" : "▼"}
-                    </span>
-                  </button>
+                    </button>
+
+                    <div className="flex shrink-0 items-center gap-1.5">
+                      <button
+                        type="button"
+                        className="rounded-md border border-[var(--border-cherry-soft)] bg-white p-1.5 text-[var(--cherry)] shadow-sm transition hover:bg-[var(--cherry-muted)]"
+                        onClick={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          setSaved(removeDictionaryItem(d.id));
+                        }}
+                        aria-label="מחיקה — הסרה מהמילון"
+                        title="מחיקה"
+                      >
+                        <IconTrash className="h-4 w-4" />
+                      </button>
+                      <div className="shrink-0 text-xs font-bold text-[var(--stem)]/55">
+                        {isOpen ? "▲" : "▼"}
+                      </div>
+                    </div>
+                  </div>
 
                   <AnimatePresence>
                     {isOpen && (
@@ -819,9 +1344,6 @@ export default function DictionaryPage() {
                           {!isMeal && (
                             <p className="text-sm text-[var(--text)]/80">
                               {d.quantity} {d.unit}
-                              {d.lastCalories != null
-                                ? ` · קלוריות (אחרון ביומן): ${d.lastCalories}`
-                                : ""}
                             </p>
                           )}
 
@@ -872,81 +1394,55 @@ export default function DictionaryPage() {
                           )}
 
                           <div className="mt-2 flex w-full max-w-full flex-wrap items-center justify-center gap-2 border-t border-[var(--border-cherry-soft)]/60 bg-gradient-to-b from-[var(--cherry-muted)]/35 to-transparent px-1 py-2.5 sm:gap-3">
-                            {!isMeal && (
-                              <button
-                                type="button"
-                                className="btn-icon-luxury flex min-w-[3.1rem] flex-col justify-center gap-0 py-1.5"
-                                title="הוספה ליומן היום לפי מה ששמור במילון (כמות ויחידה)"
-                                aria-label="יומן — הוספה ליומן היום"
-                                onClick={() => onSavedJournal(d)}
-                              >
-                                <IconCaption label="יומן">
-                                  <IconPlusCircle className="h-5 w-5 sm:h-6 sm:w-6 text-[var(--stem)]" />
-                                </IconCaption>
-                              </button>
-                            )}
-                            {isMeal && preset && (
-                              <button
-                                type="button"
-                                className="btn-icon-luxury flex min-w-[3.1rem] flex-col justify-center gap-0 py-1.5"
-                                title="הוספת הארוחה ליומן היום"
-                                aria-label="יומן — הוספת הארוחה ליומן היום"
+                            {!isMeal ? (
+                              <>
+                                <StampAction
+                                  label="ליומן"
+                                  tone="journal"
+                                  pressed={justAddedId === `journal:${d.id}`}
+                                  onClick={() => onSavedJournal(d)}
+                                >
+                                  {justAddedId === `journal:${d.id}` ? (
+                                    <span className="text-[12px] font-extrabold">✓</span>
+                                  ) : (
+                                    <IconPlusCircle className="h-4 w-4" />
+                                  )}
+                                </StampAction>
+                                <StampAction
+                                  label="לקניות"
+                                  tone="shop"
+                                  pressed={justAddedId === `shop:${d.id}`}
+                                  onClick={() => onCartDictionaryItem(d)}
+                                >
+                                  {justAddedId === `shop:${d.id}` ? (
+                                    <span className="text-[12px] font-extrabold">✓</span>
+                                  ) : (
+                                    <IconPlusCircle className="h-4 w-4" />
+                                  )}
+                                </StampAction>
+                              </>
+                            ) : preset ? (
+                              <StampAction
+                                label="ליומן"
+                                tone="journal"
+                                pressed={justAddedId === `journal:meal:${preset.id}`}
                                 onClick={() => applyPreset(preset)}
                               >
-                                <IconCaption label="יומן">
-                                  <IconPlusCircle className="h-5 w-5 sm:h-6 sm:w-6 text-[var(--stem)]" />
-                                </IconCaption>
-                              </button>
-                            )}
-                            <button
-                              type="button"
-                              className="btn-icon-luxury flex min-w-[3.1rem] flex-col justify-center gap-0 py-1.5"
-                              title={
-                                isMeal
-                                  ? "עריכת שם הארוחה"
-                                  : "עריכת שם וכמויות"
-                              }
-                              aria-label={`עריכה — עריכת «${d.food}» במילון`}
+                                {justAddedId === `journal:meal:${preset.id}` ? (
+                                  <span className="text-[12px] font-extrabold">✓</span>
+                                ) : (
+                                  <IconPlusCircle className="h-4 w-4" />
+                                )}
+                              </StampAction>
+                            ) : null}
+
+                            <StampAction
+                              label="עריכה"
+                              tone="edit"
                               onClick={() => openEdit(d)}
                             >
-                              <IconCaption label="עריכה">
-                                <IconPencil className="h-5 w-5 sm:h-6 sm:w-6" />
-                              </IconCaption>
-                            </button>
-                            {!isMeal ? (
-                              <button
-                                type="button"
-                                className={`btn-icon-luxury flex min-w-[3.1rem] flex-col justify-center gap-0 py-1.5 transition-colors ${
-                                  inCart
-                                    ? "bg-[var(--cherry-muted)] ring-2 ring-[var(--border-cherry-soft)]"
-                                    : ""
-                                }`}
-                                title="הוספה לרשימת הקניות במסך הקניות"
-                                aria-label="קניות — הוספה לרשימת קניות"
-                                aria-pressed={inCart}
-                                onClick={() => onCartDictionaryItem(d)}
-                              >
-                                <IconCaption label="קניות">
-                                  <IconCart
-                                    filled={inCart}
-                                    className={`h-5 w-5 sm:h-6 sm:w-6 ${
-                                      inCart ? "text-[var(--cherry)]" : "text-[var(--stem)]"
-                                    }`}
-                                  />
-                                </IconCaption>
-                              </button>
-                            ) : null}
-                            <button
-                              type="button"
-                              onClick={() => setSaved(removeDictionaryItem(d.id))}
-                              className="btn-icon-luxury btn-icon-luxury-danger flex min-w-[3.1rem] shrink-0 flex-col justify-center gap-0 py-1.5"
-                              aria-label="מחיקה — הסרה מהמילון"
-                              title="הסרה מהמילון האישי"
-                            >
-                              <IconCaption label="מחק">
-                                <IconTrash className="h-5 w-5 sm:h-6 sm:w-6" />
-                              </IconCaption>
-                            </button>
+                              <IconPencil className="h-4 w-4" />
+                            </StampAction>
                           </div>
                         </div>
                       </motion.div>
@@ -961,243 +1457,91 @@ export default function DictionaryPage() {
               );
             })}
           </ul>
-        )}
-      </motion.section>
-
-      <motion.section
-        className="glass-panel mt-4 p-4"
-        initial={{ opacity: 0, y: 8 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 0.03 }}
-      >
-        <h2 className="panel-title-cherry mb-1 text-lg">מחוץ למילון (אינטליגנציה קלורית + עולמי)</h2>
-        <p className="mb-3 text-xs text-[var(--stem)]/65">
-          {gf(
-            gender,
-            "מאגר אינטליגנציה קלורית מאומת ו־Open Food Facts — אותו חיפוש כמו בשדה החיפוש למעלה.",
-            "מאגר אינטליגנציה קלורית מאומת ו־Open Food Facts — אותו חיפוש כמו בשדה החיפוש למעלה."
-          )}
-        </p>
-        {debouncedQ.length < 2 ? (
-          <p className="text-sm text-[var(--text)]/85">
-            {gf(
-              gender,
-              "כשמקלידים לפחות 2 תווים בשדה למעלה — יוצגו כאן תוצאות ממאגר אינטליגנציה קלורית ומהעולם.",
-              "כשמקלידים לפחות 2 תווים בשדה למעלה — יוצגו כאן תוצאות ממאגר אינטליגנציה קלורית ומהעולם."
-            )}
-          </p>
-        ) : extSearchLoading ? (
-          <p className="text-center text-sm text-[var(--cherry)]/80">
-            {gf(
-              gender,
-              "טוען מאגר אינטליגנציה קלורית ו־Open Food Facts…",
-              "טוען מאגר אינטליגנציה קלורית ו־Open Food Facts…"
-            )}
-          </p>
-        ) : explorerRows.length === 0 && offRows.length === 0 ? (
-          <p className="text-sm text-[var(--text)]/85">
-            {gf(
-              gender,
-              "לא נמצאו פריטים במאגר אינטליגנציה קלורית או ב־Open Food Facts לחיפוש הזה.",
-              "לא נמצאו פריטים במאגר אינטליגנציה קלורית או ב־Open Food Facts לחיפוש הזה."
-            )}
-          </p>
-        ) : (
-          <>
-            {explorerRows.length > 0 && (
-              <>
-                <h3 className="mb-2 text-sm font-extrabold text-[var(--stem)]">מאגר אינטליגנציה קלורית</h3>
-                <ul className="mb-5 space-y-2">
-                  {(explorerHits ? explorerHits.map((h) => h.item) : explorerRows).map((row) => {
-                    void explorerUiTick;
-                    const inDict = isExplorerFoodInDictionary(row.id);
-                    const inCart = cartLookup.has(row.id);
-                    return (
-                      <li
-                        key={`ex-${row.id}-${row.name}`}
-                        className="flex flex-wrap items-start gap-2 rounded-2xl border-2 border-[var(--border-cherry-soft)] bg-gradient-to-b from-white to-[var(--welcome-gradient-to)] px-3 py-3"
-                        style={{ boxShadow: "var(--explorer-bubble-shadow)" }}
-                      >
-                        <div className="min-w-0 flex-1">
-                          <p className="flex flex-wrap items-center gap-1.5 font-semibold text-[var(--stem)]">
-                            <span
-                              className="inline-flex shrink-0 items-center gap-1"
-                              title="מאגר אינטליגנציה קלורית מאומת"
-                            >
-                              <IconVerified className="h-4 w-4 text-[#d4a017]" />
-                              <span className="text-[10px] font-bold text-[var(--stem)]/90" aria-hidden>
-                                🔎
-                              </span>
-                            </span>
-                            <span>
-                              {explorerHits
-                                ? renderHighlighted(
-                                    row.name,
-                                    explorerHits.find((x) => x.item.id === row.id)?.ranges ?? []
-                                  )
-                                : row.name}
-                            </span>
-                          </p>
-                          <p className="mt-0.5 text-xs text-[var(--cherry)]/75">{row.category}</p>
-                          <p className="mt-1 text-sm leading-relaxed text-[var(--stem)]/95">
-                            <span className="font-semibold">קלוריות</span>{" "}
-                            {Math.round(row.calories)} (ל־100 גרם) ·{" "}
-                            <span className="font-semibold">חלבון</span> {row.protein} ·{" "}
-                            <span className="font-semibold">פחמימות</span> {row.carbs} ·{" "}
-                            <span className="font-semibold">שומן</span> {row.fat}
-                          </p>
-                        </div>
-                        <div className="flex shrink-0 gap-2">
-                          <button
-                            type="button"
-                            className="btn-icon-luxury min-w-[3.25rem] flex-col justify-center gap-0.5 py-2 transition-colors"
-                            title="הוספה ליומן היום (100 גרם)"
-                            aria-label="יומן — הוספה ליומן היום"
-                            onClick={() => onExplorerJournal(row)}
-                          >
-                            <IconCaption label="יומן">
-                              <IconPlusCircle className="h-5 w-5 text-[var(--stem)]" />
-                            </IconCaption>
-                          </button>
-                          <button
-                            type="button"
-                            className={`btn-icon-luxury min-w-[3.25rem] flex-col justify-center gap-0.5 py-2 transition-colors ${
-                              inCart
-                                ? "bg-[var(--cherry-muted)] ring-2 ring-[var(--border-cherry-soft)]"
-                                : ""
-                            }`}
-                            title="הוספה לרשימת הקניות"
-                            aria-label="קניות — הוספה לרשימת קניות"
-                            aria-pressed={inCart}
-                            onClick={() => onExplorerCart(row)}
-                          >
-                            <IconCaption label="קניות">
-                              <IconCart
-                                filled={inCart}
-                                className={`h-5 w-5 ${
-                                  inCart ? "text-[var(--cherry)]" : "text-[var(--stem)]"
-                                }`}
-                              />
-                            </IconCaption>
-                          </button>
-                        </div>
-                      </li>
-                    );
-                  })}
-                </ul>
-              </>
-            )}
-            {offRows.length > 0 && (
-              <>
-                <h3 className="mb-2 text-sm font-extrabold text-[var(--stem)]">
-                  Open Food Facts (עולמי)
-                </h3>
-                <ul className="space-y-2">
-                  {(offHits ? offHits.map((h) => h.item) : offRows).map((row) => {
-                    void explorerUiTick;
-                    const inDict = isExplorerFoodInDictionary(row.id);
-                    const inCart = cartLookup.has(row.id);
-                    return (
-                      <li
-                        key={`off-${row.id}-${row.name}`}
-                        className="flex flex-wrap items-start gap-2 rounded-2xl border-2 border-[var(--border-cherry-soft)] bg-gradient-to-b from-white to-[var(--welcome-gradient-to)] px-3 py-3"
-                        style={{ boxShadow: "var(--explorer-bubble-shadow)" }}
-                      >
-                        <div className="min-w-0 flex-1">
-                          <p className="flex flex-wrap items-center gap-1.5 font-semibold text-[var(--stem)]">
-                            <span className="text-[10px] font-bold text-[var(--stem)]/90" aria-hidden>
-                              🌐
-                            </span>
-                            <span>
-                              {offHits
-                                ? renderHighlighted(
-                                    row.name,
-                                    offHits.find((x) => x.item.id === row.id)?.ranges ?? []
-                                  )
-                                : row.name}
-                            </span>
-                          </p>
-                          <p className="mt-0.5 text-xs text-[var(--cherry)]/75">{row.category}</p>
-                          <p className="mt-1 text-sm leading-relaxed text-[var(--stem)]/95">
-                            <span className="font-semibold">קלוריות</span>{" "}
-                            {Math.round(row.calories)} (ל־100 גרם) ·{" "}
-                            <span className="font-semibold">חלבון</span> {row.protein} ·{" "}
-                            <span className="font-semibold">פחמימות</span> {row.carbs} ·{" "}
-                            <span className="font-semibold">שומן</span> {row.fat}
-                          </p>
-                        </div>
-                        <div className="flex shrink-0 gap-2">
-                          <button
-                            type="button"
-                            className="btn-icon-luxury min-w-[3.25rem] flex-col justify-center gap-0.5 py-2 transition-colors"
-                            title="הוספה ליומן היום (100 גרם)"
-                            aria-label="יומן — הוספה ליומן היום"
-                            onClick={() => onExplorerJournal(row)}
-                          >
-                            <IconCaption label="יומן">
-                              <IconPlusCircle className="h-5 w-5 text-[var(--stem)]" />
-                            </IconCaption>
-                          </button>
-                          <button
-                            type="button"
-                            className={`btn-icon-luxury min-w-[3.25rem] flex-col justify-center gap-0.5 py-2 transition-colors ${
-                              inCart
-                                ? "bg-[var(--cherry-muted)] ring-2 ring-[var(--border-cherry-soft)]"
-                                : ""
-                            }`}
-                            title="הוספה לרשימת הקניות"
-                            aria-label="קניות — הוספה לרשימת קניות"
-                            aria-pressed={inCart}
-                            onClick={() => onExplorerCart(row)}
-                          >
-                            <IconCaption label="קניות">
-                              <IconCart
-                                filled={inCart}
-                                className={`h-5 w-5 ${
-                                  inCart ? "text-[var(--cherry)]" : "text-[var(--stem)]"
-                                }`}
-                              />
-                            </IconCaption>
-                          </button>
-                        </div>
-                      </li>
-                    );
-                  })}
-                </ul>
-              </>
-            )}
-            {explorerRows.length > 0 && (
-              <p className="mt-4 text-center">
-                <Link
-                  href={`/explorer?q=${encodeURIComponent(debouncedQ)}`}
-                  className="text-sm font-semibold text-[var(--cherry)] underline-offset-2 hover:underline"
-                >
-                  {gf(
-                    gender,
-                    "פתיחה במגלה המלאה (מיון וקטגוריות)",
-                    "פתיחה במגלה המלאה (מיון וקטגוריות)"
-                  )}
-                </Link>
-              </p>
-            )}
-          </>
+          </div>
         )}
       </motion.section>
 
       <AnimatePresence>
-        {shopToast && (
+        {exportOpen && (
           <motion.div
-            role="status"
-            className="fixed bottom-24 left-1/2 z-[150] -translate-x-1/2 rounded-2xl border-2 border-[var(--border-cherry-soft)] bg-white px-5 py-3 text-center text-sm font-semibold text-[var(--cherry)] shadow-lg"
-            initial={{ opacity: 0, y: 16 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: 8 }}
-            transition={{ duration: 0.2 }}
+            className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            onClick={() => setExportOpen(false)}
           >
-            נוסף לרשימה!
+            <motion.div
+              className="glass-panel w-full max-w-md p-4"
+              initial={{ opacity: 0, y: 10, scale: 0.98 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, y: 10, scale: 0.98 }}
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="mb-2 flex items-start justify-between gap-3">
+                <div>
+                  <h3 className="panel-title-cherry text-base">ייצוא מילון</h3>
+                  <p className="mt-1 text-xs text-[var(--stem)]/70">
+                    {exportSelectMode && exportSelectedIds.size > 0
+                      ? `נבחרו ${exportSelectedIds.size} פריטים`
+                      : `ייצוא של הרשימה המסוננת (${exportItems.length})`}
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  className="rounded-lg border-2 border-[var(--border-cherry-soft)] bg-white px-3 py-2 text-xs font-extrabold text-[var(--stem)] shadow-sm transition hover:bg-[var(--cherry-muted)]"
+                  onClick={() => setExportOpen(false)}
+                  aria-label="סגירה"
+                  title="סגירה"
+                >
+                  ×
+                </button>
+              </div>
+
+              <div className="mt-3 grid grid-cols-1 gap-2">
+                <button
+                  type="button"
+                  className="rounded-lg border-2 border-[var(--border-cherry-soft)] bg-white px-3 py-3 text-sm font-extrabold text-[var(--cherry)] shadow-sm transition hover:bg-[var(--cherry-muted)]"
+                  onClick={() => {
+                    exportPdf();
+                    setExportOpen(false);
+                  }}
+                >
+                  PDF (להדפסה/שליחה)
+                </button>
+                <button
+                  type="button"
+                  className="rounded-lg border-2 border-[var(--border-cherry-soft)] bg-white px-3 py-3 text-sm font-extrabold text-[var(--stem)] shadow-sm transition hover:bg-[var(--cherry-muted)]"
+                  onClick={() => {
+                    exportCsv();
+                    setExportOpen(false);
+                  }}
+                >
+                  CSV (אקסל / Sheets)
+                </button>
+                <button
+                  type="button"
+                  className="rounded-lg border-2 border-[var(--border-cherry-soft)] bg-white px-3 py-3 text-sm font-extrabold text-[var(--stem)] shadow-sm transition hover:bg-[var(--cherry-muted)]"
+                  onClick={() => {
+                    exportJson();
+                    setExportOpen(false);
+                  }}
+                >
+                  JSON (גיבוי מלא)
+                </button>
+              </div>
+
+              <p className="mt-3 text-[11px] text-[var(--text)]/70">
+                טיפ: אפשר לסנן קודם עם טאב/אות/חיפוש ואז לייצא (אופציה A). אם מפעילים “בחירת פריטים”
+                ומסמנים—הייצוא יהיה רק של הנבחרים (אופציה B).
+              </p>
+            </motion.div>
           </motion.div>
         )}
       </AnimatePresence>
+
+      {/* (Removed) External results card below. Results appear above while searching. */}
+
+      {/* No shopping toast in Dictionary screen */}
 
       <AnimatePresence>
         {editTarget && (
