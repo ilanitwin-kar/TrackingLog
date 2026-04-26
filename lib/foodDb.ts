@@ -47,6 +47,22 @@ export function layeredSearchScore(
   const tokenVariants = (t: string): string[] => {
     const x = collapseTypos(t);
     const out = new Set<string>([t, x]);
+    const add = (s: string) => {
+      const v = s.trim();
+      if (v) out.add(v);
+    };
+
+    // Hebrew preposition prefixes: ב/ל/כ/מ/ו/ה (heuristic).
+    for (const base of [t, x]) {
+      if (base.length >= 4 && /^[בלכמווה]/.test(base)) {
+        add(base.slice(1));
+      }
+    }
+
+    // Common equivalence: "מים" ↔ "מי"
+    for (const base of [t, x]) {
+      if (base === "מים") add("מי");
+    }
     const stripSuffix = (s: string, suffix: string) => {
       if (s.length <= suffix.length + 2) return;
       if (!s.endsWith(suffix)) return;
@@ -61,7 +77,7 @@ export function layeredSearchScore(
       stripSuffix(base, "ה");
       stripSuffix(base, "ת");
     }
-    return [...out].filter((v) => v && v.length >= 3);
+    return [...out].filter((v) => v && (v.length >= 3 || v === "מי"));
   };
   if (qWords.length >= 2) {
     // Cross-alias match: allow words to appear across comma-separated parts.

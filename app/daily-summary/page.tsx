@@ -140,6 +140,7 @@ export default function DailySummaryPage() {
       : (baseKeys[0] ?? dateKey);
     const keys = baseKeys.filter((k) => k >= startKey);
     const pastKeys = keys.filter((k) => k <= dateKey);
+    const fromTodayKeys = keys.filter((k) => k >= dateKey);
 
     const days = keys.map((k) => {
       const list = dayLogs[k] ?? [];
@@ -147,18 +148,16 @@ export default function DailySummaryPage() {
       const diff = computedTarget - consumed;
       return { dateKey: k, consumed, diff };
     });
-    const totalConsumed = pastKeys.reduce((s, k) => {
-      const list = dayLogs[k] ?? [];
-      return s + list.reduce((ss, e) => ss + e.calories, 0);
-    }, 0);
-    const totalTarget = computedTarget * keys.length;
+    // For week/month, the UI shows "from today until end of period" (including today).
+    const totalConsumed = Math.max(0, consumedKcal);
+    const totalTarget = computedTarget * fromTodayKeys.length;
     const remaining = Math.max(0, totalTarget - totalConsumed);
     const over = Math.max(0, totalConsumed - totalTarget);
 
     return {
       label: scope === "week" ? "השבוע" : "החודש",
       title: periodTitle,
-      totalDays: keys.length,
+      totalDays: fromTodayKeys.length,
       totalTarget,
       totalConsumed,
       remaining,
@@ -227,13 +226,14 @@ export default function DailySummaryPage() {
 
   const periodMacros = useMemo(() => {
     if (scope === "day") return null;
-    const pastKeys = scoped.pastKeys;
-    if (!pastKeys || pastKeys.length < 1) return null;
+    const effectiveKeys = scoped.keys?.filter((k) => k >= dateKey) ?? [];
+    if (effectiveKeys.length < 1) return null;
 
     let p = 0;
     let c = 0;
     let f = 0;
-    for (const k of pastKeys) {
+    // "From today" — include only today's entries for consumption.
+    for (const k of effectiveKeys.filter((k) => k <= dateKey)) {
       const list = dayLogs[k] ?? [];
       for (const e of list) {
         if (typeof e.proteinG === "number") p += e.proteinG;

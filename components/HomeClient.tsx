@@ -33,8 +33,10 @@ import {
   getJournalStreakDays,
   isFoodStarred,
   loadDayJournalClosedMap,
+  loadWeightSkipDayKey,
   loadWeights,
   loadProfile,
+  saveWeightSkipDayKey,
   saveDayJournalClosedMap,
   saveDayLogEntries,
   saveFoodMemoryKey,
@@ -492,6 +494,7 @@ export function HomeClient({ mode = "dashboard" }: { mode?: "dashboard" | "journ
 
   const [quickWeightOpen, setQuickWeightOpen] = useState(false);
   const [quickStepsOpen, setQuickStepsOpen] = useState(false);
+  const [weightSkipRev, setWeightSkipRev] = useState(0);
   const [weightToast, setWeightToast] = useState<{
     show: boolean;
     fade: boolean;
@@ -772,6 +775,8 @@ export function HomeClient({ mode = "dashboard" }: { mode?: "dashboard" | "journ
     try {
       // Baseline row may be created lazily; do not require it.
       const today = getTodayKey();
+      const skipKey = loadWeightSkipDayKey();
+      if (skipKey === today) return false;
       const weights = loadWeights();
       const hasToday = weights.some((w) => w && w.date === today);
       if (hasToday) return false;
@@ -792,7 +797,7 @@ export function HomeClient({ mode = "dashboard" }: { mode?: "dashboard" | "journ
     } catch {
       return false;
     }
-  }, [profile, isViewingToday]);
+  }, [profile, isViewingToday, weightSkipRev]);
 
   const nextStep = useMemo(() => {
     if (!profile) return null as null | "weight" | "walk" | "food";
@@ -1521,6 +1526,19 @@ export function HomeClient({ mode = "dashboard" }: { mode?: "dashboard" | "journ
                       ? "קיזוז בהליכה"
                       : "הוסיפי מזון"}
                 </button>
+                {nextStep === "weight" ? (
+                  <button
+                    type="button"
+                    className="mt-2 w-full rounded-xl border-2 border-[var(--border-cherry-soft)] bg-white py-2.5 text-sm font-extrabold text-[var(--stem)] shadow-sm transition hover:bg-[var(--cherry-muted)]"
+                    onClick={() => {
+                      const today = getTodayKey();
+                      saveWeightSkipDayKey(today);
+                      setWeightSkipRev((x) => x + 1);
+                    }}
+                  >
+                    {gf(gender, "דלגי היום", "דלג היום")}
+                  </button>
+                ) : null}
               </div>
             </div>
           </div>
