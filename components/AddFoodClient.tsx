@@ -2,7 +2,7 @@
 
 import { AnimatePresence, motion } from "framer-motion";
 import Link from "next/link";
-import { useRouter, useSearchParams } from "next/navigation";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import {
   useEffect,
   useId,
@@ -14,7 +14,7 @@ import {
 import { BarcodeScanModal } from "@/components/BarcodeScanModal";
 import { IconCaption } from "@/components/IconCaption";
 import { IconPlusCircle, IconScanBarcode, IconVerified } from "@/components/Icons";
-import { addDaysToDateKey, getTodayKey } from "@/lib/dateKey";
+import { getTodayKey } from "@/lib/dateKey";
 import { type HomeSuggestRow, sortHomeLocalRows } from "@/lib/foodSearchShared";
 import { optionalMacroGram } from "@/lib/macroGrams";
 import { SEARCH_DEBOUNCE_MS } from "@/lib/searchDebounce";
@@ -227,21 +227,6 @@ function resolveMealSlot(raw: string | null): MealSlot {
   }
 }
 
-function mealLabelHe(m: MealSlot): string {
-  switch (m) {
-    case "morning":
-      return "בוקר";
-    case "lunch":
-      return "צהריים";
-    case "snack":
-      return "ביניים";
-    case "dinner":
-      return "ערב";
-    case "night":
-      return "לילה";
-  }
-}
-
 function addFoodSourceBadge(src: HomeSuggestRow["source"]) {
   const s = src ?? "local";
   if (s === "local") {
@@ -382,6 +367,7 @@ export function AddFoodClient({
 }) {
   const gender = loadProfile().gender;
   const router = useRouter();
+  const pathname = usePathname();
   const searchParams = useSearchParams();
   const dateKey = resolveDateKey(searchParams.get("date"));
   const meal = resolveMealSlot(searchParams.get("meal"));
@@ -725,34 +711,7 @@ export function AddFoodClient({
 
   const showResultsPanel = food.trim().length >= 2;
 
-  const todayKey = getTodayKey();
-  const canNextDay = dateKey < todayKey;
-
-  const addFoodDateLabel = useMemo(() => {
-    try {
-      return new Date(`${dateKey}T12:00:00`).toLocaleDateString("he-IL", {
-        weekday: "long",
-        day: "numeric",
-        month: "long",
-        year: "numeric",
-      });
-    } catch {
-      return dateKey;
-    }
-  }, [dateKey]);
-
-  function goAddFoodByDelta(delta: number) {
-    const next = addDaysToDateKey(dateKey, delta);
-    if (next > todayKey) return;
-    router.replace(`/add-food?date=${encodeURIComponent(next)}`);
-  }
-
-  function onPickAddFoodDate(e: React.ChangeEvent<HTMLInputElement>) {
-    const v = e.target.value;
-    if (!v || !/^\d{4}-\d{2}-\d{2}$/.test(v)) return;
-    if (v > todayKey) return;
-    router.replace(`/add-food?date=${encodeURIComponent(v)}`);
-  }
+  // todayKey was used for date navigation; keep dateKey from params only.
 
   useEffect(() => {
     const trimmed = food.trim();
@@ -876,7 +835,10 @@ export function AddFoodClient({
         setIntelRows(sortHomeLocalRows(intel, debouncedFoodSearch));
         setMohRows(sortHomeLocalRows(moh, debouncedFoodSearch));
         setUsdaRows(sortHomeLocalRows(usda, debouncedFoodSearch));
-      } catch {
+      } catch (err) {
+        // Aborts are expected when user keeps typing / navigates away.
+        const name = (err as { name?: string } | null)?.name;
+        if (ac.signal.aborted || name === "AbortError") return;
         if (!ac.signal.aborted) {
           setIntelRows([]);
           setMohRows([]);
@@ -936,7 +898,10 @@ export function AddFoodClient({
         }));
         // API already applies strict rules; client keeps only sorting.
         setWorldRows(sortHomeLocalRows(mapped, debouncedFoodSearch));
-      } catch {
+      } catch (err) {
+        // Aborts are expected when user keeps typing / navigates away.
+        const name = (err as { name?: string } | null)?.name;
+        if (ac.signal.aborted || name === "AbortError") return;
         if (!ac.signal.aborted) setWorldRows([]);
       } finally {
         if (!ac.signal.aborted) setWorldSearchLoading(false);
@@ -1474,7 +1439,7 @@ export function AddFoodClient({
       className="min-h-[100dvh] bg-gradient-to-b from-[#fff8fa] via-white to-[#f6faf3] pb-[calc(5.25rem+env(safe-area-inset-bottom))]"
       dir="rtl"
     >
-      <header className="shrink-0 border-b-2 border-[var(--border-cherry-soft)] bg-white/95 px-3 py-3 shadow-sm backdrop-blur-sm">
+      <header className="sticky top-0 z-[120] shrink-0 border-b-2 border-[var(--border-cherry-soft)] bg-white/95 px-3 py-3 shadow-sm backdrop-blur-sm">
         <div className="mx-auto flex max-w-lg items-start gap-2">
           <Link
             href={homeLink}
@@ -1484,42 +1449,8 @@ export function AddFoodClient({
           </Link>
           <div className="flex min-w-0 flex-1 flex-col items-center gap-2 text-center">
             <h1 className="panel-title-cherry text-lg">
-              {mealLabelHe(meal)} — הוסף מזון
+              היומן שלי
             </h1>
-            <div className="flex w-full max-w-[20rem] items-center justify-center gap-1.5">
-              <button
-                type="button"
-                className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border-2 border-[var(--border-cherry-soft)] bg-white text-xl font-bold leading-none text-[var(--stem)] shadow-sm transition hover:bg-[var(--cherry-muted)] active:scale-[0.97]"
-                aria-label="יום קודם ביומן"
-                onClick={() => goAddFoodByDelta(-1)}
-              >
-                ‹
-              </button>
-              <div className="flex min-w-0 flex-1 flex-col items-center gap-0.5">
-                <label className="w-full max-w-[12rem] cursor-pointer">
-                  <span className="sr-only">תאריך ביומן</span>
-                  <input
-                    type="date"
-                    value={dateKey}
-                    max={todayKey}
-                    onChange={onPickAddFoodDate}
-                    className="w-full cursor-pointer rounded-lg border-2 border-[var(--border-cherry-soft)] bg-white px-1 py-1.5 text-center text-xs font-bold text-[var(--stem)] shadow-sm"
-                  />
-                </label>
-                <p className="max-w-full truncate px-1 text-[10px] font-medium text-[var(--cherry)]/70">
-                  {addFoodDateLabel}
-                </p>
-              </div>
-              <button
-                type="button"
-                disabled={!canNextDay}
-                className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border-2 border-[var(--border-cherry-soft)] bg-white text-xl font-bold leading-none text-[var(--stem)] shadow-sm transition hover:bg-[var(--cherry-muted)] active:scale-[0.97] disabled:cursor-not-allowed disabled:opacity-40"
-                aria-label="יום הבא ביומן"
-                onClick={() => goAddFoodByDelta(1)}
-              >
-                ›
-              </button>
-            </div>
           </div>
           <div className="w-[4.25rem] shrink-0" aria-hidden />
         </div>
@@ -1529,59 +1460,91 @@ export function AddFoodClient({
         {screen === "search" && (
           <>
             <nav
-              className="mb-3 flex flex-wrap items-center justify-center gap-2 pb-1"
+              className="mb-3"
               aria-label="מקורות הוספה"
             >
-              <Link
-                href={`/add-food?${tabsQuery}`}
-                className="shrink-0 rounded-full border-2 border-[var(--border-cherry-soft)] bg-white px-4 py-2 text-sm font-extrabold text-[var(--stem)] sm:text-base"
-              >
-                הכל
-              </Link>
-              <Link
-                href={`/menus?${tabsQuery}`}
-                className="shrink-0 rounded-full border-2 border-[var(--border-cherry-soft)] bg-white px-4 py-2 text-sm font-extrabold text-[var(--stem)] sm:text-base"
-              >
-                תפריטים
-              </Link>
-              <Link
-                href={`/my-recipes?${tabsQuery}`}
-                className="shrink-0 rounded-full border-2 border-[var(--border-cherry-soft)] bg-white px-4 py-2 text-sm font-extrabold text-[var(--stem)] sm:text-base"
-              >
-                מתכונים
-              </Link>
-              <Link
-                href={`/dictionary?${tabsQuery}`}
-                className="shrink-0 rounded-full border-2 border-[var(--border-cherry-soft)] bg-white px-4 py-2 text-sm font-extrabold text-[var(--stem)] sm:text-base"
-              >
-                מילון
-              </Link>
+              <div className="grid grid-cols-4 gap-1 rounded-2xl border-2 border-[var(--border-cherry-soft)] bg-white/90 p-1 shadow-sm">
+                {(
+                  [
+                    { href: `/add-food?${tabsQuery}`, label: "הכל", on: pathname === "/add-food" },
+                    { href: `/menus?${tabsQuery}`, label: "תפריטים", on: pathname === "/menus" },
+                    { href: `/my-recipes?${tabsQuery}`, label: "מתכונים", on: pathname === "/my-recipes" },
+                    { href: `/dictionary?${tabsQuery}`, label: "מילון", on: pathname === "/dictionary" },
+                  ] as const
+                ).map((t) => (
+                  <Link
+                    key={t.href}
+                    href={t.href}
+                    className={`rounded-xl px-2 py-2 text-center text-xs font-extrabold transition sm:text-sm ${
+                      t.on
+                        ? "bg-cherry-faint text-[var(--cherry)] shadow-sm"
+                        : "bg-transparent text-[var(--stem)]/80 hover:bg-[var(--cherry-muted)]"
+                    }`}
+                    aria-current={t.on ? "page" : undefined}
+                  >
+                    {t.label}
+                  </Link>
+                ))}
+              </div>
             </nav>
 
-            <div>
-              <label className="shrink-0">
-                <span className="mb-1.5 flex flex-wrap items-center justify-between gap-2 text-sm font-semibold text-[var(--stem)]">
-                  <span>חיפוש</span>
+            <div className="sticky top-[4.5rem] z-[110] -mx-3 border-b border-[var(--border-cherry-soft)] bg-white/80 px-3 pb-3 pt-1 backdrop-blur-sm">
+              <div className="flex items-center justify-between gap-2 pb-2">
+                <div className="min-w-0 text-sm font-extrabold text-[var(--stem)]/75">
+                  {gf(
+                    gender,
+                    "עוד תיעוד קטן — והיום שלך מקבל צורה.",
+                    "עוד תיעוד קטן — והיום שלך מקבל צורה."
+                  )}
+                </div>
+                {food.trim().length > 0 ? (
                   <button
                     type="button"
-                    className="shrink-0 rounded-lg border-2 border-[var(--border-cherry-soft)] bg-white px-2.5 py-1 text-xs font-bold text-[var(--stem)] shadow-sm transition hover:bg-[var(--cherry-muted)]"
-                    onClick={openManualModal}
+                    className="shrink-0 rounded-xl border-2 border-[var(--border-cherry-soft)] bg-white px-3 py-2 text-xs font-extrabold text-[var(--stem)] shadow-sm transition hover:bg-[var(--cherry-muted)]"
+                    onClick={() => {
+                      setFood("");
+                      setDebouncedFoodSearch("");
+                      setIntelRows([]);
+                      setMohRows([]);
+                      setUsdaRows([]);
+                      setWorldRows([]);
+                      setExpandedIntel(false);
+                      setExpandedMoh(false);
+                      setExpandedUsda(false);
+                      setExpandedWorld(false);
+                      queueMicrotask(() => searchInputRef.current?.focus());
+                    }}
                   >
-                    הוספה ידנית
+                    ניקוי
                   </button>
-                </span>
-                <p className="mb-2 text-[11px] font-medium text-[var(--cherry)]/65">
-                  {gender === "male" ? (
-                    <>
-                      לחץ <span className="font-bold">+</span> ליד מוצר כדי להוסיף ליומן{" "}
-                    </>
-                  ) : (
-                    <>
-                      לחצי <span className="font-bold">+</span> ליד מוצר כדי להוסיף ליומן{" "}
-                    </>
-                  )}
-                  (בחירת משקל בגרם).
-                </p>
+                ) : null}
+              </div>
+
+              <div className="grid grid-cols-2 gap-2 pb-2">
+                <button
+                  type="button"
+                  className="rounded-xl border-2 border-[var(--border-cherry-soft)] bg-white px-3 py-2 text-xs font-extrabold text-[var(--stem)] shadow-sm transition hover:bg-[var(--cherry-muted)]"
+                  onClick={openManualModal}
+                >
+                  הוספת מוצר
+                </button>
+                <button
+                  type="button"
+                  className="flex items-center justify-center gap-2 rounded-xl border-2 border-[var(--border-cherry-soft)] bg-white px-3 py-2 text-xs font-extrabold text-[var(--stem)] shadow-sm transition hover:bg-[var(--cherry-muted)]"
+                  aria-label="סריקת ברקוד — פתיחת מצלמה לסריקת מוצר"
+                  title="סריקת ברקוד"
+                  onClick={() => {
+                    searchInputRef.current?.blur();
+                    setScanModalOpen(true);
+                  }}
+                >
+                  <IconScanBarcode className="h-5 w-5" />
+                  ברקוד
+                </button>
+              </div>
+
+              <label className="block">
+                <span className="sr-only">הוסף מזון</span>
                 <div className="relative">
                   <input
                     ref={searchInputRef}
@@ -1597,48 +1560,15 @@ export function AddFoodClient({
                     autoCorrect="off"
                     autoCapitalize="none"
                     spellCheck={false}
-                    placeholder={gf(
-                      gender,
-                      "חפשי מזון (לפחות 2 אותיות)…",
-                      "חפש מזון (לפחות 2 אותיות)…"
-                    )}
-                    className="input-luxury-search w-full ps-4 pe-[5.25rem] sm:pe-24"
+                    placeholder={gf(gender, "הוסיפי מזון…", "הוסף מזון…")}
+                    className="input-luxury-search w-full px-4"
                   />
-                  <div className="absolute end-1.5 top-1/2 z-[70] flex -translate-y-1/2 gap-1">
-                    <button
-                      type="button"
-                      className="flex min-h-[2.65rem] min-w-[4.25rem] flex-col items-center justify-center gap-0 rounded-xl border-2 border-[var(--border-cherry-soft)] bg-white px-1 py-0.5 text-[var(--stem)] shadow-sm transition hover:bg-[var(--cherry-muted)]"
-                      aria-label="סריקת ברקוד — פתיחת מצלמה לסריקת מוצר"
-                      title="סריקת ברקוד"
-                      onClick={() => {
-                        searchInputRef.current?.blur();
-                        setScanModalOpen(true);
-                      }}
-                    >
-                      <IconCaption label="ברקוד">
-                        <IconScanBarcode className="h-5 w-5 sm:h-6 sm:w-6" />
-                      </IconCaption>
-                    </button>
-                    <button
-                      type="button"
-                      className="flex min-h-[2.65rem] min-w-[4.25rem] flex-col items-center justify-center gap-0 rounded-xl border-2 border-[var(--border-cherry-soft)] bg-white px-1 py-0.5 text-[var(--stem)] shadow-sm transition hover:bg-[var(--cherry-muted)]"
-                      aria-label="הוספה מהירה"
-                      title="הוספה מהירה"
-                      onClick={openManualModal}
-                    >
-                      <IconCaption label="מהיר">
-                        <span aria-hidden className="text-lg font-extrabold leading-none">
-                          +
-                        </span>
-                      </IconCaption>
-                    </button>
-                  </div>
                 </div>
               </label>
             </div>
 
             {(quickAddToast || dictFeedback || debouncePending || showResultsPanel) && (
-            <div className="mt-3 rounded-xl border border-[var(--border-cherry-soft)] bg-white/90 p-2 shadow-sm">
+            <div className="mt-3 scroll-mt-[11rem] rounded-xl border border-[var(--border-cherry-soft)] bg-white/90 p-2 shadow-sm">
               {quickAddToast && (
                 <p
                   className="mb-2 rounded-lg border border-[var(--border-cherry-soft)] bg-[#ecfdf5] px-2 py-2 text-center text-xs font-semibold text-[var(--stem)]"

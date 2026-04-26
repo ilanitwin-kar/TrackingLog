@@ -137,6 +137,8 @@ const KEYS = {
   foodMemory: "cj_food_memory_v1",
   dayLogs: "cj_day_logs_v1",
   weights: "cj_weights_v1",
+  /** דילוג שקילה — מסתיר את ההצעה ליום אחד */
+  weightSkipDay: "cj_weight_skip_day_v1",
   /** תחילת התהליך/מסלול — תאריך בסיס לקוביות צבירה */
   journeyStart: "cj_journey_start_v1",
   halfGoalDate: "cj_half_goal_date_v1",
@@ -152,6 +154,26 @@ const KEYS = {
   /** המשתמש עבר ממסך הכניסה (הרשמה/התחברות) — מותר להמשיך ל־TDEE */
   welcomeLeft: "cj_welcome_left_v1",
 } as const;
+
+export function loadWeightSkipDayKey(): string | null {
+  try {
+    const raw = localStorage.getItem(KEYS.weightSkipDay);
+    const v = (raw ?? "").trim();
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(v)) return null;
+    return v;
+  } catch {
+    return null;
+  }
+}
+
+export function saveWeightSkipDayKey(dateKey: string): void {
+  try {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(dateKey)) return;
+    localStorage.setItem(KEYS.weightSkipDay, dateKey);
+  } catch {
+    /* ignore */
+  }
+}
 
 /**
  * מחיקת כל הנתונים המקומיים של האפליקציה (LocalStorage).

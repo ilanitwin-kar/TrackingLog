@@ -38,6 +38,24 @@ function uniqueNonEmpty(arr: string[]): string[] {
 function tokenVariants(tokenNorm: string): string[] {
   const t = collapseCommonHebrewTypos(tokenNorm);
   const variants: string[] = [tokenNorm, t];
+  const add = (s: string) => {
+    const x = s.trim();
+    if (!x) return;
+    variants.push(x);
+  };
+
+  // Hebrew preposition prefixes: ב/ל/כ/מ/ו/ה (heuristic).
+  // Helps queries like "במים" match names like "במי מלח".
+  for (const base of [tokenNorm, t]) {
+    if (base.length >= 4 && /^[בלכמווה]/.test(base)) {
+      add(base.slice(1));
+    }
+  }
+
+  // Common equivalence: "מים" ↔ "מי" (and via prefix stripping: "במים" -> "מים" -> "מי").
+  for (const base of [tokenNorm, t]) {
+    if (base === "מים") add("מי");
+  }
   const tryStripSuffix = (s: string, suffix: string) => {
     if (s.length <= suffix.length + 2) return;
     if (!s.endsWith(suffix)) return;
@@ -55,9 +73,10 @@ function tokenVariants(tokenNorm: string): string[] {
     tryStripSuffix(base, "ת");
   }
 
-  return uniqueNonEmpty(variants).filter(
-    (v) => v.length >= 3 || v === tokenNorm || v === t
-  );
+  return uniqueNonEmpty(variants).filter((v) => {
+    if (v === "מי") return true;
+    return v.length >= 3 || v === tokenNorm || v === t;
+  });
 }
 
 /**
