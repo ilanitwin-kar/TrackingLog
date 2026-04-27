@@ -31,7 +31,8 @@ export async function syncLocalToCloud(uid: string): Promise<void> {
   ]);
 
   const logs = loadDayLogs();
-  const keys = Object.keys(logs).sort().slice(-90); // last ~3 months
+  // Upload a small recent window first to keep UX snappy.
+  const keys = Object.keys(logs).sort().slice(-14);
   for (const k of keys) {
     const entries = logs[k];
     if (!Array.isArray(entries)) continue;

@@ -32,6 +32,7 @@ import {
   loginWithGoogleRedirect,
   signupWithEmail,
 } from "@/lib/firebaseUserAuth";
+import { dispatchAppToast } from "@/lib/appToast";
 import {
   loadDictionaryFromCloud,
   loadMealPresetsFromCloud,
@@ -126,7 +127,7 @@ const COPY: Record<Lang, Copy> = {
     loggingIn: "מתחברת…",
     registering: "יוצרת חשבון…",
     signupLocalNote:
-      "החשבון נשמר במכשיר בלבד. בשלב זה אין מייל אימות מהשרת — אפשר לאפס סיסמה דרך «שכחתי סיסמה».",
+      "החשבון נשמר בענן (Firebase). אין מייל אימות כרגע — אפשר לאפס סיסמה דרך «שכחתי סיסמה».",
   },
   en: {
     taglinePrimary: "A direct path to your dream body",
@@ -170,7 +171,7 @@ const COPY: Record<Lang, Copy> = {
     loggingIn: "Signing in…",
     registering: "Creating account…",
     signupLocalNote:
-      "Your account is stored on this device only. There is no server email verification yet — use “Forgot password” if needed.",
+      "Your account is stored in the cloud (Firebase). There is no email verification yet — use “Forgot password” if needed.",
   },
 };
 
@@ -365,6 +366,14 @@ export function WelcomeScreen() {
   }
 
   async function hydrateFromCloudAfterLogin(uid: string) {
+    // Don't block login UI on cloud sync (mobile networks can be slow).
+    // Navigate immediately; sync runs in background.
+    markWelcomeLeft();
+    closeAuth();
+    const profile0 = loadProfile();
+    if (isRegistrationComplete(profile0)) router.push("/");
+    else router.push("/wizard");
+
     try {
       // Pull profile first (it controls gating), then journals.
       const cloudProfile = await loadUserProfileFromCloud(uid);
@@ -391,17 +400,9 @@ export function WelcomeScreen() {
       if (weights) saveWeights(weights, { skipCloud: true });
       if (dict) saveDictionary(dict, { skipCloud: true });
       if (presets) saveMealPresets(presets, { skipCloud: true });
-
-      markWelcomeLeft();
-      closeAuth();
-
-      const profile = loadProfile();
-      if (isRegistrationComplete(profile)) router.push("/");
-      else router.push("/wizard");
+      dispatchAppToast("התחברת. מסנכרנת נתונים מהענן…");
     } catch {
-      markWelcomeLeft();
-      closeAuth();
-      router.push("/wizard");
+      dispatchAppToast("התחברת. סנכרון ענן לא זמין כרגע.");
     }
   }
 
