@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import type { UserProfile, WeightEntry } from "@/lib/storage";
 import { ensureBaselineWeightRowFromProfile, loadWeights, saveWeights } from "@/lib/storage";
+import { getTodayKey } from "@/lib/dateKey";
 
 function uid(): string {
   return `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
@@ -13,7 +14,7 @@ function round1(n: number): number {
 }
 
 function todayKey(): string {
-  return new Date().toLocaleDateString("en-CA");
+  return getTodayKey();
 }
 
 function sortByDateAsc(list: WeightEntry[]): WeightEntry[] {

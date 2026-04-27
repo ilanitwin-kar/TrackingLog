@@ -1,6 +1,14 @@
 import { addDaysToDateKey, getTodayKey } from "./dateKey";
 import type { ActivityLevel, Gender, NutritionGoal } from "./tdee";
 import { getAppVariant } from "./appVariant";
+import { getFirebaseCurrentUser } from "@/lib/firebaseUserAuth";
+import {
+  saveDayLogToCloud,
+  saveDictionaryToCloud,
+  saveMealPresetsToCloud,
+  saveUserProfileToCloud,
+  saveWeightsToCloud,
+} from "@/lib/userCloud";
 
 export type FoodUnit =
   | "גרם"
@@ -374,6 +382,12 @@ export function saveProfile(p: UserProfile): void {
     const hasStart = getJourneyStartDateKey();
     if (!hasStart) ensureJourneyStartDateKey();
   }
+  try {
+    const uid = getFirebaseCurrentUser()?.uid;
+    if (uid) void saveUserProfileToCloud(uid, p);
+  } catch {
+    /* ignore */
+  }
   if (typeof window !== "undefined") {
     window.dispatchEvent(new Event("cj-profile-updated"));
   }
@@ -492,6 +506,12 @@ export function saveDayLogEntries(dateKey: string, entries: LogEntry[]): void {
   const all = loadDayLogs();
   all[dateKey] = entries;
   localStorage.setItem(KEYS.dayLogs, JSON.stringify(all));
+  try {
+    const uid = getFirebaseCurrentUser()?.uid;
+    if (uid) void saveDayLogToCloud(uid, dateKey, entries);
+  } catch {
+    /* ignore */
+  }
   if (typeof window !== "undefined") {
     window.dispatchEvent(new Event("cj-profile-updated"));
   }
@@ -517,6 +537,12 @@ export function loadWeights(): WeightEntry[] {
 
 export function saveWeights(entries: WeightEntry[]): void {
   localStorage.setItem(KEYS.weights, JSON.stringify(entries));
+  try {
+    const uid = getFirebaseCurrentUser()?.uid;
+    if (uid) void saveWeightsToCloud(uid, entries);
+  } catch {
+    /* ignore */
+  }
   if (typeof window !== "undefined") {
     window.dispatchEvent(new Event("cj-profile-updated"));
   }
@@ -602,6 +628,12 @@ export function loadDictionary(): DictionaryItem[] {
 
 export function saveDictionary(items: DictionaryItem[]): void {
   localStorage.setItem(KEYS.dictionary, JSON.stringify(items));
+  try {
+    const uid = getFirebaseCurrentUser()?.uid;
+    if (uid) void saveDictionaryToCloud(uid, items);
+  } catch {
+    /* ignore */
+  }
 }
 
 export function isFoodStarred(food: string): boolean {
@@ -1004,6 +1036,12 @@ export function loadMealPresets(): MealPreset[] {
 
 export function saveMealPresets(presets: MealPreset[]): void {
   localStorage.setItem(KEYS.mealPresets, JSON.stringify(presets));
+  try {
+    const uid = getFirebaseCurrentUser()?.uid;
+    if (uid) void saveMealPresetsToCloud(uid, presets);
+  } catch {
+    /* ignore */
+  }
 }
 
 export function addMealPreset(preset: Omit<MealPreset, "id" | "createdAt">): MealPreset[] {

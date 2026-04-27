@@ -1,6 +1,18 @@
+function pad2(n: number): string {
+  return String(Math.trunc(n)).padStart(2, "0");
+}
+
+/** Local calendar YYYY-MM-DD for streaks / daily logs (locale-independent). */
+export function getDateKeyLocal(d: Date): string {
+  const y = d.getFullYear();
+  const m = d.getMonth() + 1;
+  const day = d.getDate();
+  return `${y}-${pad2(m)}-${pad2(day)}`;
+}
+
 /** Local calendar YYYY-MM-DD for streaks / daily logs */
 export function getTodayKey(): string {
-  return new Date().toLocaleDateString("en-CA");
+  return getDateKeyLocal(new Date());
 }
 
 /** n ימים אחרונים כולל היום — מהעתיק לחדש */
@@ -10,7 +22,7 @@ export function getLastNDateKeysIncludingToday(n: number): string[] {
     const d = new Date();
     d.setHours(12, 0, 0, 0);
     d.setDate(d.getDate() - i);
-    keys.push(d.toLocaleDateString("en-CA"));
+    keys.push(getDateKeyLocal(d));
   }
   return keys;
 }
@@ -18,7 +30,7 @@ export function getLastNDateKeysIncludingToday(n: number): string[] {
 export function addDaysToDateKey(dateKey: string, deltaDays: number): string {
   const d = new Date(`${dateKey}T12:00:00`);
   d.setDate(d.getDate() + deltaDays);
-  return d.toLocaleDateString("en-CA");
+  return getDateKeyLocal(d);
 }
 
 /** שבוע קלנדרי א׳–ש׳ המכיל את התאריך (מזהים YYYY-MM-DD) */
@@ -30,7 +42,7 @@ export function getCalendarWeekDateKeys(anchorDateKey: string): string[] {
   for (let i = 0; i < 7; i++) {
     const x = new Date(sun);
     x.setDate(sun.getDate() + i);
-    keys.push(x.toLocaleDateString("en-CA"));
+    keys.push(getDateKeyLocal(x));
   }
   return keys;
 }
