@@ -58,7 +58,7 @@ function getIncompleteTdeeFields(p: UserProfile): { id: TdeeFieldId; label: stri
   }
   if (p.customDeficitEnabled === true) {
     if (!p.deficit || p.deficit < 50 || p.deficit > 500) {
-      missing.push({ id: "deficit", label: "גירעון נוסף" });
+      missing.push({ id: "deficit", label: "גירעון יומי" });
     }
   }
   return missing;
@@ -236,7 +236,7 @@ export default function TdeePage() {
       />
       <p className="mb-6 text-center text-sm font-medium text-[var(--cherry)]/85">
         {registered
-          ? "השינויים נשמרים אוטומטית. יעד הקלוריות והמאקרו בדשבורד מתעדכנים לפי המטרה, הפעילות והגירעון הנוסף (אם סימנת)."
+          ? "השינויים נשמרים אוטומטית. יעד הקלוריות והמאקרו בדשבורד מתעדכנים לפי המטרה, הפעילות והגירעון היומי (אם סימנת)."
           : gf(
               gender,
               "מלאי את כל השדות כדי להגדיר את היעד היומי ולהמשיך לדשבורד.",
@@ -508,8 +508,8 @@ export default function TdeePage() {
             <span className="text-sm font-bold leading-snug text-[var(--stem)]">
               {gf(
                 gender,
-                "רוצה להפחית עוד קלוריות מהיעד? סמני כאן והזיני גירעון נוסף (עד 500 קק״ל ליום).",
-                "רוצה להפחית עוד קלוריות מהיעד? סמן כאן והזן גירעון נוסף (עד 500 קק״ל ליום)."
+                "רוצה להוסיף גירעון יומי מעל חישוב המטרה? סמני כאן ובחרי כמה קק״ל להוריד ביום (עד 500).",
+                "רוצה להוסיף גירעון יומי מעל חישוב המטרה? סמן כאן ובחר כמה קק״ל להוריד ביום (עד 500)."
               )}
             </span>
           </label>
@@ -540,7 +540,7 @@ export default function TdeePage() {
               !p.customDeficitEnabled ? "opacity-45" : ""
             }`}
             placeholder={gf(gender, "למשל 300 (בין 50 ל־500)", "למשל 300 (בין 50 ל־500)")}
-            aria-label="גירעון נוסף בקלוריות"
+            aria-label="גירעון יומי בקלוריות"
           />
         </div>
       </motion.section>
@@ -572,7 +572,7 @@ export default function TdeePage() {
         {plan && p.customDeficitEnabled && p.deficit > 0 ? (
           <>
             <p className="mt-3 text-sm font-semibold text-[var(--cherry)]/85">
-              יעד אחרי המטרה (לפני גירעון נוסף)
+              יעד אחרי המטרה (לפני גירעון יומי)
             </p>
             <p className="text-xl font-bold tabular-nums text-[var(--stem)]">
               {plan.baseTargetKcal} קק״ל

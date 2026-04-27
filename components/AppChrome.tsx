@@ -18,6 +18,7 @@ import { hasChosenAppVariant } from "@/lib/appVariant";
 import {
   hasLeftWelcome,
   isRegistrationComplete,
+  clearUserLocalData,
   loadProfile,
   markWelcomeLeft,
 } from "@/lib/storage";
@@ -37,6 +38,8 @@ export function AppChrome({ children }: { children: React.ReactNode }) {
   const [regOk, setRegOk] = useState(false);
   const [authTick, setAuthTick] = useState(0);
   const [fbUserTick, setFbUserTick] = useState(0);
+  const [fbAuthResolved, setFbAuthResolved] = useState(false);
+  const LAST_UID_KEY = "cj_last_firebase_uid_v1";
 
   useEffect(() => {
     const onAuth = () => setAuthTick((n) => n + 1);
@@ -46,8 +49,18 @@ export function AppChrome({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     return onFirebaseAuthChanged((u) => {
+      setFbAuthResolved(true);
       setFbUserTick((n) => n + 1);
       if (u?.uid) {
+        try {
+          const prev = localStorage.getItem(LAST_UID_KEY) ?? "";
+          if (prev && prev !== u.uid) {
+            clearUserLocalData();
+          }
+          localStorage.setItem(LAST_UID_KEY, u.uid);
+        } catch {
+          /* ignore */
+        }
         void syncLocalToCloud(u.uid).catch(() => {});
       }
     });
@@ -135,6 +148,14 @@ export function AppChrome({ children }: { children: React.ReactNode }) {
       const authExists = hasAuthRecord();
       const legacyUnlock = !authExists && isRegistrationComplete(profile);
 
+      // On refresh, Firebase restores session asynchronously. Avoid redirecting to /welcome
+      // before auth state is resolved, otherwise "pull to refresh" can look like a logout.
+      if (!internalBypass && !legacyUnlock && !isSessionActive() && !fbAuthResolved) {
+        setRegOk(false);
+        setRegReady(false);
+        return;
+      }
+
       if (!internalBypass && !session && !legacyUnlock) {
         window.location.replace("/welcome");
         return;
@@ -174,7 +195,7 @@ export function AppChrome({ children }: { children: React.ReactNode }) {
       setRegOk(true);
       setRegReady(true);
     }
-  }, [pathname, authTick, fbUserTick]);
+  }, [pathname, authTick, fbUserTick, fbAuthResolved]);
 
   if (!regReady || !regOk) {
     return (

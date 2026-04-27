@@ -29,7 +29,6 @@ type StepId =
   | "activity"
   | "nutritionGoal"
   | "deficitToggle"
-  | "deficitValue"
   | "summary"
   | "weigh"
   | "weather"
@@ -72,13 +71,7 @@ function stepCoachLine(step: StepId, gender: "female" | "male"): string | null {
     case "nutritionGoal":
       return "מטרה ברורה עושה שקט בראש.";
     case "deficitToggle":
-      return gf(
-        gender,
-        "את בוחרת כמה חזק ללכת—בשליטה מלאה.",
-        "אתה בוחר כמה חזק ללכת—בשליטה מלאה."
-      );
-    case "deficitValue":
-      return "מספר קטן, השפעה גדולה לאורך זמן.";
+      return gf(gender, "בוחרות את הקצב. בלי לנחש.", "בוחרים את הקצב. בלי לנחש.");
     case "weigh":
       return "התמדה מנצחת. אנחנו נעזור לך לזכור בעדינות.";
     case "weather":
@@ -257,7 +250,6 @@ const stepsOrder: StepId[] = [
   "activity",
   "nutritionGoal",
   "deficitToggle",
-  "deficitValue",
   "summary",
   "weigh",
   "weather",
@@ -299,7 +291,6 @@ export default function WizardPage() {
   const [heightText, setHeightText] = useState("");
   const [weightText, setWeightText] = useState("");
   const [goalWeightText, setGoalWeightText] = useState("");
-  const [deficitText, setDeficitText] = useState("");
 
   const inputRef = useRef<HTMLInputElement | null>(null);
 
@@ -316,7 +307,6 @@ export default function WizardPage() {
     setHeightText("");
     setWeightText("");
     setGoalWeightText("");
-    setDeficitText("");
   }, [router]);
 
   const progress = useMemo(() => computeWizardProgress(step), [step]);
@@ -449,21 +439,6 @@ export default function WizardPage() {
 
     if (step === "deficitToggle") {
       // Always show the summary before weigh-in settings.
-      return goNext(p.customDeficitEnabled ? "deficitValue" : "summary");
-    }
-
-    if (step === "deficitValue") {
-      const n = parseNum(deficitText);
-      if (n == null) {
-        setError("רק מספר. למשל 200.");
-        return;
-      }
-      const deficit = clampInt(n, 0, 999);
-      if (deficit < 50 || deficit > 500) {
-        setError("גירעון נוסף צריך להיות בין 50 ל־500 קק״ל.");
-        return;
-      }
-      persist({ deficit, customDeficitEnabled: true });
       return goNext("summary");
     }
 
@@ -508,9 +483,8 @@ export default function WizardPage() {
     if (step === "height") return !heightText.trim();
     if (step === "weight") return !weightText.trim();
     if (step === "goalWeight") return !goalWeightText.trim();
-    if (step === "deficitValue") return !deficitText.trim();
     return false;
-  }, [step, p.email, p.firstName, ageText, heightText, weightText, goalWeightText, deficitText]);
+  }, [step, p.email, p.firstName, ageText, heightText, weightText, goalWeightText]);
 
   const primaryLabel = useMemo(() => stepPrimaryCtaLabel(step, gender), [step, gender]);
 
@@ -766,48 +740,63 @@ export default function WizardPage() {
 
           {step === "deficitToggle" ? (
             <motion.div key="deficitToggle" initial={{ opacity: 0, x: 12 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -12 }}>
-              <h2 className="text-lg font-extrabold text-[var(--cherry)]">רוצה גירעון נוסף?</h2>
+              <h2 className="text-lg font-extrabold text-[var(--cherry)]">כמה גירעון יומי תרצי?</h2>
               <p className="mt-2 text-sm font-semibold leading-relaxed text-[var(--text)]/80">
-                זה אופציונלי. אם תפעילי—נוריד עוד עד 500 קק״ל מהיעד היומי.
+                זה קובע כמה “אגרסיבי” יהיה היעד. אם לא בטוחה—תתחילי מתון, אפשר לשנות בהמשך.
               </p>
               <div className="mt-4 grid grid-cols-2 gap-2">
                 <button
                   type="button"
-                  className={`rounded-2xl border-2 px-4 py-3 text-sm font-extrabold shadow-sm transition ${
-                    p.customDeficitEnabled
-                      ? "border-[var(--stem)] bg-[var(--cherry-muted)] text-[var(--stem)]"
-                      : "border-[var(--border-cherry-soft)] bg-white text-[var(--stem)] hover:bg-[var(--cherry-muted)]"
-                  }`}
-                  onClick={() => persist({ customDeficitEnabled: true })}
-                >
-                  כן
-                </button>
-                <button
-                  type="button"
-                  className={`rounded-2xl border-2 px-4 py-3 text-sm font-extrabold shadow-sm transition ${
+                  className={`rounded-2xl border-2 px-4 py-3 text-start text-sm font-extrabold shadow-sm transition ${
                     !p.customDeficitEnabled
                       ? "border-[var(--stem)] bg-[var(--cherry-muted)] text-[var(--stem)]"
                       : "border-[var(--border-cherry-soft)] bg-white text-[var(--stem)] hover:bg-[var(--cherry-muted)]"
                   }`}
                   onClick={() => persist({ customDeficitEnabled: false, deficit: 0 })}
                 >
-                  לא
+                  <div className="text-[13px] font-black">0 קק״ל</div>
+                  <div className="mt-0.5 text-[11px] font-semibold text-[var(--stem)]/75">מתון / בלי תוספת</div>
+                </button>
+                <button
+                  type="button"
+                  className={`rounded-2xl border-2 px-4 py-3 text-start text-sm font-extrabold shadow-sm transition ${
+                    p.customDeficitEnabled && p.deficit === 200
+                      ? "border-[var(--stem)] bg-[var(--cherry-muted)] text-[var(--stem)]"
+                      : "border-[var(--border-cherry-soft)] bg-white text-[var(--stem)] hover:bg-[var(--cherry-muted)]"
+                  }`}
+                  onClick={() => persist({ customDeficitEnabled: true, deficit: 200 })}
+                >
+                  <div className="text-[13px] font-black">200 קק״ל</div>
+                  <div className="mt-0.5 text-[11px] font-semibold text-[var(--stem)]/75">מתון</div>
                 </button>
               </div>
-            </motion.div>
-          ) : null}
 
-          {step === "deficitValue" ? (
-            <motion.div key="deficitValue" initial={{ opacity: 0, x: 12 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -12 }}>
-              <h2 className="text-lg font-extrabold text-[var(--cherry)]">כמה גירעון נוסף?</h2>
-              <p className="mt-2 text-sm font-semibold leading-relaxed text-[var(--text)]/80">בין 50 ל־500 קק״ל.</p>
-              <input
-                inputMode="numeric"
-                value={deficitText}
-                onChange={(e) => setDeficitText(e.target.value.replace(/[^\d]/g, ""))}
-                className="input-luxury-dark mt-3 w-full"
-                placeholder="200"
-              />
+              <div className="mt-2 grid grid-cols-2 gap-2">
+                <button
+                  type="button"
+                  className={`rounded-2xl border-2 px-4 py-3 text-start text-sm font-extrabold shadow-sm transition ${
+                    p.customDeficitEnabled && p.deficit === 350
+                      ? "border-[var(--stem)] bg-[var(--cherry-muted)] text-[var(--stem)]"
+                      : "border-[var(--border-cherry-soft)] bg-white text-[var(--stem)] hover:bg-[var(--cherry-muted)]"
+                  }`}
+                  onClick={() => persist({ customDeficitEnabled: true, deficit: 350 })}
+                >
+                  <div className="text-[13px] font-black">350 קק״ל</div>
+                  <div className="mt-0.5 text-[11px] font-semibold text-[var(--stem)]/75">בינוני</div>
+                </button>
+                <button
+                  type="button"
+                  className={`rounded-2xl border-2 px-4 py-3 text-start text-sm font-extrabold shadow-sm transition ${
+                    p.customDeficitEnabled && p.deficit === 500
+                      ? "border-[var(--stem)] bg-[var(--cherry-muted)] text-[var(--stem)]"
+                      : "border-[var(--border-cherry-soft)] bg-white text-[var(--stem)] hover:bg-[var(--cherry-muted)]"
+                  }`}
+                  onClick={() => persist({ customDeficitEnabled: true, deficit: 500 })}
+                >
+                  <div className="text-[13px] font-black">500 קק״ל</div>
+                  <div className="mt-0.5 text-[11px] font-semibold text-[var(--stem)]/75">אגרסיבי</div>
+                </button>
+              </div>
             </motion.div>
           ) : null}
 
