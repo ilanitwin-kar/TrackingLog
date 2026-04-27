@@ -375,18 +375,20 @@ export function loadProfile(): UserProfile {
   }
 }
 
-export function saveProfile(p: UserProfile): void {
+export function saveProfile(p: UserProfile, opts?: { skipCloud?: boolean }): void {
   localStorage.setItem(KEYS.profile, JSON.stringify(p));
   // קובעים תחילת תהליך בפעם הראשונה שההרשמה הושלמה
   if (p.onboardingComplete === true) {
     const hasStart = getJourneyStartDateKey();
     if (!hasStart) ensureJourneyStartDateKey();
   }
-  try {
-    const uid = getFirebaseCurrentUser()?.uid;
-    if (uid) void saveUserProfileToCloud(uid, p);
-  } catch {
-    /* ignore */
+  if (!opts?.skipCloud) {
+    try {
+      const uid = getFirebaseCurrentUser()?.uid;
+      if (uid) void saveUserProfileToCloud(uid, p);
+    } catch {
+      /* ignore */
+    }
   }
   if (typeof window !== "undefined") {
     window.dispatchEvent(new Event("cj-profile-updated"));
@@ -502,15 +504,17 @@ export function getJournalStreakDays(): number {
   return streak;
 }
 
-export function saveDayLogEntries(dateKey: string, entries: LogEntry[]): void {
+export function saveDayLogEntries(dateKey: string, entries: LogEntry[], opts?: { skipCloud?: boolean }): void {
   const all = loadDayLogs();
   all[dateKey] = entries;
   localStorage.setItem(KEYS.dayLogs, JSON.stringify(all));
-  try {
-    const uid = getFirebaseCurrentUser()?.uid;
-    if (uid) void saveDayLogToCloud(uid, dateKey, entries);
-  } catch {
-    /* ignore */
+  if (!opts?.skipCloud) {
+    try {
+      const uid = getFirebaseCurrentUser()?.uid;
+      if (uid) void saveDayLogToCloud(uid, dateKey, entries);
+    } catch {
+      /* ignore */
+    }
   }
   if (typeof window !== "undefined") {
     window.dispatchEvent(new Event("cj-profile-updated"));
@@ -535,13 +539,15 @@ export function loadWeights(): WeightEntry[] {
   }
 }
 
-export function saveWeights(entries: WeightEntry[]): void {
+export function saveWeights(entries: WeightEntry[], opts?: { skipCloud?: boolean }): void {
   localStorage.setItem(KEYS.weights, JSON.stringify(entries));
-  try {
-    const uid = getFirebaseCurrentUser()?.uid;
-    if (uid) void saveWeightsToCloud(uid, entries);
-  } catch {
-    /* ignore */
+  if (!opts?.skipCloud) {
+    try {
+      const uid = getFirebaseCurrentUser()?.uid;
+      if (uid) void saveWeightsToCloud(uid, entries);
+    } catch {
+      /* ignore */
+    }
   }
   if (typeof window !== "undefined") {
     window.dispatchEvent(new Event("cj-profile-updated"));
@@ -626,13 +632,15 @@ export function loadDictionary(): DictionaryItem[] {
   }
 }
 
-export function saveDictionary(items: DictionaryItem[]): void {
+export function saveDictionary(items: DictionaryItem[], opts?: { skipCloud?: boolean }): void {
   localStorage.setItem(KEYS.dictionary, JSON.stringify(items));
-  try {
-    const uid = getFirebaseCurrentUser()?.uid;
-    if (uid) void saveDictionaryToCloud(uid, items);
-  } catch {
-    /* ignore */
+  if (!opts?.skipCloud) {
+    try {
+      const uid = getFirebaseCurrentUser()?.uid;
+      if (uid) void saveDictionaryToCloud(uid, items);
+    } catch {
+      /* ignore */
+    }
   }
 }
 
@@ -1034,13 +1042,15 @@ export function loadMealPresets(): MealPreset[] {
   }
 }
 
-export function saveMealPresets(presets: MealPreset[]): void {
+export function saveMealPresets(presets: MealPreset[], opts?: { skipCloud?: boolean }): void {
   localStorage.setItem(KEYS.mealPresets, JSON.stringify(presets));
-  try {
-    const uid = getFirebaseCurrentUser()?.uid;
-    if (uid) void saveMealPresetsToCloud(uid, presets);
-  } catch {
-    /* ignore */
+  if (!opts?.skipCloud) {
+    try {
+      const uid = getFirebaseCurrentUser()?.uid;
+      if (uid) void saveMealPresetsToCloud(uid, presets);
+    } catch {
+      /* ignore */
+    }
   }
 }
 
