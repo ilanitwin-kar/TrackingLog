@@ -227,6 +227,41 @@ export function clearAllLocalAppData(): void {
   }
 }
 
+/**
+ * Clears user-specific local data (profile/journal/etc) while preserving app theme/variant.
+ * Useful when switching between Firebase users on the same device.
+ */
+export function clearUserLocalData(): void {
+  if (typeof window === "undefined") return;
+  const userKeys = [
+    KEYS.profile,
+    KEYS.foodMemory,
+    KEYS.dayLogs,
+    KEYS.weights,
+    KEYS.dictionary,
+    KEYS.mealPresets,
+    KEYS.weightSkipDay,
+    KEYS.journeyStart,
+    KEYS.halfGoalDate,
+    KEYS.fullGoalDate,
+    KEYS.calorieBoardGold,
+    KEYS.storyRevealUnlock,
+    KEYS.dayJournalClosed,
+  ];
+  for (const k of userKeys) {
+    try {
+      localStorage.removeItem(k);
+    } catch {
+      /* ignore */
+    }
+  }
+  try {
+    window.dispatchEvent(new Event("cj-profile-updated"));
+  } catch {
+    /* ignore */
+  }
+}
+
 export function getJourneyStartDateKey(): string | null {
   if (typeof window === "undefined") return null;
   const raw = localStorage.getItem(KEYS.journeyStart);
