@@ -3,17 +3,16 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
-import {
-  hasWelcomeAutoResume,
-  loadAuthRecord,
-  registerAccount,
-  startSession,
-  verifyLogin,
-} from "@/lib/localAuth";
+import { hasWelcomeAutoResume } from "@/lib/localAuth";
 import {
   isRegistrationComplete,
   loadProfile,
   markWelcomeLeft,
+  saveDayLogEntries,
+  saveDictionary,
+  saveMealPresets,
+  saveProfile,
+  saveWeights,
 } from "@/lib/storage";
 import { BlueberryMark } from "@/components/BlueberryMark";
 import { CherryMark } from "@/components/CherryMark";
@@ -27,6 +26,19 @@ import { DevAdminQuickEntry } from "@/components/DevAdminQuickEntry";
 import { PasswordRevealInput } from "@/components/PasswordRevealInput";
 import { gf } from "@/lib/hebrewGenderUi";
 import { getTimeOfDaySlot } from "@/lib/dashboardGreeting";
+import {
+  consumeGoogleRedirectResult,
+  loginWithEmail,
+  loginWithGoogleRedirect,
+  signupWithEmail,
+} from "@/lib/firebaseUserAuth";
+import {
+  loadDictionaryFromCloud,
+  loadMealPresetsFromCloud,
+  loadRecentDayLogsFromCloud,
+  loadUserProfileFromCloud,
+  loadWeightsFromCloud,
+} from "@/lib/userCloud";
 
 const LANG_KEY = "cj_welcome_lang";
 
@@ -272,6 +284,20 @@ export function WelcomeScreen() {
     setLang(loadLang());
   }, []);
 
+  useEffect(() => {
+    if (!mounted) return;
+    // Google sign-in uses redirect on mobile; consume result on return.
+    void consumeGoogleRedirectResult().then(async (r) => {
+      if (!r) return;
+      if (!r.ok) {
+        setAuthError(r.messageHe);
+        return;
+      }
+      await hydrateFromCloudAfterLogin(r.user.uid);
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mounted]);
+
   /** כבר מחוברים או דילוג מנהלת/צוות — לא לעצור במסך הכניסה */
   useEffect(() => {
     if (!mounted) return;
@@ -323,7 +349,7 @@ export function WelcomeScreen() {
   function openAuth(mode: "signup" | "login") {
     setAuthEmail(
       mode === "login"
-        ? loadAuthRecord()?.email ?? loadProfile().email ?? ""
+        ? loadProfile().email ?? ""
         : ""
     );
     setAuthPassword("");
@@ -338,6 +364,47 @@ export function WelcomeScreen() {
     setAuthError(null);
   }
 
+  async function hydrateFromCloudAfterLogin(uid: string) {
+    try {
+      // Pull profile first (it controls gating), then journals.
+      const cloudProfile = await loadUserProfileFromCloud(uid);
+      if (cloudProfile) {
+        saveProfile(cloudProfile);
+      } else {
+        // Ensure at least the email stays consistent locally.
+        const p = loadProfile();
+        if (authEmail.trim() && p.email.trim().toLowerCase() !== authEmail.trim().toLowerCase()) {
+          saveProfile({ ...p, email: authEmail.trim().toLowerCase() });
+        }
+      }
+
+      const [dayLogs, weights, dict, presets] = await Promise.all([
+        loadRecentDayLogsFromCloud(uid, 60),
+        loadWeightsFromCloud(uid),
+        loadDictionaryFromCloud(uid),
+        loadMealPresetsFromCloud(uid),
+      ]);
+
+      for (const [k, entries] of Object.entries(dayLogs)) {
+        saveDayLogEntries(k, entries);
+      }
+      if (weights) saveWeights(weights);
+      if (dict) saveDictionary(dict);
+      if (presets) saveMealPresets(presets);
+
+      markWelcomeLeft();
+      closeAuth();
+
+      const profile = loadProfile();
+      if (isRegistrationComplete(profile)) router.push("/");
+      else router.push("/tdee");
+    } catch {
+      markWelcomeLeft();
+      closeAuth();
+      router.push("/tdee");
+    }
+  }
+
   async function submitSignup() {
     setAuthError(null);
     if (authPassword.trim() !== authConfirm.trim()) {
@@ -346,11 +413,9 @@ export function WelcomeScreen() {
     }
     setAuthBusy(true);
     try {
-      const r = await registerAccount(authEmail, authPassword.trim());
+      const r = await signupWithEmail(authEmail, authPassword.trim());
       if (!r.ok) {
-        if (r.error === "email") setAuthError(t.errEmail);
-        else if (r.error === "short") setAuthError(t.errPasswordShort);
-        else setAuthError(t.errAlreadyRegistered);
+        setAuthError(r.messageHe);
         return;
       }
       void fetch("/api/email/welcome", {
@@ -361,10 +426,7 @@ export function WelcomeScreen() {
           gender: trackGender,
         }),
       }).catch(() => {});
-      startSession();
-      markWelcomeLeft();
-      closeAuth();
-      router.push("/tdee");
+      await hydrateFromCloudAfterLogin(r.user.uid);
     } finally {
       setAuthBusy(false);
     }
@@ -374,26 +436,12 @@ export function WelcomeScreen() {
     setAuthError(null);
     setAuthBusy(true);
     try {
-      const ok = await verifyLogin(authEmail, authPassword.trim());
-      if (!ok) {
-        const reg = loadAuthRecord()?.email ?? "";
-        const p0 = loadProfile();
-        const prof = p0.email.trim().toLowerCase();
-        if (reg && prof && reg !== prof) {
-          setAuthError(
-            `${t.errWrongCreds} טיפ: האימייל בפרופיל (${p0.email.trim()}) שונה מהאימייל שאיתו נרשמת (${reg}). נסי את אחד מהם או «שכחתי סיסמה».`
-          );
-        } else {
-          setAuthError(t.errWrongCreds);
-        }
+      const r = await loginWithEmail(authEmail, authPassword.trim());
+      if (!r.ok) {
+        setAuthError(r.messageHe);
         return;
       }
-      startSession();
-      markWelcomeLeft();
-      closeAuth();
-      const profile = loadProfile();
-      if (isRegistrationComplete(profile)) router.push("/");
-      else router.push("/tdee");
+      await hydrateFromCloudAfterLogin(r.user.uid);
     } finally {
       setAuthBusy(false);
     }
@@ -496,7 +544,15 @@ export function WelcomeScreen() {
         <div className="flex justify-center gap-6">
           <button
             type="button"
-            onClick={() => showToast(t.shareSoon)}
+            onClick={() => {
+              setAuthError(null);
+              setAuthBusy(true);
+              void loginWithGoogleRedirect()
+                .then((r) => {
+                  if (!r.ok) setAuthError(r.messageHe);
+                })
+                .finally(() => setAuthBusy(false));
+            }}
             className="flex h-12 w-12 items-center justify-center rounded-full border border-[#e8e8e8] bg-white shadow-sm"
             aria-label="Google"
           >

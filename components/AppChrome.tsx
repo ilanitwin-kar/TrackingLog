@@ -11,6 +11,8 @@ import {
   isInternalAuthBypassActive,
   isSessionActive,
 } from "@/lib/localAuth";
+import { onFirebaseAuthChanged } from "@/lib/firebaseUserAuth";
+import { getFirebaseCurrentUser } from "@/lib/firebaseUserAuth";
 import { hasChosenAppVariant } from "@/lib/appVariant";
 import {
   hasLeftWelcome,
@@ -33,11 +35,16 @@ export function AppChrome({ children }: { children: React.ReactNode }) {
   const [regReady, setRegReady] = useState(false);
   const [regOk, setRegOk] = useState(false);
   const [authTick, setAuthTick] = useState(0);
+  const [fbUserTick, setFbUserTick] = useState(0);
 
   useEffect(() => {
     const onAuth = () => setAuthTick((n) => n + 1);
     window.addEventListener("cj-auth-changed", onAuth);
     return () => window.removeEventListener("cj-auth-changed", onAuth);
+  }, []);
+
+  useEffect(() => {
+    return onFirebaseAuthChanged(() => setFbUserTick((n) => n + 1));
   }, []);
 
   useEffect(() => {
@@ -118,7 +125,7 @@ export function AppChrome({ children }: { children: React.ReactNode }) {
       }
 
       const internalBypass = isInternalAuthBypassActive();
-      const session = isSessionActive();
+      const session = isSessionActive() || Boolean(getFirebaseCurrentUser());
       const authExists = hasAuthRecord();
       const legacyUnlock = !authExists && isRegistrationComplete(profile);
 
@@ -161,7 +168,7 @@ export function AppChrome({ children }: { children: React.ReactNode }) {
       setRegOk(true);
       setRegReady(true);
     }
-  }, [pathname, authTick]);
+  }, [pathname, authTick, fbUserTick]);
 
   if (!regReady || !regOk) {
     return (
