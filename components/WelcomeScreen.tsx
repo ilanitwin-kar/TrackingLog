@@ -304,7 +304,7 @@ export function WelcomeScreen() {
     if (!hasWelcomeAutoResume()) return;
     const profile = loadProfile();
     if (isRegistrationComplete(profile)) router.replace("/");
-    else router.replace("/tdee");
+    else router.replace("/wizard");
   }, [mounted, router]);
 
   useEffect(() => {
@@ -397,11 +397,11 @@ export function WelcomeScreen() {
 
       const profile = loadProfile();
       if (isRegistrationComplete(profile)) router.push("/");
-      else router.push("/tdee");
+      else router.push("/wizard");
     } catch {
       markWelcomeLeft();
       closeAuth();
-      router.push("/tdee");
+      router.push("/wizard");
     }
   }
 
