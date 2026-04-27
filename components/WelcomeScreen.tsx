@@ -369,12 +369,12 @@ export function WelcomeScreen() {
       // Pull profile first (it controls gating), then journals.
       const cloudProfile = await loadUserProfileFromCloud(uid);
       if (cloudProfile) {
-        saveProfile(cloudProfile);
+        saveProfile(cloudProfile, { skipCloud: true });
       } else {
         // Ensure at least the email stays consistent locally.
         const p = loadProfile();
         if (authEmail.trim() && p.email.trim().toLowerCase() !== authEmail.trim().toLowerCase()) {
-          saveProfile({ ...p, email: authEmail.trim().toLowerCase() });
+          saveProfile({ ...p, email: authEmail.trim().toLowerCase() }, { skipCloud: true });
         }
       }
 
@@ -386,11 +386,11 @@ export function WelcomeScreen() {
       ]);
 
       for (const [k, entries] of Object.entries(dayLogs)) {
-        saveDayLogEntries(k, entries);
+        saveDayLogEntries(k, entries, { skipCloud: true });
       }
-      if (weights) saveWeights(weights);
-      if (dict) saveDictionary(dict);
-      if (presets) saveMealPresets(presets);
+      if (weights) saveWeights(weights, { skipCloud: true });
+      if (dict) saveDictionary(dict, { skipCloud: true });
+      if (presets) saveMealPresets(presets, { skipCloud: true });
 
       markWelcomeLeft();
       closeAuth();
