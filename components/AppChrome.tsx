@@ -13,6 +13,7 @@ import {
 } from "@/lib/localAuth";
 import { onFirebaseAuthChanged } from "@/lib/firebaseUserAuth";
 import { getFirebaseCurrentUser } from "@/lib/firebaseUserAuth";
+import { syncLocalToCloud } from "@/lib/userSync";
 import { hasChosenAppVariant } from "@/lib/appVariant";
 import {
   hasLeftWelcome,
@@ -44,7 +45,12 @@ export function AppChrome({ children }: { children: React.ReactNode }) {
   }, []);
 
   useEffect(() => {
-    return onFirebaseAuthChanged(() => setFbUserTick((n) => n + 1));
+    return onFirebaseAuthChanged((u) => {
+      setFbUserTick((n) => n + 1);
+      if (u?.uid) {
+        void syncLocalToCloud(u.uid).catch(() => {});
+      }
+    });
   }, []);
 
   useEffect(() => {
