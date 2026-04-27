@@ -55,6 +55,7 @@ export function getFirebaseRtdb() {
 export function getFirebaseFirestore() {
   const app = getFirebaseApp();
   if (!app) return null;
-  return getFirestore(app);
+  const dbId = (process.env.NEXT_PUBLIC_FIREBASE_FIRESTORE_DB_ID ?? "").trim();
+  return dbId ? getFirestore(app, dbId) : getFirestore(app);
 }
 
