@@ -22,6 +22,7 @@ import {
   loadProfile,
   markWelcomeLeft,
 } from "@/lib/storage";
+import { ADMIN_EMAIL } from "@/lib/adminConstants";
 
 function isStandalonePublicPath(pathname: string): boolean {
   return (
@@ -82,7 +83,8 @@ export function AppChrome({ children }: { children: React.ReactNode }) {
       pathname === "/welcome" ||
       pathname === "/pick-theme" ||
       pathname === "/wizard" ||
-      pathname === "/tdee"
+      pathname === "/tdee" ||
+      pathname === "/admin"
     ) {
       setHideNav(true);
       return;
@@ -96,7 +98,8 @@ export function AppChrome({ children }: { children: React.ReactNode }) {
         pathname === "/welcome" ||
         pathname === "/pick-theme" ||
         pathname === "/wizard" ||
-        pathname === "/tdee"
+        pathname === "/tdee" ||
+        pathname === "/admin"
       ) {
         setHideNav(true);
         return;
@@ -129,6 +132,15 @@ export function AppChrome({ children }: { children: React.ReactNode }) {
       if (!hasChosenAppVariant()) {
         window.location.replace("/pick-theme");
         return;
+      }
+
+      if (pathname === "/admin") {
+        const u = getFirebaseCurrentUser();
+        if (u?.email?.trim().toLowerCase() === ADMIN_EMAIL.toLowerCase()) {
+          setRegOk(true);
+          setRegReady(true);
+          return;
+        }
       }
 
       if (pathname === "/welcome") {

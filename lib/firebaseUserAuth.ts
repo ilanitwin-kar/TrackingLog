@@ -122,6 +122,17 @@ export async function consumeGoogleRedirectResult(): Promise<FirebaseAuthResult 
   }
 }
 
+export async function getFirebaseIdToken(forceRefresh = false): Promise<string | null> {
+  const auth = getFirebaseAuth();
+  const u = auth?.currentUser;
+  if (!u) return null;
+  try {
+    return await u.getIdToken(forceRefresh);
+  } catch {
+    return null;
+  }
+}
+
 export async function logoutFirebase(): Promise<void> {
   const auth = getFirebaseAuth();
   if (!auth) return;

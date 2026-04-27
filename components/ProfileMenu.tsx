@@ -27,6 +27,8 @@ import {
   saveProfile,
 } from "@/lib/storage";
 import { gf } from "@/lib/hebrewGenderUi";
+import { ADMIN_EMAIL } from "@/lib/adminConstants";
+import { onFirebaseAuthChanged } from "@/lib/firebaseUserAuth";
 
 export function ProfileMenu() {
   const router = useRouter();
@@ -34,8 +36,16 @@ export function ProfileMenu() {
   const [open, setOpen] = useState(false);
   const [showLogout, setShowLogout] = useState(false);
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
+  const [showAdminLink, setShowAdminLink] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
   const avatarInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    return onFirebaseAuthChanged((u) => {
+      const email = (u?.email ?? "").trim().toLowerCase();
+      setShowAdminLink(email === ADMIN_EMAIL.toLowerCase());
+    });
+  }, []);
 
   useEffect(() => {
     function syncLogout() {
@@ -178,6 +188,16 @@ export function ProfileMenu() {
                 </span>
                 מרכז השליטה
               </Link>
+
+              {showAdminLink ? (
+                <Link
+                  href="/admin"
+                  className={`${linkClass} border-b border-[var(--border-cherry-soft)]/70 font-extrabold text-[var(--cherry)]`}
+                  onClick={() => setOpen(false)}
+                >
+                  ניהול מערכת
+                </Link>
+              ) : null}
 
               <div className="border-b border-[var(--border-cherry-soft)]/70">
                 <p className="px-4 pt-2 text-[10px] font-bold uppercase tracking-wide text-[var(--stem)]/55">
