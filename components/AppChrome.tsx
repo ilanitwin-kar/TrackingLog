@@ -41,6 +41,17 @@ export function AppChrome({ children }: { children: React.ReactNode }) {
   }, []);
 
   useEffect(() => {
+    // Try to reduce the risk of browser storage eviction (best-effort).
+    try {
+      void (navigator as unknown as { storage?: { persist?: () => Promise<boolean> } })?.storage
+        ?.persist?.()
+        .catch?.(() => {});
+    } catch {
+      /* ignore */
+    }
+  }, []);
+
+  useEffect(() => {
     if (
       pathname === "/welcome" ||
       pathname === "/pick-theme" ||
