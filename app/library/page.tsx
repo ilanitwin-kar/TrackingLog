@@ -1,7 +1,6 @@
 "use client";
 
 import Link from "next/link";
-import { BackToMenuButton } from "@/components/BackToMenuButton";
 
 export default function LibraryPage() {
   return (
@@ -9,7 +8,6 @@ export default function LibraryPage() {
       className="mx-auto min-h-[100dvh] max-w-lg bg-gradient-to-b from-[#fff8fa] via-white to-[#f6faf3] px-4 py-8 pb-28 md:py-12"
       dir="rtl"
     >
-      <BackToMenuButton />
       <h1 className="heading-page mb-2 text-center text-2xl md:text-3xl">
         הספרייה שלי
       </h1>

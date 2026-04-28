@@ -9,7 +9,6 @@ import {
 } from "@/lib/calorieAccumulation";
 import { getDaysRemainingToGoal } from "@/lib/goalMetrics";
 import { getJourneyStartDateKey, loadProfile, loadWeights } from "@/lib/storage";
-import { BackToMenuButton } from "@/components/BackToMenuButton";
 import {
   gf,
   strategicReportIntroBody,
@@ -132,7 +131,6 @@ export default function ReportPage() {
 
   return (
     <div className="mx-auto max-w-lg px-4 pb-28 pt-8 md:py-12" dir="rtl">
-      <BackToMenuButton label="חזרה למסך הבית" href="/" />
       <motion.h1
         className="heading-page mb-5 text-center text-3xl md:text-4xl"
         initial={{ opacity: 0, y: -8 }}

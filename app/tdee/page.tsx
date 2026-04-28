@@ -11,7 +11,6 @@ import {
   markWelcomeLeft,
   saveProfile,
 } from "@/lib/storage";
-import { BackToMenuButton } from "@/components/BackToMenuButton";
 import { DevAdminQuickEntry } from "@/components/DevAdminQuickEntry";
 import { InfoCard } from "@/components/InfoCard";
 import type { ActivityLevel, NutritionGoal } from "@/lib/tdee";
@@ -144,7 +143,6 @@ export default function TdeePage() {
   if (!p) {
     return (
       <div className="mx-auto max-w-lg px-4 py-8 md:py-12" dir="rtl">
-        <BackToMenuButton />
         <p className="text-center text-[var(--cherry)]">טוען…</p>
       </div>
     );
@@ -213,8 +211,6 @@ export default function TdeePage() {
 
   return (
     <div className="mx-auto max-w-lg px-4 py-8 md:py-12" dir="rtl">
-      <BackToMenuButton />
-
       <div className="mb-6">
         <DevAdminQuickEntry variant="tdee" />
       </div>

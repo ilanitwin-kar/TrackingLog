@@ -10,6 +10,8 @@ import { HomeDrawer } from "@/components/HomeDrawer";
 function titleForPathname(pathname: string): string {
   if (pathname === "/") return "בית";
   if (pathname === "/journal") return "היומן שלי";
+  if (pathname === "/add-food") return "הוספת מזון";
+  if (pathname === "/add-food-ai") return "הוספת מזון (AI)";
   if (pathname === "/dictionary") return "המילון האישי";
   if (pathname === "/explorer") return "מגלה מזונות";
   if (pathname === "/shopping-list" || pathname === "/shopping") return "רשימת קניות";
@@ -19,11 +21,21 @@ function titleForPathname(pathname: string): string {
   if (pathname === "/planner") return "בניית תפריט";
   if (pathname === "/recipes") return "מחשבון מתכונים";
   if (pathname === "/weight") return "מעקב משקל";
+  if (pathname === "/calorie-board") return "לוח צבירת קלוריות";
+  if (pathname === "/daily-summary") return "סיכום";
+  if (pathname === "/report") return "דוח אסטרטגי";
+  if (pathname === "/tdee") return "יעד קלוריות ופרופיל";
+  if (pathname === "/wizard") return "התחלה";
+  if (pathname === "/welcome") return "ברוכים הבאים";
+  if (pathname === "/forgot-password") return "שחזור סיסמה";
+  if (pathname === "/privacy") return "מדיניות פרטיות";
+  if (pathname === "/terms") return "תנאי שימוש";
+  if (pathname === "/presets") return "ערכות מוכנות";
   if (pathname === "/control-center") return "מרכז השליטה";
   if (pathname === "/assistant") return "עוזר";
   if (pathname === "/settings") return "הגדרות";
   if (pathname === "/admin") return "ניהול מערכת";
-  return "";
+  return "מסך";
 }
 
 /** Header קבוע: ימין חזרה/תפריט, מרכז כותרת, שמאל לוגו */

@@ -11,7 +11,6 @@ import {
   loadWeights,
   saveWeights,
 } from "@/lib/storage";
-import { BackToMenuButton } from "@/components/BackToMenuButton";
 import { CelebrationConfetti } from "@/components/Fireworks";
 import { InfoCard } from "@/components/InfoCard";
 import { useCelebration } from "@/lib/useCelebration";
@@ -132,9 +131,6 @@ export default function WeightPage() {
 
   return (
     <div className="mx-auto max-w-lg px-4 py-8 md:py-12 print:py-4" dir="rtl">
-      <div className="print:hidden">
-        <BackToMenuButton />
-      </div>
       {showCelebration && (
         <div className={`celebration print:hidden ${fadeOut ? "fade-out" : ""}`}>
           <CelebrationConfetti message={celebrationMessage} />

@@ -2,7 +2,6 @@
 
 import { motion } from "framer-motion";
 import { useEffect, useMemo, useState } from "react";
-import { BackToMenuButton } from "@/components/BackToMenuButton";
 import { CalorieBoardGrid } from "@/components/CalorieBoardGrid";
 import {
   buildCalorieAccumulationTable,
@@ -45,8 +44,6 @@ export default function CalorieBoardPage() {
       className="mx-auto max-w-lg px-4 py-8 pb-28 md:py-12 md:pb-32"
       dir="rtl"
     >
-      <BackToMenuButton />
-
       <motion.h1
         className="heading-page mb-6 text-center text-2xl md:text-3xl"
         initial={{ opacity: 0, y: -8 }}

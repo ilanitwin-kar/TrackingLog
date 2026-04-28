@@ -987,20 +987,9 @@ export function AssistantClient() {
   }
 
   return (
-    <div className="min-h-dvh bg-gradient-to-b from-[#fff8fa] via-white to-[#f6faf3] px-4 pb-10 pt-6" dir="rtl">
+    <div className="min-h-dvh bg-gradient-to-b from-[#fff8fa] via-white to-[#f6faf3] px-4 pb-10 pt-2" dir="rtl">
       <div className="mx-auto w-full max-w-lg">
-        <div className="flex items-center justify-between gap-2">
-          <Link
-            href="/"
-            className="rounded-xl border-2 border-[var(--border-cherry-soft)] bg-white px-3 py-2 text-sm font-semibold text-[var(--stem)] shadow-sm transition hover:bg-[var(--cherry-muted)]"
-          >
-            חזרה
-          </Link>
-          <h1 className="panel-title-cherry text-lg">העוזר של Cherry/Blue</h1>
-          <div className="w-[4.25rem]" aria-hidden />
-        </div>
-
-        <div className="mt-4 rounded-2xl border-2 border-[var(--border-cherry-soft)] bg-white/90 p-4 shadow-sm">
+        <div className="rounded-2xl border-2 border-[var(--border-cherry-soft)] bg-white/90 p-4 shadow-sm">
           <p className="text-xs font-semibold text-[var(--stem)]/70">
             {loadingMem
               ? "מחבר זיכרון ענן…"
