@@ -145,6 +145,8 @@ const KEYS = {
   foodMemory: "cj_food_memory_v1",
   dayLogs: "cj_day_logs_v1",
   weights: "cj_weights_v1",
+  /** היום הפעיל לעריכה/הוספה ביומן — נשמר כשבוחרים יום שאינו היום */
+  activeJournalDate: "cj_active_journal_date_v1",
   /** דילוג שקילה — מסתיר את ההצעה ליום אחד */
   weightSkipDay: "cj_weight_skip_day_v1",
   /** תחילת התהליך/מסלול — תאריך בסיס לקוביות צבירה */
@@ -162,6 +164,39 @@ const KEYS = {
   /** המשתמש עבר ממסך הכניסה (הרשמה/התחברות) — מותר להמשיך ל־TDEE */
   welcomeLeft: "cj_welcome_left_v1",
 } as const;
+
+export function setActiveJournalDateKey(dateKey: string): void {
+  if (typeof window === "undefined") return;
+  const v = (dateKey ?? "").trim();
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(v)) return;
+  try {
+    localStorage.setItem(KEYS.activeJournalDate, v);
+    window.dispatchEvent(new Event("cj-active-journal-date-changed"));
+  } catch {
+    /* ignore */
+  }
+}
+
+export function getActiveJournalDateKey(): string | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const raw = localStorage.getItem(KEYS.activeJournalDate);
+    const v = (raw ?? "").trim();
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(v)) return null;
+    return v;
+  } catch {
+    return null;
+  }
+}
+
+/** ברירת מחדל לכל הוספה ממסכים אחרים */
+export function resolveJournalTargetDateKey(opts?: { allowFuture?: boolean }): string {
+  const today = getTodayKey();
+  const k = getActiveJournalDateKey();
+  if (!k) return today;
+  if (opts?.allowFuture) return k;
+  return k <= today ? k : today;
+}
 
 export function loadWeightSkipDayKey(): string | null {
   try {

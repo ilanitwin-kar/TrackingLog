@@ -12,6 +12,7 @@ import {
 } from "@/components/Icons";
 import { getTodayKey } from "@/lib/dateKey";
 import {
+  resolveJournalTargetDateKey,
   loadDayJournalClosedMap,
   loadProfile,
   saveDayJournalClosedMap,
@@ -33,7 +34,7 @@ function resolveAddFoodDateKey(
   if (pathname === "/" && dateParam && /^\d{4}-\d{2}-\d{2}$/.test(dateParam)) {
     if (dateParam <= today) return dateParam;
   }
-  return today;
+  return resolveJournalTargetDateKey({ allowFuture: true });
 }
 
 export function BottomNav() {
@@ -48,7 +49,7 @@ export function BottomNav() {
 
   const addFoodDateKey = useMemo(
     () => resolveAddFoodDateKey(pathname, searchParams.get("date")),
-    [pathname, searchParams]
+    [pathname, searchParams],
   );
 
   const [journalClosedTick, setJournalClosedTick] = useState(0);

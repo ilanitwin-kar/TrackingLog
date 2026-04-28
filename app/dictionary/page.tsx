@@ -23,6 +23,7 @@ import {
   loadProfile,
   patchDictionaryItemById,
   removeDictionaryItem,
+  resolveJournalTargetDateKey,
   saveDayLogEntries,
   toggleExplorerFoodInDictionary,
 } from "@/lib/storage";
@@ -40,11 +41,8 @@ import {
   gf,
 } from "@/lib/hebrewGenderUi";
 import Link from "next/link";
-import { useSearchParams } from "next/navigation";
-import { BackSmartButton } from "@/components/BackSmartButton";
 import { rankedFuzzySearchByText, type MatchRange } from "@/lib/rankedSearch";
 import { matchesAllQueryWords } from "@/lib/foodSearchRules";
-import { getTodayKey } from "@/lib/dateKey";
 
 const fontFood =
   "font-[Calibri,'Segoe_UI','Helvetica_Neue',system-ui,sans-serif]";
@@ -246,7 +244,6 @@ function renderHighlighted(text: string, ranges: MatchRange[]) {
 
 export default function DictionaryPage() {
   const gender = loadProfile().gender;
-  const searchParams = useSearchParams();
   const [saved, setSaved] = useState<DictionaryItem[]>([]);
   const [presetMap, setPresetMap] = useState<Map<string, MealPreset>>(
     () => new Map()
@@ -700,7 +697,7 @@ export default function DictionaryPage() {
   }
 
   function onSavedJournal(d: DictionaryItem) {
-    const dateKey = getTodayKey();
+    const dateKey = resolveJournalTargetDateKey({ allowFuture: true });
     const existing = getEntriesForDate(dateKey);
 
     const k100 =
@@ -838,28 +835,6 @@ export default function DictionaryPage() {
       className={`mx-auto max-w-lg px-4 py-8 pb-28 md:py-12 ${fontFood}`}
       dir="rtl"
     >
-      {(() => {
-        const date = searchParams.get("date");
-        const meal = searchParams.get("meal");
-        const from = searchParams.get("from");
-        const backHref =
-          date && meal && from
-            ? `/add-food?from=${encodeURIComponent(from)}&date=${encodeURIComponent(
-                date
-              )}&meal=${encodeURIComponent(meal)}`
-            : "/";
-        return (
-          <div className="mb-4 flex items-center justify-between gap-2">
-            <BackSmartButton
-              fallbackHref={backHref}
-              className="rounded-xl border-2 border-[var(--border-cherry-soft)] bg-white px-3 py-2 text-sm font-semibold text-[var(--stem)] shadow-sm transition hover:bg-[var(--cherry-muted)]"
-            >
-              חזרה
-            </BackSmartButton>
-            <div className="w-[4.25rem]" aria-hidden />
-          </div>
-        );
-      })()}
       <motion.h1
         className="heading-page mb-6 text-center text-3xl md:text-4xl"
         initial={{ opacity: 0, y: -8 }}
@@ -1128,18 +1103,18 @@ export default function DictionaryPage() {
         initial={{ opacity: 0, y: 8 }}
         animate={{ opacity: 1, y: 0 }}
       >
-        <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-          <h2 className="panel-title-cherry text-lg">המילון שלי</h2>
-          <div className="flex items-center gap-2">
+        <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+          <h2 className="panel-title-cherry text-xl">המילון שלי</h2>
+          <div className="flex w-[8.75rem] flex-col gap-1.5">
             <Link
               href="/explorer"
-              className="rounded-lg border-2 border-[var(--border-cherry-soft)] bg-white px-3 py-2 text-xs font-extrabold text-[var(--cherry)] shadow-sm transition hover:bg-[var(--cherry-muted)]"
+              className="w-full rounded-lg border-2 border-[var(--border-cherry-soft)] bg-white px-2.5 py-1 text-center text-[11px] font-extrabold text-[var(--cherry)] shadow-sm transition hover:bg-[var(--cherry-muted)]"
             >
               גלה מזונות
             </Link>
             <button
               type="button"
-              className={`rounded-lg border-2 px-3 py-2 text-xs font-extrabold shadow-sm transition ${
+              className={`w-full rounded-lg border-2 px-2.5 py-1 text-center text-[11px] font-extrabold leading-tight shadow-sm transition ${
                 exportSelectMode
                   ? "border-[var(--border-cherry-soft)] bg-cherry-faint text-[var(--cherry)]"
                   : "border-[var(--border-cherry-soft)] bg-white text-[var(--stem)]/85 hover:bg-[var(--cherry-muted)]"
@@ -1151,18 +1126,18 @@ export default function DictionaryPage() {
               }}
               aria-pressed={exportSelectMode}
             >
-              {exportSelectMode ? "סיום בחירה" : "בחירת פריטים לייצוא"}
+              {exportSelectMode ? "סיום בחירה" : "בחירה לייצוא"}
             </button>
             <button
               type="button"
-              className="rounded-lg border-2 border-[var(--border-cherry-soft)] bg-white px-3 py-2 text-xs font-extrabold text-[var(--stem)] shadow-sm transition hover:bg-[var(--cherry-muted)]"
+              className="w-full rounded-lg border-2 border-[var(--border-cherry-soft)] bg-white px-2.5 py-1 text-center text-[11px] font-extrabold text-[var(--stem)] shadow-sm transition hover:bg-[var(--cherry-muted)]"
               onClick={() => setExportOpen(true)}
             >
               ייצוא
             </button>
           </div>
         </div>
-        <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+        <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
           <div className="flex flex-wrap gap-2">
             {(
               [

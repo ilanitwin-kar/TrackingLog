@@ -36,6 +36,7 @@ import {
   loadWeightSkipDayKey,
   loadWeights,
   loadProfile,
+  setActiveJournalDateKey,
   saveWeightSkipDayKey,
   saveDayJournalClosedMap,
   saveDayLogEntries,
@@ -68,7 +69,6 @@ import {
 } from "./Icons";
 import { IconCaption } from "./IconCaption";
 import { LiveClock } from "./LiveClock";
-import { ProfileMenu } from "./ProfileMenu";
 
 const UNITS: FoodUnit[] = [
   "גרם",
@@ -941,6 +941,10 @@ export function HomeClient({ mode = "dashboard" }: { mode?: "dashboard" | "journ
   }, [searchParams]);
 
   useEffect(() => {
+    setActiveJournalDateKey(viewDateKey);
+  }, [viewDateKey]);
+
+  useEffect(() => {
     const id = window.setInterval(() => {
       const now = getTodayKey();
       if (now !== prevCalKeyRef.current) {
@@ -1144,16 +1148,16 @@ export function HomeClient({ mode = "dashboard" }: { mode?: "dashboard" | "journ
     );
 
   const compact = mode === "journal";
+  const showHomeSearchTrigger = mode === "dashboard";
+  const showHomeMenu = mode === "dashboard";
+  void showHomeSearchTrigger;
+  void showHomeMenu;
 
   return (
     <div
       className={`mx-auto max-w-lg ${compact ? "px-3 pb-28 pt-4 md:pt-7 cj-compact" : "px-4 pb-32 pt-6 md:pt-10"}`}
       dir="rtl"
     >
-      <div className="mb-4 flex flex-wrap items-center justify-start gap-3">
-        <ProfileMenu />
-      </div>
-
       {celebration.show && (
         <div
           className={`celebration ${celebration.fadeOut ? "fade-out" : ""}`}

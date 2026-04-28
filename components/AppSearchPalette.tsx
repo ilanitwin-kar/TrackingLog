@@ -78,17 +78,7 @@ export function AppSearchPalette() {
 
   useEffect(() => {
     function onKeyDown(e: KeyboardEvent) {
-      const isK = e.key.toLowerCase() === "k";
-      const isSlash = e.key === "/";
-      const meta = e.metaKey || e.ctrlKey;
-      if ((meta && isK) || (meta && isSlash)) {
-        e.preventDefault();
-        setOpen(true);
-        return;
-      }
-      if (e.key === "Escape") {
-        setOpen(false);
-      }
+      if (e.key === "Escape") setOpen(false);
     }
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
@@ -154,7 +144,7 @@ export function AppSearchPalette() {
                 className="mt-2 w-full rounded-xl border-2 border-[var(--border-cherry-soft)] px-3 py-2.5 text-sm font-semibold text-[var(--stem)] shadow-sm outline-none focus:ring-2 focus:ring-[var(--focus-ring-outer)]"
               />
               <p className="mt-2 text-[11px] font-semibold text-[var(--text)]/60">
-                טיפ: Ctrl/⌘+K לפתיחה מכל מסך
+                טיפ: אפשר לפתוח דרך אייקון החיפוש במסך הבית.
               </p>
             </div>
 
