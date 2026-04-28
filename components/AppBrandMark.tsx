@@ -68,10 +68,10 @@ export function AppBrandMark() {
   return (
     <div className="fixed left-0 right-0 top-0 z-[250] pointer-events-none">
       <div
-        className="pointer-events-auto mx-auto grid h-[60px] w-full max-w-lg grid-cols-3 items-center gap-2 px-3 pt-[env(safe-area-inset-top)]"
+        className="pointer-events-auto relative mx-auto flex h-[60px] w-full max-w-lg items-center px-3 pt-[env(safe-area-inset-top)]"
         dir="rtl"
       >
-        <div className="col-span-1 flex items-center justify-start" dir="rtl">
+        <div className="pointer-events-auto absolute right-3 top-[env(safe-area-inset-top)] flex h-[60px] items-center">
           {showBack ? (
             <button
               type="button"
@@ -87,13 +87,13 @@ export function AppBrandMark() {
           )}
         </div>
 
-        <div className="col-span-1 flex items-center justify-center">
-          <p className="max-w-[14rem] truncate text-center text-sm font-extrabold text-[var(--cherry)]">
+        <div className="pointer-events-none absolute inset-x-0 top-[env(safe-area-inset-top)] flex h-[60px] items-center justify-center">
+          <p className="pointer-events-none max-w-[14rem] truncate text-center text-sm font-extrabold text-[var(--cherry)]">
             {title}
           </p>
         </div>
 
-        <div className="col-span-1 flex items-center justify-end" dir="ltr">
+        <div className="pointer-events-auto absolute left-3 top-[env(safe-area-inset-top)] flex h-[60px] items-center" dir="ltr">
           <button
             type="button"
             className="pointer-events-auto inline-flex h-10 w-10 items-center justify-center rounded-xl bg-white/0 transition hover:bg-white/25 active:scale-[0.99]"
@@ -104,6 +104,7 @@ export function AppBrandMark() {
             <CherryMark className="h-6 w-8 shrink-0 drop-shadow-sm" />
           </button>
         </div>
+        <div className="h-[60px] w-full" aria-hidden />
       </div>
     </div>
   );
