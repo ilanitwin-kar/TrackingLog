@@ -209,6 +209,30 @@ input[type="checkbox"] {
       0 0 0 1px var(--glass-glow-inner);
   }
 
+  /**
+   * Compact mode — ניסוי רק למסך היומן (`HomeClient mode="journal"`).
+   * מצמצם padding/gaps כדי להכניס יותר תוכן בלי לשנות מסכים אחרים.
+   */
+  .cj-compact .glass-panel {
+    border-radius: 0.95rem;
+  }
+
+  .cj-compact .glass-panel.p-4 {
+    padding: 0.75rem;
+  }
+
+  .cj-compact .glass-panel.p-5 {
+    padding: 0.875rem;
+  }
+
+  .cj-compact .space-y-4 > :not([hidden]) ~ :not([hidden]) {
+    margin-top: 0.75rem;
+  }
+
+  .cj-compact .space-y-3 > :not([hidden]) ~ :not([hidden]) {
+    margin-top: 0.625rem;
+  }
+
   /** כפתורי הדגשה רכים — ורוד עדין */
   .btn-gold {
     background: linear-gradient(to bottom, #fff6f8, var(--accent));

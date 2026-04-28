@@ -42,7 +42,7 @@ import {
   saveFoodMemoryKey,
   toggleDictionaryFromEntry,
 } from "@/lib/storage";
-import { buildDashboardGreetingLine } from "@/lib/dashboardGreeting";
+import { buildDashboardGreetingRich } from "@/lib/dashboardGreeting";
 import { dailyMacroTargetsGramsForProfile } from "@/lib/macroTargets";
 import {
   dailyCalorieMotivationLine,
@@ -629,13 +629,11 @@ export function HomeClient({ mode = "dashboard" }: { mode?: "dashboard" | "journ
     setEntries(next);
   }
 
-  const greetingLine = useMemo(
-    () =>
-      buildDashboardGreetingLine(
-        profile?.firstName ?? "",
-        greetingHour
-      ),
-    [profile?.firstName, greetingHour]
+  const greetingModel = useMemo(
+    () => buildDashboardGreetingRich(profile?.firstName ?? "", new Date()),
+    // refresh on hour tick (and profile name)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [profile?.firstName, greetingHour],
   );
 
   const isJournalMode = mode === "journal";
@@ -1145,8 +1143,13 @@ export function HomeClient({ mode = "dashboard" }: { mode?: "dashboard" | "journ
       "דיווח צעדים למטה מחשב קיזוז לפי MET 3.5 ומעדכן את הגרף."
     );
 
+  const compact = mode === "journal";
+
   return (
-    <div className="mx-auto max-w-lg px-4 pb-32 pt-6 md:pt-10" dir="rtl">
+    <div
+      className={`mx-auto max-w-lg ${compact ? "px-3 pb-28 pt-4 md:pt-7 cj-compact" : "px-4 pb-32 pt-6 md:pt-10"}`}
+      dir="rtl"
+    >
       <div className="mb-4 flex flex-wrap items-center justify-start gap-3">
         <ProfileMenu />
       </div>
@@ -1372,9 +1375,21 @@ export function HomeClient({ mode = "dashboard" }: { mode?: "dashboard" | "journ
       {!isJournalMode && (
       <header className="mb-6 space-y-4 sm:space-y-5">
         <div className="flex flex-row items-start justify-between gap-2 sm:items-center sm:gap-4 md:justify-between">
-          <p className="min-w-0 flex-1 text-balance text-base font-extrabold leading-snug text-[var(--stem)] sm:text-lg md:text-right md:text-2xl">
-            {greetingLine}
-          </p>
+          <div className="min-w-0 flex-1">
+            <p className="text-balance text-base font-extrabold leading-snug text-[var(--stem)] sm:text-lg md:text-right md:text-2xl">
+              {greetingModel.title}
+            </p>
+            {greetingModel.subtitle ? (
+              <p className="mt-1 text-xs font-semibold text-[var(--text)]/70 sm:text-sm">
+                {greetingModel.subtitle}
+              </p>
+            ) : null}
+            {greetingModel.tip ? (
+              <p className="mt-1 text-xs font-semibold text-[var(--stem)]/80 sm:text-sm">
+                {greetingModel.tip}
+              </p>
+            ) : null}
+          </div>
           <div className="shrink-0 scale-[0.92] sm:scale-100 md:max-w-[12rem] md:scale-100">
             <LiveClock />
           </div>

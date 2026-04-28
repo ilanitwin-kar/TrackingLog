@@ -10,6 +10,7 @@ import { useRouter } from "next/navigation";
 import { addDaysToDateKey, getTodayKey } from "@/lib/dateKey";
 import { addSavedMenu } from "@/lib/menuStorage";
 import { loadPlannerState, savePlannerState, clearPlannerState, type PlannerItem, type PlannerMealSlot } from "@/lib/plannerStorage";
+import { BackSmartButton } from "@/components/BackSmartButton";
 import { fuzzySearch } from "@/lib/fuzzySearch";
 import { rankedFuzzySearchByText, type MatchRange } from "@/lib/rankedSearch";
 import { matchesAllQueryWords } from "@/lib/foodSearchRules";
@@ -454,13 +455,12 @@ export default function PlannerPage() {
   return (
     <div className={`mx-auto max-w-lg px-4 py-8 pb-28 md:py-12 ${fontFood}`} dir="rtl">
       <div className="flex items-center justify-between gap-2">
-        <button
-          type="button"
-          onClick={() => router.back()}
+        <BackSmartButton
           className="rounded-xl border-2 border-[var(--border-cherry-soft)] bg-white px-3 py-2 text-sm font-semibold text-[var(--stem)] shadow-sm transition hover:bg-[var(--cherry-muted)]"
+          fallbackHref="/"
         >
           חזרה
-        </button>
+        </BackSmartButton>
         <h1 className="panel-title-cherry text-lg">בניית תפריט</h1>
         <div className="w-[4.25rem]" aria-hidden />
       </div>

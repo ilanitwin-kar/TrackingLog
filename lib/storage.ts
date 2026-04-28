@@ -599,12 +599,19 @@ export function ensureBaselineWeightRowFromProfile(): void {
   if (!isRegistrationComplete(p)) return;
   if (p.weightKg < 30 || p.weightKg > 250) return;
   const entries = loadWeights();
+  const nextKg = Math.round(p.weightKg * 10) / 10;
+  // If baseline already exists, keep the row but update kg when profile changes.
+  const baselineIdx = entries.findIndex((e) => typeof e?.id === "string" && e.id.startsWith("baseline-"));
+  if (baselineIdx >= 0) {
+    const cur = entries[baselineIdx]!;
+    if (Math.abs((cur.kg ?? 0) - nextKg) < 0.01) return;
+    const updated = [...entries];
+    updated[baselineIdx] = { ...cur, kg: nextKg };
+    saveWeights(updated);
+    return;
+  }
   if (entries.length > 0) return;
-  const entry: WeightEntry = {
-    id: `baseline-${Date.now()}`,
-    kg: Math.round(p.weightKg * 10) / 10,
-    date: getTodayKey(),
-  };
+  const entry: WeightEntry = { id: `baseline-${Date.now()}`, kg: nextKg, date: getTodayKey() };
   saveWeights([entry]);
 }
 

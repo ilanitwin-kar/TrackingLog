@@ -6,6 +6,7 @@ import { AppBrandMark } from "@/components/AppBrandMark";
 import { AppToastHost } from "@/components/AppToastHost";
 import { BottomNav } from "@/components/BottomNav";
 import { SoundFeedbackHost } from "@/components/SoundFeedbackHost";
+import { AppSearchPalette } from "@/components/AppSearchPalette";
 import {
   hasAuthRecord,
   isInternalAuthBypassActive,
@@ -230,6 +231,7 @@ export function AppChrome({ children }: { children: React.ReactNode }) {
     >
       <AppBrandMark />
       {children}
+      <AppSearchPalette />
       <AppToastHost />
       <SoundFeedbackHost />
       {!hideNav && (

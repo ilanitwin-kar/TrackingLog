@@ -70,16 +70,30 @@ export function BottomNav() {
     router.push(`/add-food?date=${encodeURIComponent(addFoodDateKey)}`);
   }
 
-  function goAddFoodAi() {
+  // AI flows are available from “מרכז השליטה” תחת «עזרה».
+
+  function goWeight() {
     setSheetOpen(false);
     setFabOpen(false);
-    router.push(`/add-food-ai?date=${encodeURIComponent(addFoodDateKey)}`);
+    router.push("/weight");
   }
 
-  function goAssistant() {
+  function goRecipes() {
     setSheetOpen(false);
     setFabOpen(false);
-    router.push("/assistant");
+    router.push("/recipes");
+  }
+
+  function goPlanner() {
+    setSheetOpen(false);
+    setFabOpen(false);
+    router.push("/planner");
+  }
+
+  function goExplorer() {
+    setSheetOpen(false);
+    setFabOpen(false);
+    router.push("/explorer");
   }
 
   function openJournalDayAndGoAddFood() {
@@ -164,41 +178,70 @@ export function BottomNav() {
                       className="flex items-center gap-2 rounded-2xl border-2 border-[var(--border-cherry-soft)] bg-white/95 px-4 py-2.5 text-sm font-semibold text-[var(--stem)] shadow-lg backdrop-blur-sm transition hover:bg-[var(--cherry-muted)]"
                       onClick={goAddFood}
                       role="menuitem"
-                      aria-label="חיפוש רגיל"
-                      title="חיפוש רגיל"
+                      aria-label="הוספת מזון"
+                      title="הוספת מזון"
                     >
                       <span className="text-lg" aria-hidden>
-                        🔍
+                        ➕
                       </span>
-                      <span className="text-[12px] font-extrabold">חיפוש רגיל</span>
+                      <span className="text-[12px] font-extrabold">הוספת מזון</span>
                     </motion.button>
                     <motion.button
                       type="button"
                       whileTap={{ scale: 0.98 }}
                       className="flex items-center gap-2 rounded-2xl border-2 border-[var(--border-cherry-soft)] bg-white/95 px-4 py-2.5 text-sm font-semibold text-[var(--stem)] shadow-lg backdrop-blur-sm transition hover:bg-[var(--cherry-muted)]"
-                      onClick={goAddFoodAi}
+                      onClick={goExplorer}
                       role="menuitem"
-                      aria-label="רישום חופשי ב-AI"
-                      title="רישום חופשי ב-AI"
+                      aria-label="מגלה מזונות"
+                      title="מגלה מזונות"
                     >
                       <span className="text-lg" aria-hidden>
-                        🪄
+                        🔎
                       </span>
-                      <span className="text-[12px] font-extrabold">AI ארוחה</span>
+                      <span className="text-[12px] font-extrabold">מגלה מזונות</span>
                     </motion.button>
                     <motion.button
                       type="button"
                       whileTap={{ scale: 0.98 }}
                       className="flex items-center gap-2 rounded-2xl border-2 border-[var(--border-cherry-soft)] bg-white/95 px-4 py-2.5 text-sm font-semibold text-[var(--stem)] shadow-lg backdrop-blur-sm transition hover:bg-[var(--cherry-muted)]"
-                      onClick={goAssistant}
+                      onClick={goWeight}
                       role="menuitem"
-                      aria-label="עוזר AI"
-                      title="עוזר AI"
+                      aria-label="הוספת שקילה"
+                      title="הוספת שקילה"
                     >
                       <span className="text-lg" aria-hidden>
-                        🤖
+                        ⚖️
                       </span>
-                      <span className="text-[12px] font-extrabold">עוזר</span>
+                      <span className="text-[12px] font-extrabold">הוספת שקילה</span>
+                    </motion.button>
+                    <motion.button
+                      type="button"
+                      whileTap={{ scale: 0.98 }}
+                      className="flex items-center gap-2 rounded-2xl border-2 border-[var(--border-cherry-soft)] bg-white/95 px-4 py-2.5 text-sm font-semibold text-[var(--stem)] shadow-lg backdrop-blur-sm transition hover:bg-[var(--cherry-muted)]"
+                      onClick={goRecipes}
+                      role="menuitem"
+                      aria-label="יצירת מתכון"
+                      title="יצירת מתכון"
+                    >
+                      <span className="text-lg" aria-hidden>
+                        🍲
+                      </span>
+                      <span className="text-[12px] font-extrabold">יצירת מתכון</span>
+                    </motion.button>
+
+                    <motion.button
+                      type="button"
+                      whileTap={{ scale: 0.98 }}
+                      className="flex items-center gap-2 rounded-2xl border-2 border-[var(--border-cherry-soft)] bg-white/95 px-4 py-2.5 text-sm font-semibold text-[var(--stem)] shadow-lg backdrop-blur-sm transition hover:bg-[var(--cherry-muted)]"
+                      onClick={goPlanner}
+                      role="menuitem"
+                      aria-label="בניית תפריט"
+                      title="בניית תפריט"
+                    >
+                      <span className="text-lg" aria-hidden>
+                        🗓️
+                      </span>
+                      <span className="text-[12px] font-extrabold">בניית תפריט</span>
                     </motion.button>
                   </motion.div>
                 )}

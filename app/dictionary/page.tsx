@@ -41,6 +41,7 @@ import {
 } from "@/lib/hebrewGenderUi";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
+import { BackSmartButton } from "@/components/BackSmartButton";
 import { rankedFuzzySearchByText, type MatchRange } from "@/lib/rankedSearch";
 import { matchesAllQueryWords } from "@/lib/foodSearchRules";
 import { getTodayKey } from "@/lib/dateKey";
@@ -849,12 +850,12 @@ export default function DictionaryPage() {
             : "/";
         return (
           <div className="mb-4 flex items-center justify-between gap-2">
-            <Link
-              href={backHref}
+            <BackSmartButton
+              fallbackHref={backHref}
               className="rounded-xl border-2 border-[var(--border-cherry-soft)] bg-white px-3 py-2 text-sm font-semibold text-[var(--stem)] shadow-sm transition hover:bg-[var(--cherry-muted)]"
             >
               חזרה
-            </Link>
+            </BackSmartButton>
             <div className="w-[4.25rem]" aria-hidden />
           </div>
         );
@@ -1130,6 +1131,12 @@ export default function DictionaryPage() {
         <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
           <h2 className="panel-title-cherry text-lg">המילון שלי</h2>
           <div className="flex items-center gap-2">
+            <Link
+              href="/explorer"
+              className="rounded-lg border-2 border-[var(--border-cherry-soft)] bg-white px-3 py-2 text-xs font-extrabold text-[var(--cherry)] shadow-sm transition hover:bg-[var(--cherry-muted)]"
+            >
+              גלה מזונות
+            </Link>
             <button
               type="button"
               className={`rounded-lg border-2 px-3 py-2 text-xs font-extrabold shadow-sm transition ${

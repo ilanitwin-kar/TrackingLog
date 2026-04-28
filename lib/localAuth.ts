@@ -210,7 +210,7 @@ export function syncAuthEmailWithProfile(profileEmail: string): void {
   saveAuthRecord({ ...auth, email: n });
 }
 
-/** ערכים שמפעילים דילוג בלחיצה אחת (ב-Netlify / .env) */
+/** ערכים שמפעילים דילוג בלחיצה אחת (משתני סביבה ב-Vercel / .env) */
 function isPublicEnvTruthy(name: string): boolean {
   const v = process.env[name];
   if (typeof v !== "string") return false;
@@ -269,7 +269,7 @@ export function isDevAdminBypassActive(): boolean {
   return localStorage.getItem(DEV_ADMIN_BYPASS_KEY) === "1";
 }
 
-/** האם הוגדר קוד צוות בבילד (Netlify / .env) — מאפשר כניסת מנהלת בנייד בלי dev */
+/** האם הוגדר קוד צוות בבילד (משתני סביבה בפרודקשן) — מאפשר כניסת מנהלת בנייד בלי dev */
 export function isStaffUnlockConfigured(): boolean {
   const s = process.env.NEXT_PUBLIC_STAFF_UNLOCK;
   return typeof s === "string" && s.length >= 4;
@@ -278,7 +278,7 @@ export function isStaffUnlockConfigured(): boolean {
 /**
  * האם להציג בממשק כפתור «כניסת צוות» (מסכי onboarding).
  * בפרודקשן מוסתר כברירת מחדל — משתמשי קצה נכנסים בהרשמה/התחברות רגילה בלי קוד.
- * להפעלה ב-Netlify: NEXT_PUBLIC_SHOW_STAFF_BYPASS_UI=1 (בנוסף ל-NEXT_PUBLIC_STAFF_UNLOCK).
+ * להפעלה ב-Vercel: NEXT_PUBLIC_SHOW_STAFF_BYPASS_UI=1 (בנוסף ל-NEXT_PUBLIC_STAFF_UNLOCK).
  */
 export function isStaffBypassUiEnabled(): boolean {
   if (process.env.NODE_ENV === "development") return true;

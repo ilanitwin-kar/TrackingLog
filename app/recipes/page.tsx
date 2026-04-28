@@ -396,7 +396,17 @@ export default function RecipesPage() {
       <div className="flex items-center justify-between gap-2">
         <button
           type="button"
-          onClick={() => router.back()}
+          onClick={() => {
+            try {
+              if (typeof window !== "undefined" && window.history.length > 1) {
+                router.back();
+                return;
+              }
+            } catch {
+              /* ignore */
+            }
+            router.push("/");
+          }}
           className="rounded-xl border-2 border-[var(--border-cherry-soft)] bg-white px-3 py-2 text-sm font-semibold text-[var(--stem)] shadow-sm transition hover:bg-[var(--cherry-muted)]"
         >
           חזרה

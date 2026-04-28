@@ -189,6 +189,29 @@ export function ProfileMenu() {
                 מרכז השליטה
               </Link>
 
+              <button
+                type="button"
+                className={`${linkClass} border-b border-[var(--border-cherry-soft)]/70 font-extrabold text-[var(--cherry)]`}
+                onClick={() => {
+                  setOpen(false);
+                  try {
+                    window.dispatchEvent(new Event("cj-open-search"));
+                  } catch {
+                    /* ignore */
+                  }
+                }}
+              >
+                חיפוש
+              </button>
+
+              <Link
+                href="/library"
+                className={`${linkClass} border-b border-[var(--border-cherry-soft)]/70 font-extrabold text-[var(--cherry)]`}
+                onClick={() => setOpen(false)}
+              >
+                הספרייה שלי
+              </Link>
+
               {showAdminLink ? (
                 <Link
                   href="/admin"
