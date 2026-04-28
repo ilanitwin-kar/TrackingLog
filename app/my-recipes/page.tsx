@@ -4,6 +4,7 @@ import Link from "next/link";
 import { AnimatePresence, motion } from "framer-motion";
 import { useEffect, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
+import { BackSmartButton } from "@/components/BackSmartButton";
 import { gf } from "@/lib/hebrewGenderUi";
 import {
   getEntriesForDate,
@@ -188,6 +189,7 @@ export default function MyRecipesPage() {
     const date = searchParams.get("date");
     const meal = searchParams.get("meal");
     const from = searchParams.get("from");
+    if (from === "library") return "/library";
     if (date && meal && from) {
       return `/add-food?from=${encodeURIComponent(from)}&date=${encodeURIComponent(date)}&meal=${encodeURIComponent(meal)}`;
     }
@@ -197,12 +199,12 @@ export default function MyRecipesPage() {
   return (
     <div className={`mx-auto max-w-lg px-4 py-8 pb-28 md:py-12 ${fontFood}`} dir="rtl">
       <div className="flex items-center justify-between gap-2">
-        <Link
-          href={backHref}
+        <BackSmartButton
+          fallbackHref={backHref}
           className="rounded-xl border-2 border-[var(--border-cherry-soft)] bg-white px-3 py-2 text-sm font-semibold text-[var(--stem)] shadow-sm transition hover:bg-[var(--cherry-muted)]"
         >
           חזרה
-        </Link>
+        </BackSmartButton>
         <h1 className="panel-title-cherry text-lg">המתכונים שלי</h1>
         <Link
           href="/recipes"

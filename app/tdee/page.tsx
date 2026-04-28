@@ -236,13 +236,36 @@ export default function TdeePage() {
       />
       <p className="mb-6 text-center text-sm font-medium text-[var(--cherry)]/85">
         {registered
-          ? "השינויים נשמרים אוטומטית. יעד הקלוריות והמאקרו בדשבורד מתעדכנים לפי המטרה, הפעילות והגירעון היומי (אם סימנת)."
+          ? "עדכני פרטים ואז לחצי «שמירה» כדי לוודא שהכל התעדכן בכל המסכים."
           : gf(
               gender,
               "מלאי את כל השדות כדי להגדיר את היעד היומי ולהמשיך לדשבורד.",
               "מלא את כל השדות כדי להגדיר את היעד היומי ולהמשיך לדשבורד."
             )}
       </p>
+
+      {registered ? (
+        <div className="mb-5 flex justify-center">
+          <motion.button
+            type="button"
+            className="btn-stem w-full max-w-sm rounded-xl py-3 text-base font-extrabold"
+            whileTap={{ scale: 0.98 }}
+            onClick={() => {
+              // For clarity: re-save + refresh dependent screens (weights baseline etc.).
+              saveProfile(p);
+              ensureBaselineWeightRowFromProfile();
+              try {
+                window.dispatchEvent(new Event("cj-profile-updated"));
+              } catch {
+                /* ignore */
+              }
+              router.back();
+            }}
+          >
+            שמירה
+          </motion.button>
+        </div>
+      ) : null}
 
       <motion.section
         className="glass-panel space-y-4 p-4"
