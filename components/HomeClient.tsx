@@ -609,8 +609,6 @@ export function HomeClient({ mode = "dashboard" }: { mode?: "dashboard" | "journ
     [macroGoals.fatG, totalFatG]
   );
 
-  // (meal slots kept in data model but not shown in UI per latest UX)
-
   function entryTimeHHmm(createdAtIso: string): string {
     const t = formatEntryTime(createdAtIso);
     return t && /^\d{2}:\d{2}$/.test(t) ? t : "";
@@ -1535,7 +1533,7 @@ export function HomeClient({ mode = "dashboard" }: { mode?: "dashboard" | "journ
                       return;
                     }
                     router.push(
-                      `/add-food?from=journal&date=${encodeURIComponent(viewDateKey)}&meal=snack`
+                      `/add-food?from=journal&date=${encodeURIComponent(viewDateKey)}`
                     );
                   }}
                 >
@@ -1596,7 +1594,7 @@ export function HomeClient({ mode = "dashboard" }: { mode?: "dashboard" | "journ
 
         <nav className="grid w-full grid-cols-2 gap-2 sm:gap-3" aria-label="פעולות מהירות">
           <Link
-            href={`/add-food?from=journal&date=${encodeURIComponent(viewDateKey)}&meal=snack`}
+            href={`/add-food?from=journal&date=${encodeURIComponent(viewDateKey)}`}
             className={`${quickNavBtnClass} min-h-[3.25rem] px-3 py-3 text-sm sm:min-h-[3.5rem] sm:text-base`}
           >
             <span className="text-xl" aria-hidden>
@@ -1811,7 +1809,7 @@ export function HomeClient({ mode = "dashboard" }: { mode?: "dashboard" | "journ
         <div className="mb-5 flex flex-col gap-3">
           <div className="flex flex-wrap items-center justify-center gap-2">
             <Link
-              href={`/add-food?from=journal&date=${encodeURIComponent(viewDateKey)}&meal=snack`}
+              href={`/add-food?from=journal&date=${encodeURIComponent(viewDateKey)}`}
               className={`${quickNavBtnClass} min-h-[3rem] px-4 py-3 text-sm font-extrabold sm:min-h-[3.25rem] sm:text-base`}
             >
               <span className="text-xl" aria-hidden>

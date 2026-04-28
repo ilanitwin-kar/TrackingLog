@@ -1111,7 +1111,7 @@ export function AssistantClient() {
                           ?.text ?? ""
                       );
                       window.location.assign(
-                        `/add-food-ai?date=${dk}${t ? `&meal=${t}` : ""}`
+                        `/add-food-ai?date=${dk}${t ? `&text=${t}` : ""}`
                       );
                     } else {
                       window.location.assign(`/add-food?date=${dk}`);

@@ -224,36 +224,6 @@ function formatDateKeyHe(dateKey: string): string {
   });
 }
 
-type MealSlot = "morning" | "lunch" | "snack" | "dinner" | "night";
-
-function resolveMealSlot(raw: string | null): MealSlot {
-  switch (raw) {
-    case "morning":
-    case "lunch":
-    case "snack":
-    case "dinner":
-    case "night":
-      return raw;
-    default:
-      return "snack";
-  }
-}
-
-function mealSlotLabel(slot: MealSlot): string {
-  switch (slot) {
-    case "morning":
-      return "בוקר";
-    case "lunch":
-      return "צהריים";
-    case "dinner":
-      return "ערב";
-    case "night":
-      return "לילה";
-    default:
-      return "חטיף / ביניים";
-  }
-}
-
 function addFoodSourceBadge(src: HomeSuggestRow["source"]) {
   const s = src ?? "local";
   if (s === "local") {
@@ -397,7 +367,6 @@ export function AddFoodClient({
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const dateKey = resolveDateKey(searchParams.get("date"));
-  const meal = resolveMealSlot(searchParams.get("meal"));
   const from = searchParams.get("from") ?? "";
 
   const [food, setFood] = useState("");
@@ -481,7 +450,7 @@ export function AddFoodClient({
   const mealPrefilledRef = useRef(false);
   useEffect(() => {
     if (screen !== "ai" || mealPrefilledRef.current) return;
-    const raw = searchParams.get("meal") ?? searchParams.get("text") ?? "";
+    const raw = searchParams.get("text") ?? "";
     const t = raw.trim();
     if (t) {
       setAiMealText(t);
@@ -1365,7 +1334,7 @@ export function AddFoodClient({
     }
   }
 
-  const tabsQuery = `date=${encodeURIComponent(dateKey)}&meal=${encodeURIComponent(meal)}&from=${encodeURIComponent(from || "journal")}`;
+  const tabsQuery = `date=${encodeURIComponent(dateKey)}&from=${encodeURIComponent(from || "journal")}`;
   const [quickAddToast, setQuickAddToast] = useState<string | null>(null);
   const [quickAddId, setQuickAddId] = useState<string | null>(null);
   const quickAddTimerRef = useRef<number | null>(null);
@@ -1416,7 +1385,6 @@ export function AddFoodClient({
       unit,
       createdAt: new Date().toISOString(),
       verified: entryVerifiedForQuickAdd(row.source),
-      meal,
       ...(row.protein != null ? { proteinG: Math.round(row.protein * factor * 10) / 10 } : {}),
       ...(row.carbs != null ? { carbsG: Math.round(row.carbs * factor * 10) / 10 } : {}),
       ...(row.fat != null ? { fatG: Math.round(row.fat * factor * 10) / 10 } : {}),
@@ -1465,8 +1433,6 @@ export function AddFoodClient({
           <span className="text-[var(--cherry)]">תאריך ביומן:</span>{" "}
           {formatDateKeyHe(dateKey)}
           {dateKey === getTodayKey() ? " · היום" : ""}
-          <span className="mx-1 text-[var(--stem)]/40">·</span>
-          {mealSlotLabel(meal)}
         </p>
         {screen === "search" && (
           <>
