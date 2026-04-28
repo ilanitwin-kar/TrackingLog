@@ -4,7 +4,7 @@ import Link from "next/link";
 import { AnimatePresence, motion } from "framer-motion";
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Menu, Library, ShieldCheck, Info, LogOut, UserCircle2 } from "lucide-react";
+import { Menu, Library, ShieldCheck, Info, LogOut, UserCircle2, Settings, SlidersHorizontal } from "lucide-react";
 import { ADMIN_EMAIL } from "@/lib/adminConstants";
 import { onFirebaseAuthChanged } from "@/lib/firebaseUserAuth";
 import {
@@ -173,6 +173,15 @@ export function HomeDrawer({ displayName = "אילנית" }: Props) {
 
               <div className="p-3">
                 <Link
+                  href="/control-center"
+                  className={itemClass}
+                  onClick={() => close()}
+                >
+                  <SlidersHorizontal className="h-5 w-5 text-[var(--cherry)]" />
+                  מרכז השליטה
+                </Link>
+
+                <Link
                   href="/library"
                   className={itemClass}
                   onClick={() => close()}
@@ -191,6 +200,15 @@ export function HomeDrawer({ displayName = "אילנית" }: Props) {
                     ניהול מערכת
                   </Link>
                 ) : null}
+
+                <Link
+                  href="/settings"
+                  className={itemClass}
+                  onClick={() => close()}
+                >
+                  <Settings className="h-5 w-5 text-[var(--stem)]/70" />
+                  הגדרות
+                </Link>
 
                 <div className="my-3 border-t border-[var(--border-cherry-soft)]/70" />
 
