@@ -1,77 +1,109 @@
 "use client";
 
 import { usePathname, useRouter } from "next/navigation";
-import { BlueberryMark } from "@/components/BlueberryMark";
 import { CherryMark } from "@/components/CherryMark";
-import { useAppVariant } from "@/components/useAppVariant";
-import { getBrandName } from "@/lib/appVariant";
+import { ArrowRight } from "lucide-react";
+import { getActiveJournalDateKey } from "@/lib/storage";
+import { getTodayKey } from "@/lib/dateKey";
+import { HomeDrawer } from "@/components/HomeDrawer";
 
-/** מותג Cherry / BLUEBERRY בפינה השמאלית העליונה (LTR) */
+function titleForPathname(pathname: string): string {
+  if (pathname === "/") return "בית";
+  if (pathname === "/journal") return "היומן שלי";
+  if (pathname === "/dictionary") return "המילון האישי";
+  if (pathname === "/explorer") return "מגלה מזונות";
+  if (pathname === "/shopping-list" || pathname === "/shopping") return "רשימת קניות";
+  if (pathname === "/library") return "הספרייה שלי";
+  if (pathname === "/my-recipes") return "המתכונים שלי";
+  if (pathname === "/menus") return "התפריטים שלי";
+  if (pathname === "/planner") return "בניית תפריט";
+  if (pathname === "/recipes") return "מחשבון מתכונים";
+  if (pathname === "/weight") return "מעקב משקל";
+  if (pathname === "/control-center") return "מרכז השליטה";
+  if (pathname === "/assistant") return "עוזר";
+  if (pathname === "/settings") return "הגדרות";
+  if (pathname === "/admin") return "ניהול מערכת";
+  return "";
+}
+
+/** Header קבוע: ימין חזרה/תפריט, מרכז כותרת, שמאל לוגו */
 export function AppBrandMark() {
   const pathname = usePathname();
   const router = useRouter();
-  const variant = useAppVariant();
   if (pathname === "/welcome" || pathname === "/pick-theme") return null;
 
-  const Mark = variant === "blueberry" ? BlueberryMark : CherryMark;
+  const isHome = pathname === "/";
+  const showBack = !isHome;
+  const title = titleForPathname(pathname);
+
+  function onBack() {
+    try {
+      if (typeof window !== "undefined" && window.history.length > 1) {
+        router.back();
+        return;
+      }
+    } catch {
+      /* ignore */
+    }
+
+    let date: string | null = null;
+    try {
+      if (typeof window !== "undefined") {
+        date = new URLSearchParams(window.location.search).get("date");
+      }
+    } catch {
+      /* ignore */
+    }
+    const dk =
+      date && /^\d{4}-\d{2}-\d{2}$/.test(date)
+        ? date
+        : getActiveJournalDateKey() ?? null;
+    if (dk && dk !== getTodayKey()) {
+      router.push(`/journal?date=${encodeURIComponent(dk)}`);
+      return;
+    }
+    router.push("/");
+  }
 
   return (
-    <div className="sticky top-0 z-[250] bg-white/55 backdrop-blur-sm">
+    <div className="fixed left-0 right-0 top-0 z-[250] pointer-events-none">
       <div
-        className="mx-auto flex w-full max-w-lg items-center gap-2 px-3 pb-1 pt-[max(0.4rem,env(safe-area-inset-top))]"
-        dir="ltr"
+        className="pointer-events-auto mx-auto grid h-[60px] w-full max-w-lg grid-cols-3 items-center gap-2 px-3 pt-[env(safe-area-inset-top)]"
+        dir="rtl"
       >
-        <button
-          type="button"
-          onClick={() => router.push("/assistant")}
-          className="flex items-center gap-1 rounded-xl bg-white/0 px-1 py-0.5 transition hover:bg-white/25 active:scale-[0.99]"
-          dir="ltr"
-          aria-label="פתיחת העוזר"
-          title="פתיחת העוזר"
-        >
-          <Mark className="h-6 w-8 shrink-0 drop-shadow-sm sm:h-7 sm:w-9" />
-          <span className="select-none font-[system-ui,'Segoe_UI',sans-serif] text-[0.82rem] font-extrabold tracking-tight text-[var(--ui-brand-wordmark)] drop-shadow-[0_1px_0_rgba(255,255,255,0.85)] sm:text-[0.9rem]">
-            {getBrandName(variant)}
-          </span>
-        </button>
+        <div className="col-span-1 flex items-center justify-start" dir="rtl">
+          {showBack ? (
+            <button
+              type="button"
+              className="pointer-events-auto inline-flex h-10 w-10 items-center justify-center rounded-xl bg-white/0 text-[var(--stem)] transition hover:bg-[var(--cherry-muted)] active:scale-[0.99]"
+              onClick={onBack}
+              aria-label="חזרה"
+              title="חזרה"
+            >
+              <ArrowRight className="h-6 w-6" />
+            </button>
+          ) : (
+            <HomeDrawer />
+          )}
+        </div>
 
-        <button
-          type="button"
-          className="hidden flex-1 items-center justify-between gap-2 rounded-full border-2 border-[var(--border-cherry-soft)] bg-white/70 px-3 py-1 text-[11px] font-semibold text-[var(--stem)] shadow-sm transition hover:bg-white md:flex"
-          onClick={() => {
-            try {
-              window.dispatchEvent(new Event("cj-open-search"));
-            } catch {
-              /* ignore */
-            }
-          }}
-          aria-label="חיפוש באפליקציה"
-          title="חיפוש באפליקציה (Ctrl/⌘+K)"
-          dir="rtl"
-        >
-          <span className="truncate text-[var(--text)]/70">חיפוש…</span>
-          <span className="shrink-0 text-[10px] font-bold text-[var(--stem)]/60">⌘K</span>
-        </button>
+        <div className="col-span-1 flex items-center justify-center">
+          <p className="max-w-[14rem] truncate text-center text-sm font-extrabold text-[var(--cherry)]">
+            {title}
+          </p>
+        </div>
 
-        <button
-          type="button"
-          className="flex flex-1 items-center justify-between gap-2 rounded-full border-2 border-[var(--border-cherry-soft)] bg-white/70 px-3 py-1 text-[11px] font-semibold text-[var(--stem)] shadow-sm transition hover:bg-white md:hidden"
-          onClick={() => {
-            try {
-              window.dispatchEvent(new Event("cj-open-search"));
-            } catch {
-              /* ignore */
-            }
-          }}
-          aria-label="חיפוש באפליקציה"
-          title="חיפוש באפליקציה"
-          dir="rtl"
-        >
-          <span className="truncate text-[var(--text)]/70">חיפוש…</span>
-          <span className="shrink-0 text-sm" aria-hidden>
-            🔍
-          </span>
-        </button>
+        <div className="col-span-1 flex items-center justify-end" dir="ltr">
+          <button
+            type="button"
+            className="pointer-events-auto inline-flex h-10 w-10 items-center justify-center rounded-xl bg-white/0 transition hover:bg-white/25 active:scale-[0.99]"
+            onClick={() => router.push("/")}
+            aria-label="בית"
+            title="בית"
+          >
+            <CherryMark className="h-6 w-8 shrink-0 drop-shadow-sm" />
+          </button>
+        </div>
       </div>
     </div>
   );

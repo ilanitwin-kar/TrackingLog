@@ -4,7 +4,6 @@ import Link from "next/link";
 import { AnimatePresence, motion } from "framer-motion";
 import { useEffect, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
-import { BackSmartButton } from "@/components/BackSmartButton";
 import { gf } from "@/lib/hebrewGenderUi";
 import {
   getEntriesForDate,
@@ -159,7 +158,7 @@ function makeShareText(recipe: SavedRecipe, portionGrams?: number) {
 
 export default function MyRecipesPage() {
   const gender = loadProfile().gender;
-  const searchParams = useSearchParams();
+  void useSearchParams();
   const [recipes, setRecipes] = useState<SavedRecipe[]>([]);
   const [openId, setOpenId] = useState<string | null>(null);
   const [portionById, setPortionById] = useState<Record<string, string>>({});
@@ -185,26 +184,11 @@ export default function MyRecipesPage() {
   const openPortionText = openId ? portionById[openId] ?? "" : "";
   const openPortionG = clamp(num(openPortionText), 0, 200000);
 
-  const backHref = (() => {
-    const date = searchParams.get("date");
-    const meal = searchParams.get("meal");
-    const from = searchParams.get("from");
-    if (from === "library") return "/library";
-    if (date && meal && from) {
-      return `/add-food?from=${encodeURIComponent(from)}&date=${encodeURIComponent(date)}&meal=${encodeURIComponent(meal)}`;
-    }
-    return "/";
-  })();
+  // back is handled globally by the fixed header
 
   return (
     <div className={`mx-auto max-w-lg px-4 py-8 pb-28 md:py-12 ${fontFood}`} dir="rtl">
       <div className="flex items-center justify-between gap-2">
-        <BackSmartButton
-          fallbackHref={backHref}
-          className="rounded-xl border-2 border-[var(--border-cherry-soft)] bg-white px-3 py-2 text-sm font-semibold text-[var(--stem)] shadow-sm transition hover:bg-[var(--cherry-muted)]"
-        >
-          חזרה
-        </BackSmartButton>
         <h1 className="panel-title-cherry text-lg">המתכונים שלי</h1>
         <Link
           href="/recipes"

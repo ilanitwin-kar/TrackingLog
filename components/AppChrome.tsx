@@ -225,8 +225,8 @@ export function AppChrome({ children }: { children: React.ReactNode }) {
     <div
       className={
         hideNav
-          ? "min-h-dvh pb-6 print:pb-0"
-          : "min-h-dvh pb-28 print:pb-0"
+          ? "min-h-dvh pb-6 pt-[calc(60px+env(safe-area-inset-top))] print:pb-0 print:pt-0"
+          : "min-h-dvh pb-28 pt-[calc(60px+env(safe-area-inset-top))] print:pb-0 print:pt-0"
       }
     >
       <AppBrandMark />

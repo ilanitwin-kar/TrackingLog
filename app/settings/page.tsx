@@ -12,7 +12,6 @@ import {
 import { resetJourneyStartToToday } from "@/lib/storage";
 import { loadSoundEffectsEnabled, saveSoundEffectsEnabled } from "@/lib/soundSettings";
 import { useRouter } from "next/navigation";
-import { BackSmartButton } from "@/components/BackSmartButton";
 
 type WeatherCache = { ts: number; data: { tempC: number; description: string; isRain: boolean; isHot: boolean } };
 type GeoPermissionState = "granted" | "denied" | "prompt";
@@ -181,16 +180,6 @@ export default function SettingsPage() {
 
   return (
     <div className="mx-auto max-w-lg px-4 pb-28 pt-8 md:pt-12" dir="rtl">
-      <div className="flex items-center justify-between gap-2">
-        <BackSmartButton
-          className="rounded-xl border-2 border-[var(--border-cherry-soft)] bg-white px-3 py-2 text-sm font-semibold text-[var(--stem)] shadow-sm transition hover:bg-[var(--cherry-muted)]"
-        >
-          חזרה
-        </BackSmartButton>
-        <h1 className="panel-title-cherry text-lg">הגדרות</h1>
-        <div className="w-[4.25rem]" aria-hidden />
-      </div>
-
       <motion.section className="mt-4 glass-panel p-4" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}>
         <h2 className="text-base font-extrabold text-[var(--stem)]">צלילים</h2>
         <button
