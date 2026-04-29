@@ -1,6 +1,6 @@
 "use client";
 
-import { AnimatePresence, motion } from "framer-motion";
+import { AnimatePresence, motion, type PanInfo } from "framer-motion";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
@@ -174,6 +174,19 @@ function formatDateKeyHe(dateKey: string): string {
     month: "short",
   });
 }
+
+/** כיוון מעבר יום ביומן: +1 קדימה בזמן, -1 אחורה (מותאם לאנימציית slide) */
+const journalSwipeVariants = {
+  enter: (dir: number) =>
+    dir === 0
+      ? { x: 0, opacity: 1 }
+      : { x: dir > 0 ? "100%" : "-100%", opacity: 1 },
+  center: { x: 0, opacity: 1 },
+  exit: (dir: number) =>
+    dir === 0
+      ? { x: 0, opacity: 1 }
+      : { x: dir > 0 ? "-100%" : "100%", opacity: 1 },
+};
 
 function CalorieHeroRing({
   target,
@@ -454,7 +467,7 @@ export function HomeClient({ mode = "dashboard" }: { mode?: "dashboard" | "journ
   const [journalExpandedId, setJournalExpandedId] = useState<string | null>(null);
 
   const datePickerRef = useRef<HTMLInputElement | null>(null);
-  const touchRef = useRef<{ x: number; y: number; t: number } | null>(null);
+  const [journalTransitionDir, setJournalTransitionDir] = useState(0);
 
   const [celebration, setCelebration] = useState({
     show: false,
@@ -521,12 +534,32 @@ export function HomeClient({ mode = "dashboard" }: { mode?: "dashboard" | "journ
   const canGoNextDay = viewDateKey < todayKey;
 
   function navigateToDate(dk: string) {
+    const cmp = dk.localeCompare(viewDateKey);
+    setJournalTransitionDir(cmp === 0 ? 0 : cmp > 0 ? 1 : -1);
     setViewDateKey(dk);
+    setEntries(getEntriesForDate(dk));
     const base = isJournalMode ? "/journal" : "/";
     if (dk === getTodayKey()) {
       router.replace(base, { scroll: false });
     } else {
       router.replace(`${base}?date=${encodeURIComponent(dk)}`, { scroll: false });
+    }
+  }
+
+  function onJournalDayDragEnd(
+    _e: MouseEvent | TouchEvent | PointerEvent,
+    info: PanInfo
+  ) {
+    const { offset, velocity } = info;
+    if (Math.abs(offset.y) > Math.abs(offset.x) * 1.25) return;
+    const threshold = 56;
+    const vThresh = 420;
+    if (offset.x < -threshold || velocity.x < -vThresh) {
+      if (canGoNextDay) navigateToDate(addDaysToDateKey(viewDateKey, 1));
+      return;
+    }
+    if (offset.x > threshold || velocity.x > vThresh) {
+      navigateToDate(addDaysToDateKey(viewDateKey, -1));
     }
   }
 
@@ -934,7 +967,9 @@ export function HomeClient({ mode = "dashboard" }: { mode?: "dashboard" | "journ
   useEffect(() => {
     const d = searchParams.get("date");
     if (d && /^\d{4}-\d{2}-\d{2}$/.test(d) && d <= getTodayKey()) {
+      setJournalTransitionDir(0);
       setViewDateKey(d);
+      setEntries(getEntriesForDate(d));
     }
   }, [searchParams]);
 
@@ -948,6 +983,7 @@ export function HomeClient({ mode = "dashboard" }: { mode?: "dashboard" | "journ
       if (now !== prevCalKeyRef.current) {
         const before = prevCalKeyRef.current;
         prevCalKeyRef.current = now;
+        setJournalTransitionDir(0);
         setViewDateKey((v) => (v === before ? now : v));
       }
     }, 25000);
@@ -1772,42 +1808,23 @@ export function HomeClient({ mode = "dashboard" }: { mode?: "dashboard" | "journ
       {/* CTA moved next to the last starred entry (see below) */}
 
       {isJournalMode ? (
-      <section
-        className="glass-panel p-4"
-        onTouchStart={(e) => {
-          const t = e.touches?.[0];
-          if (!t) return;
-          const tag =
-            (e.target as HTMLElement | null)?.tagName?.toLowerCase() ?? "";
-          if (
-            tag === "input" ||
-            tag === "textarea" ||
-            tag === "button" ||
-            tag === "select" ||
-            tag === "a"
-          )
-            return;
-          touchRef.current = { x: t.clientX, y: t.clientY, t: Date.now() };
-        }}
-        onTouchEnd={(e) => {
-          const start = touchRef.current;
-          touchRef.current = null;
-          if (!start) return;
-          const t = e.changedTouches?.[0];
-          if (!t) return;
-          const dx = t.clientX - start.x;
-          const dy = t.clientY - start.y;
-          if (Math.abs(dx) < 60) return;
-          if (Math.abs(dx) < Math.abs(dy) * 1.4) return;
-          if (dx > 0) {
-            // ימינה: יום קודם
-            navigateToDate(addDaysToDateKey(viewDateKey, -1));
-          } else {
-            // שמאלה: יום הבא (עד היום)
-            if (canGoNextDay) navigateToDate(addDaysToDateKey(viewDateKey, 1));
-          }
-        }}
-      >
+      <div className="overflow-x-hidden">
+        <AnimatePresence initial={false} custom={journalTransitionDir} mode="sync">
+          <motion.section
+            key={viewDateKey}
+            custom={journalTransitionDir}
+            variants={journalSwipeVariants}
+            initial="enter"
+            animate="center"
+            exit="exit"
+            transition={{ type: "tween", duration: 0.3, ease: [0.22, 1, 0.36, 1] }}
+            className="glass-panel touch-pan-y p-4 will-change-transform"
+            drag="x"
+            dragDirectionLock
+            dragConstraints={{ left: 0, right: 0 }}
+            dragElastic={0.14}
+            onDragEnd={onJournalDayDragEnd}
+          >
         <div className="mb-5 flex flex-col gap-3">
           <div className="flex flex-wrap items-center justify-center gap-2">
             <Link
@@ -2230,7 +2247,9 @@ export function HomeClient({ mode = "dashboard" }: { mode?: "dashboard" | "journ
             </button>
           </div>
         )}
-      </section>
+          </motion.section>
+        </AnimatePresence>
+      </div>
       ) : null}
 
     </div>
