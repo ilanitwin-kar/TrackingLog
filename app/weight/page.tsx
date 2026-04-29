@@ -16,10 +16,9 @@ import { InfoCard } from "@/components/InfoCard";
 import { useCelebration } from "@/lib/useCelebration";
 import {
   buildWeightShareText,
-  formatDeltaVersusStartLine,
   formatRemainingToGoal,
-  formatStepFromPrevious,
   formatTotalChangeFromBaseline,
+  formatWeightEntryDateTimeLine,
   round1,
 } from "@/lib/weightDisplay";
 import {
@@ -80,10 +79,12 @@ export default function WeightPage() {
     if (Number.isNaN(v) || v < 20 || v > 300) return;
 
     const prevLast = sorted[sorted.length - 1];
+    const now = new Date();
     const entry: WeightEntry = {
       id: uid(),
       kg: round1(v),
-      date: new Date().toISOString().slice(0, 10),
+      date: now.toISOString().slice(0, 10),
+      recordedAt: now.toISOString(),
     };
     const next = [...list, entry].sort((a, b) => a.date.localeCompare(b.date));
     saveWeights(next);
@@ -110,7 +111,6 @@ export default function WeightPage() {
   function handleWhatsApp() {
     if (!regOk || !profile) return;
     const text = buildWeightShareText({
-      baselineKg,
       latestKg,
       goalKg,
       totalDelta,
@@ -120,7 +120,7 @@ export default function WeightPage() {
   }
 
   const summaryLine =
-    regOk && baselineKg >= 30
+    regOk && baselineKg >= 30 && Math.abs(totalDelta) >= 0.05
       ? formatTotalChangeFromBaseline(totalDelta)
       : null;
 
@@ -159,22 +159,11 @@ export default function WeightPage() {
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
         >
-          {summaryLine && (
+          {summaryLine ? (
             <p className="text-lg font-bold leading-snug">{summaryLine}</p>
-          )}
-          <p className="text-sm opacity-90">
-            משקל התחלה מהפרופיל:{" "}
-            <span className="font-bold">{round1(baselineKg)} ק״ג</span>
-            {latest ? (
-              <>
-                {" "}
-                · משקל אחרון:{" "}
-                <span className="font-bold">{round1(latest.kg)} ק״ג</span>
-              </>
-            ) : null}
-          </p>
+          ) : null}
           {goalLine ? (
-            <p className="text-base font-semibold text-[var(--cherry)]">
+            <p className="text-lg font-bold leading-snug text-[var(--cherry)]">
               {goalLine}
             </p>
           ) : null}
@@ -252,17 +241,7 @@ export default function WeightPage() {
         ) : (
           <ul className="space-y-3">
             <AnimatePresence>
-              {[...sorted].reverse().map((w, revIdx) => {
-                const chronologicalIdx = sorted.length - 1 - revIdx;
-                const prevInTime =
-                  chronologicalIdx > 0 ? sorted[chronologicalIdx - 1] : null;
-                const deltaFromStart =
-                  regOk && baselineKg >= 30 ? w.kg - baselineKg : null;
-                const stepLine =
-                  prevInTime != null
-                    ? formatStepFromPrevious(prevInTime.kg, w.kg)
-                    : "שקילת בסיס — לפי המשקל בפרטים האישיים";
-
+              {[...sorted].reverse().map((w) => {
                 return (
                   <motion.li
                     key={w.id}
@@ -278,18 +257,10 @@ export default function WeightPage() {
                           <span className="text-lg font-bold text-[var(--stem)]">
                             {round1(w.kg)} ק״ג
                           </span>
-                          <span className="text-sm text-[var(--cherry)]/80">
-                            {w.date}
+                          <span className="text-sm font-semibold tabular-nums text-[var(--cherry)]/85">
+                            {formatWeightEntryDateTimeLine(w)}
                           </span>
                         </div>
-                        <p className="mt-1 text-sm font-medium text-[var(--stem)]/90">
-                          {stepLine}
-                        </p>
-                        {deltaFromStart != null ? (
-                          <p className="mt-1 text-xs text-[var(--stem)]/75">
-                            {formatDeltaVersusStartLine(deltaFromStart)}
-                          </p>
-                        ) : null}
                       </div>
                       <button
                         type="button"

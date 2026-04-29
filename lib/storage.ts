@@ -78,6 +78,8 @@ export type WeightEntry = {
   id: string;
   kg: number;
   date: string;
+  /** מועד רישום מלא (ISO) — לשעת שקילה לצד התאריך; רשומות ישנות בלי שדה */
+  recordedAt?: string;
 };
 
 export type WeighInFrequency = "daily" | "weekly" | "monthly";
