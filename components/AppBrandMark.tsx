@@ -94,10 +94,7 @@ function HeaderBarContent({
   );
 }
 
-/**
- * ברירת מחדל: הדר קבוע (fixed).
- * במסך היומן בלבד: הדר בזרימת המסמך — גוללים והוא נעלם, בלי לכסות את רשומות היומן.
- */
+/** הדר גלובלי אחיד — sticky, ללא קו תחתון. */
 export function AppBrandMark() {
   const pathname = usePathname();
   const router = useRouter();
@@ -106,8 +103,7 @@ export function AppBrandMark() {
   const isHome = pathname === "/";
   const showBack = !isHome;
   const title = titleForPathname(pathname);
-  const isJournalScreen = pathname === "/journal";
-  const titleSizeClass = isJournalScreen ? "text-base sm:text-[1.05rem]" : "text-sm";
+  const titleSizeClass = pathname === "/journal" ? "text-base sm:text-[1.05rem]" : "text-sm";
 
   function onBack() {
     try {
@@ -138,28 +134,10 @@ export function AppBrandMark() {
     router.push("/");
   }
 
-  if (isJournalScreen) {
-    return (
-      <header className="relative z-[200] w-full shrink-0 border-b-2 border-[var(--border-cherry-soft)] bg-white/95 shadow-sm backdrop-blur-sm print:relative">
-        <div
-          className="relative mx-auto w-full max-w-lg px-3 pt-[env(safe-area-inset-top)]"
-          dir="rtl"
-        >
-          <HeaderBarContent
-            showBack={showBack}
-            title={title}
-            titleClassName={titleSizeClass}
-            onBack={onBack}
-          />
-        </div>
-      </header>
-    );
-  }
-
   return (
-    <div className="pointer-events-none fixed left-0 right-0 top-0 z-[250]">
+    <header className="sticky top-0 z-[250] w-full shrink-0 bg-[var(--cherry-muted)]/45 backdrop-blur-sm">
       <div
-        className="pointer-events-auto relative mx-auto flex w-full max-w-lg flex-col px-3 pt-[env(safe-area-inset-top)]"
+        className="relative mx-auto flex w-full max-w-lg flex-col px-3 pt-[env(safe-area-inset-top)]"
         dir="rtl"
       >
         <HeaderBarContent
@@ -169,6 +147,6 @@ export function AppBrandMark() {
           onBack={onBack}
         />
       </div>
-    </div>
+    </header>
   );
 }

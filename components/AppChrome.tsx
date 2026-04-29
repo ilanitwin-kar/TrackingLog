@@ -35,7 +35,6 @@ function isStandalonePublicPath(pathname: string): boolean {
 
 export function AppChrome({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
-  const isJournalScreen = pathname === "/journal";
   const [hideNav, setHideNav] = useState(false);
   const [regReady, setRegReady] = useState(false);
   const [regOk, setRegOk] = useState(false);
@@ -212,11 +211,8 @@ export function AppChrome({ children }: { children: React.ReactNode }) {
   }, [pathname, authTick, fbUserTick, fbAuthResolved]);
 
   if (!regReady || !regOk) {
-    const loadPad = isJournalScreen
-      ? ""
-      : "pt-[calc(60px+env(safe-area-inset-top))]";
     return (
-      <div className={`min-h-dvh pb-6 ${loadPad}`}>
+      <div className="min-h-dvh pb-6">
         <AppBrandMark />
         <div className="p-8 text-center text-lg text-[var(--cherry)]" dir="rtl">
           טוען…
@@ -225,16 +221,12 @@ export function AppChrome({ children }: { children: React.ReactNode }) {
     );
   }
 
-  const shellTopPad = isJournalScreen
-    ? ""
-    : "pt-[calc(60px+env(safe-area-inset-top))]";
-
   return (
     <div
       className={
         hideNav
-          ? `min-h-dvh pb-6 ${shellTopPad} print:pb-0 print:pt-0`
-          : `min-h-dvh pb-28 ${shellTopPad} print:pb-0 print:pt-0`
+          ? "min-h-dvh pb-6 print:pb-0 print:pt-0"
+          : "min-h-dvh pb-28 print:pb-0 print:pt-0"
       }
     >
       <AppBrandMark />

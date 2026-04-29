@@ -554,11 +554,12 @@ export function HomeClient({ mode = "dashboard" }: { mode?: "dashboard" | "journ
     if (Math.abs(offset.y) > Math.abs(offset.x) * 1.25) return;
     const threshold = 56;
     const vThresh = 420;
-    if (offset.x < -threshold || velocity.x < -vThresh) {
+    // לפי הבקשה: ימינה = היום הבא, שמאלה = היום הקודם
+    if (offset.x > threshold || velocity.x > vThresh) {
       if (canGoNextDay) navigateToDate(addDaysToDateKey(viewDateKey, 1));
       return;
     }
-    if (offset.x > threshold || velocity.x > vThresh) {
+    if (offset.x < -threshold || velocity.x < -vThresh) {
       navigateToDate(addDaysToDateKey(viewDateKey, -1));
     }
   }
@@ -672,7 +673,6 @@ export function HomeClient({ mode = "dashboard" }: { mode?: "dashboard" | "journ
     () => (isJournalMode ? getJournalStreakDays() : 0),
     [isJournalMode]
   );
-
   const weeklySavings = useMemo(
     () =>
       profile
