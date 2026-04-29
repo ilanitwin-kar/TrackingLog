@@ -1229,7 +1229,6 @@ export default function DictionaryPage() {
                   )}
           </p>
         ) : (
-          <div className="notebook-paper">
           <ul className="notebook-list space-y-2">
             {visibleSaved.map((d) => {
               const preset =
@@ -1439,7 +1438,6 @@ export default function DictionaryPage() {
               );
             })}
           </ul>
-          </div>
         )}
       </motion.section>
 

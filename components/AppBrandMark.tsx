@@ -135,9 +135,9 @@ export function AppBrandMark() {
   }
 
   return (
-    <header className="sticky top-0 z-[250] w-full shrink-0 bg-[var(--cherry-muted)]/45 backdrop-blur-sm">
+    <header className="pointer-events-none sticky top-0 z-[250] w-full shrink-0 bg-[var(--cherry-muted)]/45">
       <div
-        className="relative mx-auto flex w-full max-w-lg flex-col px-3 pt-[env(safe-area-inset-top)]"
+        className="pointer-events-auto relative mx-auto flex w-full max-w-lg flex-col px-3 pt-[env(safe-area-inset-top)]"
         dir="rtl"
       >
         <HeaderBarContent
