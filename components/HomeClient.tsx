@@ -530,8 +530,7 @@ export function HomeClient({ mode = "dashboard" }: { mode?: "dashboard" | "journ
   }, []);
 
   const isDayClosed = journalClosedMap[viewDateKey] === true;
-  const todayKey = getTodayKey();
-  const canGoNextDay = viewDateKey < todayKey;
+  const canGoNextDay = true;
 
   function navigateToDate(dk: string) {
     const cmp = dk.localeCompare(viewDateKey);
@@ -966,12 +965,12 @@ export function HomeClient({ mode = "dashboard" }: { mode?: "dashboard" | "journ
 
   useEffect(() => {
     const d = searchParams.get("date");
-    if (d && /^\d{4}-\d{2}-\d{2}$/.test(d) && d <= getTodayKey()) {
+    if (d && /^\d{4}-\d{2}-\d{2}$/.test(d) && d !== viewDateKey) {
       setJournalTransitionDir(0);
       setViewDateKey(d);
       setEntries(getEntriesForDate(d));
     }
-  }, [searchParams]);
+  }, [searchParams, viewDateKey]);
 
   useEffect(() => {
     setActiveJournalDateKey(viewDateKey);
@@ -1809,7 +1808,7 @@ export function HomeClient({ mode = "dashboard" }: { mode?: "dashboard" | "journ
 
       {isJournalMode ? (
       <div className="overflow-x-hidden">
-        <AnimatePresence initial={false} custom={journalTransitionDir} mode="sync">
+        <AnimatePresence initial={false} custom={journalTransitionDir} mode="wait">
           <motion.section
             key={viewDateKey}
             custom={journalTransitionDir}
@@ -1823,6 +1822,7 @@ export function HomeClient({ mode = "dashboard" }: { mode?: "dashboard" | "journ
             dragDirectionLock
             dragConstraints={{ left: 0, right: 0 }}
             dragElastic={0.14}
+            dragMomentum={false}
             onDragEnd={onJournalDayDragEnd}
           >
         <div className="mb-5 flex flex-col gap-3">
@@ -1840,13 +1840,12 @@ export function HomeClient({ mode = "dashboard" }: { mode?: "dashboard" | "journ
               ref={datePickerRef}
               type="date"
               value={viewDateKey}
-              max={todayKey}
               className="sr-only"
               aria-hidden
               tabIndex={-1}
               onChange={(e) => {
                 const dk = e.target.value;
-                if (dk && /^\d{4}-\d{2}-\d{2}$/.test(dk) && dk <= todayKey) {
+                if (dk && /^\d{4}-\d{2}-\d{2}$/.test(dk)) {
                   navigateToDate(dk);
                 }
               }}
@@ -1883,13 +1882,13 @@ export function HomeClient({ mode = "dashboard" }: { mode?: "dashboard" | "journ
         </div>
 
         <div className="mb-5 rounded-2xl border-2 border-[var(--border-cherry-soft)] bg-white/90 px-3 py-3 shadow-sm">
-          <p className="text-center text-xs font-extrabold tracking-wide text-[var(--cherry)]/80">
+          <p className="text-center text-lg font-extrabold tracking-wide text-[var(--cherry)]/85 sm:text-xl">
             נשאר להיום
           </p>
-          <div className="mt-2 flex w-full items-stretch gap-1.5">
+          <div className="mt-3 flex w-full items-stretch gap-1.5">
             {(
               [
-                ["קלוריות", remainingKcal, "קק״ל"] as const,
+                ["קלוריות", remainingKcal, ""] as const,
                 ["חלבון", remainingProteinG, "ג"] as const,
                 ["פחמימה", remainingCarbsG, "ג"] as const,
                 ["שומן", remainingFatG, "ג"] as const,
@@ -1897,22 +1896,24 @@ export function HomeClient({ mode = "dashboard" }: { mode?: "dashboard" | "journ
             ).map(([label, val, unit]) => (
               <div
                 key={label}
-                className={`min-w-0 rounded-xl border border-[var(--border-cherry-soft)] bg-white px-2 py-2 text-center ${
+                className={`min-w-0 rounded-xl border border-[var(--border-cherry-soft)] bg-white px-2 py-2.5 text-center ${
                   label === "קלוריות" ? "flex-[1.35]" : "flex-1"
                 }`}
               >
-                <p className="text-[11px] font-bold text-[var(--stem)]/70">
+                <p className="text-sm font-bold text-[var(--stem)]/80 sm:text-base">
                   {label}
                 </p>
                 <p
-                  className={`mt-0.5 text-sm font-extrabold tabular-nums ${
+                  className={`mt-1 text-base font-extrabold tabular-nums ${
                     val < 0 ? "text-[var(--cherry)]" : "text-[var(--stem)]"
                   }`}
                 >
                   {val}
-                  <span className="ms-1 text-[10px] font-bold opacity-70">
-                    {unit}
-                  </span>
+                  {unit ? (
+                    <span className="ms-1 text-sm font-bold opacity-80 sm:text-base">
+                      {unit}
+                    </span>
+                  ) : null}
                 </p>
               </div>
             ))}

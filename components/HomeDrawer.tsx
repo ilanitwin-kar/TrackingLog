@@ -117,7 +117,7 @@ export function HomeDrawer({ displayName = "אילנית" }: Props) {
       <AnimatePresence>
         {open ? (
           <motion.div
-            className="fixed inset-0 z-[300]"
+            className="fixed inset-0 z-[1200]"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}

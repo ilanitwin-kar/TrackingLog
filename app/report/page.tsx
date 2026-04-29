@@ -621,7 +621,7 @@ export default function ReportPage() {
       </motion.section>
 
       <motion.div
-        className="sticky bottom-4 z-10 sm:static sm:bottom-auto"
+        className="mt-4"
         initial={{ opacity: 0, y: 12 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ delay: 0.1 }}
