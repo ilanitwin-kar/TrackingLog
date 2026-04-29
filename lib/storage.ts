@@ -41,8 +41,6 @@ export type LogEntry = {
   quantity: number;
   unit: FoodUnit;
   createdAt: string;
-  /** חלוקת ארוחות ביומן (חדש). ערכים ישנים בלי meal מוצגים תחת \"ביניים\". */
-  meal?: "morning" | "lunch" | "snack" | "dinner" | "night";
   /** מסומן ליצירת ארוחה קבועה */
   mealStarred?: boolean;
   /** ערך מאומת ממאגר Caloric Intelligence */
@@ -80,6 +78,8 @@ export type WeightEntry = {
   id: string;
   kg: number;
   date: string;
+  /** מועד רישום מלא (ISO) — לשעת שקילה לצד התאריך; רשומות ישנות בלי שדה */
+  recordedAt?: string;
 };
 
 export type WeighInFrequency = "daily" | "weekly" | "monthly";
@@ -546,10 +546,14 @@ export function loadDayLogs(): DayLogsMap {
     const out: DayLogsMap = {};
     for (const [dateKey, list] of Object.entries(parsed)) {
       if (!Array.isArray(list)) continue;
-      out[dateKey] = list.map((e) => ({
-        ...e,
-        unit: normalizeFoodUnit(String(e.unit)),
-      }));
+      out[dateKey] = list.map((e) => {
+        const { meal, ...rest } = e as LogEntry & { meal?: unknown };
+        void meal;
+        return {
+          ...rest,
+          unit: normalizeFoodUnit(String(e.unit)),
+        };
+      });
     }
     return out;
   } catch {

@@ -28,6 +28,7 @@ import {
   getEntriesForDate,
   getFoodMemory,
   loadProfile,
+  resolveJournalTargetDateKey,
   saveDayLogEntries,
   saveFoodMemoryKey,
   upsertDictionaryFromAiMeal,
@@ -207,24 +208,20 @@ const AI_BLUE_PLACEHOLDERS = [
 
 function resolveDateKey(raw: string | null): string {
   const today = getTodayKey();
-  if (!raw || !/^\d{4}-\d{2}-\d{2}$/.test(raw)) return today;
+  const fallback = resolveJournalTargetDateKey();
+  if (!raw || !/^\d{4}-\d{2}-\d{2}$/.test(raw)) return fallback;
   if (raw > today) return today;
   return raw;
 }
 
-type MealSlot = "morning" | "lunch" | "snack" | "dinner" | "night";
-
-function resolveMealSlot(raw: string | null): MealSlot {
-  switch (raw) {
-    case "morning":
-    case "lunch":
-    case "snack":
-    case "dinner":
-    case "night":
-      return raw;
-    default:
-      return "snack";
-  }
+function formatDateKeyHe(dateKey: string): string {
+  const d = new Date(`${dateKey}T12:00:00`);
+  if (Number.isNaN(d.getTime())) return dateKey;
+  return d.toLocaleDateString("he-IL", {
+    weekday: "short",
+    day: "numeric",
+    month: "short",
+  });
 }
 
 function addFoodSourceBadge(src: HomeSuggestRow["source"]) {
@@ -370,7 +367,6 @@ export function AddFoodClient({
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const dateKey = resolveDateKey(searchParams.get("date"));
-  const meal = resolveMealSlot(searchParams.get("meal"));
   const from = searchParams.get("from") ?? "";
 
   const [food, setFood] = useState("");
@@ -454,7 +450,7 @@ export function AddFoodClient({
   const mealPrefilledRef = useRef(false);
   useEffect(() => {
     if (screen !== "ai" || mealPrefilledRef.current) return;
-    const raw = searchParams.get("meal") ?? searchParams.get("text") ?? "";
+    const raw = searchParams.get("text") ?? "";
     const t = raw.trim();
     if (t) {
       setAiMealText(t);
@@ -1338,13 +1334,7 @@ export function AddFoodClient({
     }
   }
 
-  const backBase = from === "journal" ? "/journal" : "/";
-  const homeLink =
-    dateKey === getTodayKey()
-      ? backBase
-      : `${backBase}?date=${encodeURIComponent(dateKey)}`;
-
-  const tabsQuery = `date=${encodeURIComponent(dateKey)}&meal=${encodeURIComponent(meal)}&from=${encodeURIComponent(from || "journal")}`;
+  const tabsQuery = `date=${encodeURIComponent(dateKey)}&from=${encodeURIComponent(from || "journal")}`;
   const [quickAddToast, setQuickAddToast] = useState<string | null>(null);
   const [quickAddId, setQuickAddId] = useState<string | null>(null);
   const quickAddTimerRef = useRef<number | null>(null);
@@ -1395,7 +1385,6 @@ export function AddFoodClient({
       unit,
       createdAt: new Date().toISOString(),
       verified: entryVerifiedForQuickAdd(row.source),
-      meal,
       ...(row.protein != null ? { proteinG: Math.round(row.protein * factor * 10) / 10 } : {}),
       ...(row.carbs != null ? { carbsG: Math.round(row.carbs * factor * 10) / 10 } : {}),
       ...(row.fat != null ? { fatG: Math.round(row.fat * factor * 10) / 10 } : {}),
@@ -1439,24 +1428,12 @@ export function AddFoodClient({
       className="min-h-[100dvh] bg-gradient-to-b from-[#fff8fa] via-white to-[#f6faf3] pb-[calc(5.25rem+env(safe-area-inset-bottom))]"
       dir="rtl"
     >
-      <header className="sticky top-0 z-[120] shrink-0 border-b-2 border-[var(--border-cherry-soft)] bg-white/95 px-3 py-3 shadow-sm backdrop-blur-sm">
-        <div className="mx-auto flex max-w-lg items-start gap-2">
-          <Link
-            href={homeLink}
-            className="shrink-0 rounded-xl border-2 border-[var(--border-cherry-soft)] bg-white px-3 py-2 text-sm font-semibold text-[var(--stem)] shadow-sm transition hover:bg-[#fff5f7]"
-          >
-            חזרה
-          </Link>
-          <div className="flex min-w-0 flex-1 flex-col items-center gap-2 text-center">
-            <h1 className="panel-title-cherry text-lg">
-              היומן שלי
-            </h1>
-          </div>
-          <div className="w-[4.25rem] shrink-0" aria-hidden />
-        </div>
-      </header>
-
       <div className="mx-auto w-full max-w-lg px-3 pt-3">
+        <p className="mb-3 text-center text-sm font-semibold text-[var(--stem)]/80">
+          <span className="text-[var(--cherry)]">תאריך ביומן:</span>{" "}
+          {formatDateKeyHe(dateKey)}
+          {dateKey === getTodayKey() ? " · היום" : ""}
+        </p>
         {screen === "search" && (
           <>
             <nav

@@ -3,7 +3,6 @@
 import Link from "next/link";
 import { AnimatePresence, motion } from "framer-motion";
 import { useState } from "react";
-import { BackToMenuButton } from "@/components/BackToMenuButton";
 import { loadProfile } from "@/lib/storage";
 import { gf } from "@/lib/hebrewGenderUi";
 
@@ -229,7 +228,6 @@ export default function ControlCenterPage() {
       className="mx-auto min-h-[100dvh] max-w-lg bg-gradient-to-b from-[#fff8fa] via-white to-[#f6faf3] px-4 py-8 pb-28 md:py-12"
       dir="rtl"
     >
-      <BackToMenuButton />
       <h1 className="heading-page mb-2 text-center text-2xl md:text-3xl">
         מרכז השליטה
       </h1>

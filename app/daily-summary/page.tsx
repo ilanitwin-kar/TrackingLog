@@ -3,7 +3,6 @@
 import { motion } from "framer-motion";
 import { useEffect, useMemo, useState } from "react";
 import { Pie, PieChart, ResponsiveContainer, Cell } from "recharts";
-import { BackToMenuButton } from "@/components/BackToMenuButton";
 import { InfoCard } from "@/components/InfoCard";
 import { dailyMacroTargetsGramsForProfile } from "@/lib/macroTargets";
 import {
@@ -265,8 +264,6 @@ export default function DailySummaryPage() {
 
   return (
     <div className="mx-auto max-w-lg px-4 pb-28 pt-8 md:pt-12" dir="rtl">
-      <BackToMenuButton />
-
       <motion.h1
         className="heading-page mb-5 text-center text-3xl md:text-4xl"
         initial={{ opacity: 0, y: -8 }}

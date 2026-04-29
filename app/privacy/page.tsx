@@ -1,18 +1,10 @@
-import Link from "next/link";
-
 export default function PrivacyPage() {
   return (
     <div
       className="mx-auto max-w-lg px-4 py-8 md:py-12"
       dir="rtl"
     >
-      <Link
-        href="/welcome"
-        className="text-sm font-semibold text-[var(--cherry)] underline underline-offset-4"
-      >
-        ← חזרה
-      </Link>
-      <h1 className="heading-page mt-6 text-2xl">
+      <h1 className="heading-page mt-2 text-2xl">
         מדיניות פרטיות — Cherry
       </h1>
       <p className="mt-4 text-sm leading-relaxed text-[var(--text)]/90">
