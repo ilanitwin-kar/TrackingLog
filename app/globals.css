@@ -166,6 +166,21 @@ input[type="checkbox"] {
 }
 
 @layer utilities {
+  /**
+   * Accessibility typography floor (all app, both tracks):
+   * avoid ultra-small text on mobile.
+   */
+  .text-xs {
+    font-size: 0.875rem !important; /* 14px */
+    line-height: 1.35rem !important;
+  }
+
+  [class*="text-\\[10px\\]"],
+  [class*="text-\\[11px\\]"] {
+    font-size: 0.875rem !important; /* 14px */
+    line-height: 1.35rem !important;
+  }
+
   /** כותרות מסך ראשי */
   .app-title {
     color: var(--ui-page-heading);
