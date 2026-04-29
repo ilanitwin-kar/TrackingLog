@@ -1153,7 +1153,7 @@ export function HomeClient({ mode = "dashboard" }: { mode?: "dashboard" | "journ
 
   return (
     <div
-      className={`mx-auto max-w-lg ${compact ? "px-3 pb-28 pt-4 md:pt-7 cj-compact" : "px-4 pb-32 pt-6 md:pt-10"}`}
+      className={`mx-auto max-w-lg ${compact ? "px-3 pb-28 pt-2 md:pt-4 cj-compact" : "px-4 pb-32 pt-6 md:pt-10"}`}
       dir="rtl"
     >
       {celebration.show && (
@@ -1670,7 +1670,9 @@ export function HomeClient({ mode = "dashboard" }: { mode?: "dashboard" | "journ
         >
           <div className="flex items-center justify-between gap-2" dir="rtl">
             <div className="flex items-center gap-2">
-              <h1 className="text-lg font-extrabold text-[var(--stem)]">יומן</h1>
+              <h1 className="text-xl font-extrabold tracking-tight text-[var(--stem)] sm:text-2xl">
+                יומן
+              </h1>
               <button
                 type="button"
                 className="rounded-lg border border-[var(--border-cherry-soft)] bg-white px-2 py-1 text-sm font-extrabold text-[var(--stem)] shadow-sm"
@@ -1989,7 +1991,13 @@ export function HomeClient({ mode = "dashboard" }: { mode?: "dashboard" | "journ
                             <span className="mt-0.5 text-xs" aria-hidden>
                               🍒
                             </span>
-                            <span className="min-w-0 flex-1 break-words text-base font-extrabold leading-snug text-[var(--stem)]">
+                            <span
+                              className={`min-w-0 flex-1 break-words font-extrabold leading-snug text-[var(--stem)] ${
+                                isJournalMode
+                                  ? "text-lg sm:text-xl"
+                                  : "text-base"
+                              }`}
+                            >
                               {item.food}
                             </span>
                           </span>

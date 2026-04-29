@@ -38,7 +38,66 @@ function titleForPathname(pathname: string): string {
   return "מסך";
 }
 
-/** Header קבוע: ימין חזרה/תפריט, מרכז כותרת, שמאל לוגו */
+function HeaderBarContent({
+  showBack,
+  title,
+  titleClassName,
+  onBack,
+}: {
+  showBack: boolean;
+  title: string;
+  titleClassName: string;
+  onBack: () => void;
+}) {
+  const router = useRouter();
+  return (
+    <div className="relative h-[60px] w-full">
+      <div className="absolute right-3 top-0 flex h-[60px] items-center">
+        {showBack ? (
+          <button
+            type="button"
+            className="inline-flex h-10 w-10 items-center justify-center rounded-xl bg-white/0 text-[var(--stem)] transition hover:bg-[var(--cherry-muted)] active:scale-[0.99]"
+            onClick={onBack}
+            aria-label="חזרה"
+            title="חזרה"
+          >
+            <ArrowRight className="h-6 w-6" />
+          </button>
+        ) : (
+          <HomeDrawer />
+        )}
+      </div>
+
+      <div className="pointer-events-none absolute inset-x-0 top-0 flex h-[60px] items-center justify-center">
+        <p
+          className={`pointer-events-none max-w-[14rem] truncate text-center font-extrabold text-[var(--cherry)] ${titleClassName}`}
+        >
+          {title}
+        </p>
+      </div>
+
+      <div
+        className="absolute left-3 top-0 flex h-[60px] items-center"
+        dir="ltr"
+      >
+        <button
+          type="button"
+          className="inline-flex h-10 w-10 items-center justify-center rounded-xl bg-white/0 transition hover:bg-white/25 active:scale-[0.99]"
+          onClick={() => router.push("/")}
+          aria-label="בית"
+          title="בית"
+        >
+          <CherryMark className="h-6 w-8 shrink-0 drop-shadow-sm" />
+        </button>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * ברירת מחדל: הדר קבוע (fixed).
+ * במסך היומן בלבד: הדר בזרימת המסמך — גוללים והוא נעלם, בלי לכסות את רשומות היומן.
+ */
 export function AppBrandMark() {
   const pathname = usePathname();
   const router = useRouter();
@@ -47,6 +106,8 @@ export function AppBrandMark() {
   const isHome = pathname === "/";
   const showBack = !isHome;
   const title = titleForPathname(pathname);
+  const isJournalScreen = pathname === "/journal";
+  const titleSizeClass = isJournalScreen ? "text-base sm:text-[1.05rem]" : "text-sm";
 
   function onBack() {
     try {
@@ -77,46 +138,36 @@ export function AppBrandMark() {
     router.push("/");
   }
 
+  if (isJournalScreen) {
+    return (
+      <header className="relative z-[200] w-full shrink-0 border-b-2 border-[var(--border-cherry-soft)] bg-white/95 shadow-sm backdrop-blur-sm print:relative">
+        <div
+          className="relative mx-auto w-full max-w-lg px-3 pt-[env(safe-area-inset-top)]"
+          dir="rtl"
+        >
+          <HeaderBarContent
+            showBack={showBack}
+            title={title}
+            titleClassName={titleSizeClass}
+            onBack={onBack}
+          />
+        </div>
+      </header>
+    );
+  }
+
   return (
-    <div className="fixed left-0 right-0 top-0 z-[250] pointer-events-none">
+    <div className="pointer-events-none fixed left-0 right-0 top-0 z-[250]">
       <div
-        className="pointer-events-auto relative mx-auto flex h-[60px] w-full max-w-lg items-center px-3 pt-[env(safe-area-inset-top)]"
+        className="pointer-events-auto relative mx-auto flex w-full max-w-lg flex-col px-3 pt-[env(safe-area-inset-top)]"
         dir="rtl"
       >
-        <div className="pointer-events-auto absolute right-3 top-[env(safe-area-inset-top)] flex h-[60px] items-center">
-          {showBack ? (
-            <button
-              type="button"
-              className="pointer-events-auto inline-flex h-10 w-10 items-center justify-center rounded-xl bg-white/0 text-[var(--stem)] transition hover:bg-[var(--cherry-muted)] active:scale-[0.99]"
-              onClick={onBack}
-              aria-label="חזרה"
-              title="חזרה"
-            >
-              <ArrowRight className="h-6 w-6" />
-            </button>
-          ) : (
-            <HomeDrawer />
-          )}
-        </div>
-
-        <div className="pointer-events-none absolute inset-x-0 top-[env(safe-area-inset-top)] flex h-[60px] items-center justify-center">
-          <p className="pointer-events-none max-w-[14rem] truncate text-center text-sm font-extrabold text-[var(--cherry)]">
-            {title}
-          </p>
-        </div>
-
-        <div className="pointer-events-auto absolute left-3 top-[env(safe-area-inset-top)] flex h-[60px] items-center" dir="ltr">
-          <button
-            type="button"
-            className="pointer-events-auto inline-flex h-10 w-10 items-center justify-center rounded-xl bg-white/0 transition hover:bg-white/25 active:scale-[0.99]"
-            onClick={() => router.push("/")}
-            aria-label="בית"
-            title="בית"
-          >
-            <CherryMark className="h-6 w-8 shrink-0 drop-shadow-sm" />
-          </button>
-        </div>
-        <div className="h-[60px] w-full" aria-hidden />
+        <HeaderBarContent
+          showBack={showBack}
+          title={title}
+          titleClassName={titleSizeClass}
+          onBack={onBack}
+        />
       </div>
     </div>
   );
