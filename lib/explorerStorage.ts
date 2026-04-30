@@ -10,7 +10,7 @@ export type ShoppingItem = {
   calories: number;
   checked: boolean;
   brand?: string;
-  /** ל־100 גרם */
+  /** לא בשימוש ברשימת הקניות — נשמר רק לתאימות לאחור */
   protein?: number;
   carbs?: number;
   fat?: number;
@@ -43,12 +43,20 @@ export function isFavorite(foodId: string): boolean {
   return loadFavoriteIds().includes(foodId);
 }
 
+function stripShoppingMacros(raw: ShoppingItem): ShoppingItem {
+  const { protein, carbs, fat, ...rest } = raw;
+  void protein;
+  void carbs;
+  void fat;
+  return rest;
+}
+
 function migrateShoppingRow(raw: ShoppingItem): ShoppingItem {
   const qty =
     typeof raw.qty === "number" && Number.isFinite(raw.qty) && raw.qty > 0
       ? raw.qty
       : 1;
-  return { ...raw, qty };
+  return { ...stripShoppingMacros(raw), qty };
 }
 
 export function loadShopping(): ShoppingItem[] {
@@ -75,7 +83,11 @@ export function addToShopping(
   const list = loadShopping();
   if (list.some((x) => x.foodId === item.foodId)) return false;
   const row: ShoppingItem = {
-    ...item,
+    foodId: item.foodId,
+    name: item.name,
+    category: item.category,
+    calories: item.calories,
+    brand: item.brand,
     id: `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
     checked: false,
     qty: item.qty ?? 1,
@@ -118,7 +130,9 @@ export function updateShoppingItem(
 ): ShoppingItem[] {
   const list = loadShopping();
   const next = list.map((x) =>
-    x.id === id ? { ...x, ...patch, id: x.id } : x
+    x.id === id
+      ? stripShoppingMacros({ ...x, ...patch, id: x.id })
+      : x
   );
   saveShopping(next);
   return next;

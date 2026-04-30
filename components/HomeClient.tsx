@@ -54,6 +54,7 @@ import {
 import { optionalMacroGram, sumMacroGrams } from "@/lib/macroGrams";
 import { dailyCalorieTarget } from "@/lib/tdee";
 import { weeklyCalorieSavingsClosedDays } from "@/lib/weeklyCalorieSavings";
+import { useDocumentScrollOnlyIfOverflowing } from "@/lib/useDocumentScrollOnlyIfOverflowing";
 import { loadDayLogs } from "@/lib/storage";
 import { CelebrationConfetti } from "./Fireworks";
 import { useAppVariant } from "./useAppVariant";
@@ -451,6 +452,7 @@ function parseWeatherCachePayload(
 }
 
 export function HomeClient({ mode = "dashboard" }: { mode?: "dashboard" | "journal" }) {
+  useDocumentScrollOnlyIfOverflowing();
   const gender = loadProfile().gender;
   const appVariant = useAppVariant();
   const router = useRouter();
@@ -1188,7 +1190,7 @@ export function HomeClient({ mode = "dashboard" }: { mode?: "dashboard" | "journ
 
   return (
     <div
-      className={`mx-auto max-w-lg ${compact ? "px-3 pb-28 pt-2 md:pt-4 cj-compact" : "px-4 pb-32 pt-6 md:pt-10"}`}
+      className={`mx-auto max-w-lg ${compact ? "px-3 pb-28 pt-0 cj-compact" : "px-4 pb-32 pt-6 md:pt-10"}`}
       dir="rtl"
     >
       {celebration.show && (
@@ -1233,11 +1235,13 @@ export function HomeClient({ mode = "dashboard" }: { mode?: "dashboard" | "journ
                 id="meal-modal-title"
                 className="panel-title-cherry text-lg"
               >
-                שמירת ארוחה במילון
+                שמירה ליומן — ארוחה שמורה
               </h2>
               <p className="text-sm text-[var(--text)]/85">
-                נשמרו {starredForMealCount} פריטים. תני שם — הארוחה תופיע
-                במילון האישי לחיפוש והוספה ליומן (למשל: בוקר קבוע).
+                נשמרו {starredForMealCount} פריטים ביום הזה.{" "}
+                {gender === "male" ? "תן" : "תני"} שם לארוחה — הצירוף יישמר תחת{" "}
+                <strong>המילון האישי</strong> (ארוחות שמורות) ויהיה זמין להוספה
+                מהירה ליומן בכל תאריך, בנוסף לרשומות הנפרדות שכבר רשמת היום.
               </p>
               <input
                 type="text"
@@ -1254,7 +1258,7 @@ export function HomeClient({ mode = "dashboard" }: { mode?: "dashboard" | "journ
                   onClick={confirmCreateMeal}
                   disabled={!mealNameDraft.trim()}
                 >
-                  שמירה
+                  שמירה ליומן
                 </button>
                 <button
                   type="button"
@@ -1699,18 +1703,18 @@ export function HomeClient({ mode = "dashboard" }: { mode?: "dashboard" | "journ
 
       {isJournalMode ? (
         <motion.header
-          className="mb-5 rounded-2xl border-2 border-[var(--border-cherry-soft)] bg-white/90 px-3 py-3 shadow-sm"
+          className="sticky top-0 z-50 mb-4 rounded-b-xl border-b border-[var(--border-cherry-soft)]/80 bg-[color-mix(in_srgb,white_87%,var(--cherry)_13%)] px-2.5 py-2 shadow-[0_1px_0_rgba(155,27,48,0.05)] sm:px-3 sm:py-2.5"
           initial={{ opacity: 0, y: -8 }}
           animate={{ opacity: 1, y: 0 }}
         >
-          <div className="flex items-center justify-between gap-2" dir="rtl">
-            <div className="flex items-center gap-2">
-              <h1 className="text-xl font-extrabold tracking-tight text-[var(--stem)] sm:text-2xl">
+          <div className="flex min-h-[2.75rem] items-center justify-between gap-1.5 sm:gap-2" dir="rtl">
+            <div className="flex min-w-0 items-center gap-1.5 sm:gap-2">
+              <h1 className="truncate text-lg font-bold tracking-tight text-[var(--stem)] sm:text-xl">
                 יומן
               </h1>
               <button
                 type="button"
-                className="rounded-lg border border-[var(--border-cherry-soft)] bg-white px-2 py-1 text-sm font-extrabold text-[var(--stem)] shadow-sm"
+                className="inline-flex size-8 shrink-0 items-center justify-center rounded-lg border border-[var(--border-cherry-soft)] bg-white/95 text-[0.85rem] leading-none text-[var(--stem)] shadow-[0_1px_2px_rgba(0,0,0,0.04)] transition hover:bg-white active:scale-[0.98]"
                 aria-label="פתיחת הסבר על היומן"
                 aria-expanded={journalInfoOpen}
                 onClick={() => setJournalInfoOpen((x) => !x)}
@@ -1718,15 +1722,15 @@ export function HomeClient({ mode = "dashboard" }: { mode?: "dashboard" | "journ
                 ℹ️
               </button>
             </div>
-            <div className="flex items-center gap-2">
-              <div className="flex items-center gap-1.5 rounded-full border border-[var(--border-cherry-soft)] bg-white px-2.5 py-1 text-xs font-bold text-[var(--cherry)]">
-                <span aria-hidden className="text-base leading-none">
+            <div className="flex shrink-0 items-center gap-1.5">
+              <div className="flex max-w-[min(100%,11.5rem)] items-center gap-1 rounded-full border border-[var(--border-cherry-soft)] bg-white/95 px-2 py-1 text-sm font-semibold text-[var(--cherry)] shadow-[0_1px_2px_rgba(0,0,0,0.04)] sm:max-w-none sm:px-2.5 sm:text-[0.9375rem]">
+                <span aria-hidden className="text-[0.95rem] leading-none sm:text-base">
                   {appVariant === "blueberry" ? "🫐" : "🍒"}
                 </span>
-                <span className="tabular-nums">{journalStreakDays} ימים ברצף</span>
+                <span className="tabular-nums leading-tight">{journalStreakDays} ימים ברצף</span>
               </div>
               <details className="relative">
-                <summary className="list-none cursor-pointer rounded-xl border border-[var(--border-cherry-soft)] bg-white px-3 py-1.5 text-sm font-extrabold text-[var(--stem)] shadow-sm">
+                <summary className="list-none cursor-pointer rounded-lg border border-[var(--border-cherry-soft)] bg-white/95 px-2 py-1 text-base font-bold leading-none text-[var(--stem)] shadow-[0_1px_2px_rgba(0,0,0,0.04)] transition hover:bg-white sm:px-2.5 sm:py-1.5">
                   ⋯
                 </summary>
                 <div className="absolute left-0 mt-2 w-44 overflow-hidden rounded-xl border border-[var(--border-cherry-soft)] bg-white shadow-lg">
@@ -2208,7 +2212,8 @@ export function HomeClient({ mode = "dashboard" }: { mode?: "dashboard" | "journ
                           יצירת ארוחה מהמסומנים ({starredForMealCount})
                         </button>
                         <p className="mt-1 text-center text-[11px] font-medium text-[var(--text)]/60">
-                          זה ישמור ארוחה במילון לפי הפריטים שסימנת בכוכב.
+                          נשמרת ארוחה שמורה במילון האישי — להוספה מהירה ליומן
+                          בימים הבאים. הפריטים נשארים גם ברשימת היום.
                         </p>
                       </motion.div>
                     )}

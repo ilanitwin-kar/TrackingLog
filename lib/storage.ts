@@ -347,6 +347,10 @@ export type DictionaryItem = {
   /** משקל יחידה בגרם — כש־unit הוא «יחידה», לחישוב מול ערכי 100 ג׳ */
   gramsPerUnit?: number;
   lastCalories?: number;
+  /** מאקרו לפי ברירת המחדל הנוכחית (מיומן / עדכון כמות) */
+  lastProteinG?: number;
+  lastCarbsG?: number;
+  lastFatG?: number;
   /** ל־100 גרם — מסריקה / מקור חיצוני */
   caloriesPer100g?: number;
   proteinPer100g?: number;
@@ -354,6 +358,10 @@ export type DictionaryItem = {
   fatPer100g?: number;
   barcode?: string;
   source?: string;
+  /** קטגוריה מקורית (ממגלה מזונות וכו׳) — לרשימת קניות */
+  foodCategory?: string;
+  /** מותג — לרשימת קניות */
+  brand?: string;
   /** קישור לארוחה שמורה — הוספה ליומן מוסיפה את כל הרכיבים */
   mealPresetId?: string;
 };
@@ -730,6 +738,44 @@ export function isFoodStarred(food: string): boolean {
   return loadDictionary().some((d) => normalizeFoodKey(d.food) === n);
 }
 
+function nutritionPer100gFromJournalGramEntry(
+  entry: LogEntry
+): Partial<
+  Pick<
+    DictionaryItem,
+    "caloriesPer100g" | "proteinPer100g" | "carbsPer100g" | "fatPer100g"
+  >
+> {
+  if (entry.unit !== "גרם") return {};
+  const g = Math.min(5000, Math.max(1, Math.round(Number(entry.quantity))));
+  if (!Number.isFinite(g) || g <= 0) return {};
+  const factor = 100 / g;
+  const out: Partial<
+    Pick<
+      DictionaryItem,
+      "caloriesPer100g" | "proteinPer100g" | "carbsPer100g" | "fatPer100g"
+    >
+  > = {
+    caloriesPer100g: Math.max(1, Math.round(entry.calories * factor)),
+  };
+  if (entry.proteinG != null && Number.isFinite(entry.proteinG)) {
+    out.proteinPer100g = Math.max(
+      0,
+      Math.round(entry.proteinG * factor * 10) / 10
+    );
+  }
+  if (entry.carbsG != null && Number.isFinite(entry.carbsG)) {
+    out.carbsPer100g = Math.max(
+      0,
+      Math.round(entry.carbsG * factor * 10) / 10
+    );
+  }
+  if (entry.fatG != null && Number.isFinite(entry.fatG)) {
+    out.fatPer100g = Math.max(0, Math.round(entry.fatG * factor * 10) / 10);
+  }
+  return out;
+}
+
 export function toggleDictionaryFromEntry(entry: LogEntry): DictionaryItem[] {
   const items = loadDictionary();
   const n = normalizeFoodKey(entry.food);
@@ -737,13 +783,25 @@ export function toggleDictionaryFromEntry(entry: LogEntry): DictionaryItem[] {
   if (idx >= 0) {
     items.splice(idx, 1);
   } else {
-    items.push({
+    const row: DictionaryItem = {
       id: `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
       food: entry.food,
       quantity: entry.quantity,
-      unit: entry.unit,
+      unit: normalizeFoodUnit(String(entry.unit)),
       lastCalories: entry.calories,
-    });
+      source: "journal",
+      ...(entry.proteinG != null && Number.isFinite(entry.proteinG)
+        ? { lastProteinG: entry.proteinG }
+        : {}),
+      ...(entry.carbsG != null && Number.isFinite(entry.carbsG)
+        ? { lastCarbsG: entry.carbsG }
+        : {}),
+      ...(entry.fatG != null && Number.isFinite(entry.fatG)
+        ? { lastFatG: entry.fatG }
+        : {}),
+      ...nutritionPer100gFromJournalGramEntry(entry),
+    };
+    items.push(row);
   }
   saveDictionary(items);
   return items;
@@ -767,7 +825,18 @@ export function patchDictionaryItemById(
   patch: Partial<
     Pick<
       DictionaryItem,
-      "food" | "quantity" | "unit" | "gramsPerUnit" | "lastCalories"
+      | "food"
+      | "quantity"
+      | "unit"
+      | "gramsPerUnit"
+      | "lastCalories"
+      | "lastProteinG"
+      | "lastCarbsG"
+      | "lastFatG"
+      | "caloriesPer100g"
+      | "proteinPer100g"
+      | "carbsPer100g"
+      | "fatPer100g"
     >
   > & { gramsPerUnit?: number | null }
 ): DictionaryItem[] | null {
@@ -909,6 +978,8 @@ export function toggleExplorerFoodInDictionary(item: {
   protein: number;
   fat: number;
   carbs: number;
+  category?: string;
+  brand?: string;
 }): boolean {
   const src = explorerFoodSourceKey(item.id);
   const items = loadDictionary();
@@ -917,17 +988,25 @@ export function toggleExplorerFoodInDictionary(item: {
     saveDictionary(items.filter((_, i) => i !== idx));
     return false;
   }
+  const kcal = Math.max(0, Math.round(Number(item.calories) || 0));
+  const p = Number.isFinite(item.protein) ? Math.max(0, item.protein) : 0;
+  const c = Number.isFinite(item.carbs) ? Math.max(0, item.carbs) : 0;
+  const f = Number.isFinite(item.fat) ? Math.max(0, item.fat) : 0;
+  const cat = item.category?.trim();
+  const br = item.brand?.trim();
   const row: DictionaryItem = {
     id: makeId(),
     food: item.name.trim(),
     quantity: 100,
     unit: "גרם",
-    lastCalories: Math.max(0, Math.round(item.calories)),
-    caloriesPer100g: item.calories,
-    proteinPer100g: item.protein,
-    carbsPer100g: item.carbs,
-    fatPer100g: item.fat,
+    lastCalories: kcal,
+    caloriesPer100g: kcal,
+    proteinPer100g: p,
+    carbsPer100g: c,
+    fatPer100g: f,
     source: src,
+    ...(cat ? { foodCategory: cat } : {}),
+    ...(br ? { brand: br } : {}),
   };
   saveDictionary([row, ...items]);
   return true;
@@ -980,20 +1059,30 @@ export function upsertExplorerFoodInDictionary(item: {
   protein: number;
   fat: number;
   carbs: number;
+  category?: string;
+  brand?: string;
 }): DictionaryItem[] {
   const src = explorerFoodSourceKey(item.id);
   const rest = loadDictionary().filter((d) => d.source !== src);
+  const kcal = Math.max(0, Math.round(Number(item.calories) || 0));
+  const p = Number.isFinite(item.protein) ? Math.max(0, item.protein) : 0;
+  const c = Number.isFinite(item.carbs) ? Math.max(0, item.carbs) : 0;
+  const f = Number.isFinite(item.fat) ? Math.max(0, item.fat) : 0;
+  const cat = item.category?.trim();
+  const br = item.brand?.trim();
   const row: DictionaryItem = {
     id: makeId(),
     food: item.name.trim(),
     quantity: 100,
     unit: "גרם",
-    lastCalories: Math.max(0, Math.round(item.calories)),
-    caloriesPer100g: item.calories,
-    proteinPer100g: item.protein,
-    carbsPer100g: item.carbs,
-    fatPer100g: item.fat,
+    lastCalories: kcal,
+    caloriesPer100g: kcal,
+    proteinPer100g: p,
+    carbsPer100g: c,
+    fatPer100g: f,
     source: src,
+    ...(cat ? { foodCategory: cat } : {}),
+    ...(br ? { brand: br } : {}),
   };
   saveDictionary([row, ...rest]);
   return loadDictionary();

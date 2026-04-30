@@ -29,18 +29,18 @@ import {
 } from "@/lib/storage";
 import { addToShopping, loadShoppingFoodIds } from "@/lib/explorerStorage";
 import {
-  IconPencil,
   IconTrash,
   IconPlusCircle,
   IconVerified,
 } from "@/components/Icons";
 import {
-  dictionaryEditFoodError,
   dictionaryIntroBody,
   dictionarySavedFilterPlaceholder,
   gf,
 } from "@/lib/hebrewGenderUi";
+import { useDocumentScrollOnlyIfOverflowing } from "@/lib/useDocumentScrollOnlyIfOverflowing";
 import Link from "next/link";
+import { SlidersHorizontal } from "lucide-react";
 import { rankedFuzzySearchByText, type MatchRange } from "@/lib/rankedSearch";
 import { matchesAllQueryWords } from "@/lib/foodSearchRules";
 
@@ -55,6 +55,7 @@ type ExplorerFoodRow = {
   fat: number;
   carbs: number;
   category: string;
+  brand?: string;
 };
 
 function StampAction({
@@ -133,6 +134,31 @@ const HEB_LETTERS = [
   "ת",
 ] as const;
 
+function explicitShoppingCategory(d: DictionaryItem): string | null {
+  const t = d.foodCategory?.trim();
+  return t || null;
+}
+
+async function resolveShoppingCategoryForDictionaryItem(
+  d: DictionaryItem
+): Promise<string> {
+  const explicit = explicitShoppingCategory(d);
+  if (explicit) return explicit;
+  try {
+    const res = await fetch(
+      `/api/food-category-lookup?q=${encodeURIComponent(d.food)}`
+    );
+    if (res.ok) {
+      const data = (await res.json()) as { category?: string | null };
+      const cat = data.category?.trim();
+      if (cat) return cat;
+    }
+  } catch {
+    /* ignore */
+  }
+  return "מילון אישי";
+}
+
 function normalizeTitleForIndex(title: string): string {
   const t = title.trim();
   // סדר טוב יותר למוצרים שנשמרים עם פריפיקס
@@ -189,6 +215,14 @@ function parseQtyForUnit(text: string, unit: FoodUnit): number {
   return clampOtherQty(n);
 }
 
+/** כמות בשדה במודאלים (יומן / עריכת כמות במילון) — 0 נשאר 0; מעל 0 — חוקי תחום כמו בשמירת מילון */
+function parseQtyAllowZero(text: string, unit: FoodUnit): number {
+  const n = parseFloat(text.replace(",", "."));
+  if (!Number.isFinite(n) || n <= 0) return 0;
+  if (unit === "גרם") return clampGramQty(n);
+  return clampOtherQty(n);
+}
+
 function parseGramsPerUnitField(text: string): number | null {
   const t = text.trim();
   if (t === "") return null;
@@ -197,13 +231,170 @@ function parseGramsPerUnitField(text: string): number | null {
   return Math.min(5000, Math.max(0.1, Math.round(n * 100) / 100));
 }
 
+function servingScaleRatioFromDictionaryDefault(
+  d: DictionaryItem,
+  qty: number,
+  unit: FoodUnit,
+  gramsPerUnitResolved: number | null
+): number | null {
+  const newG = servingTotalGrams(qty, unit, gramsPerUnitResolved);
+  const baseG = servingTotalGrams(
+    d.quantity,
+    d.unit,
+    d.gramsPerUnit != null &&
+      Number.isFinite(d.gramsPerUnit) &&
+      d.gramsPerUnit > 0
+      ? d.gramsPerUnit
+      : null
+  );
+  if (newG != null && baseG != null && baseG > 0) {
+    return newG / baseG;
+  }
+  if (unit !== d.unit) return null;
+  if (unit === "יחידה") {
+    const gNew =
+      gramsPerUnitResolved != null &&
+      Number.isFinite(gramsPerUnitResolved) &&
+      gramsPerUnitResolved > 0
+        ? gramsPerUnitResolved
+        : null;
+    const gBase =
+      d.gramsPerUnit != null &&
+      Number.isFinite(d.gramsPerUnit) &&
+      d.gramsPerUnit > 0
+        ? d.gramsPerUnit
+        : null;
+    if (gNew != null && gBase != null && d.quantity > 0) {
+      const ng = qty * gNew;
+      const bg = d.quantity * gBase;
+      if (bg > 0) return ng / bg;
+    }
+    return null;
+  }
+  if (d.quantity > 0) return qty / d.quantity;
+  return null;
+}
+
+/** מנה ליומן לפי פריט מילון + כמות/יחידה (בלי לעדכן את המילון) */
+function buildLogEntryFromDictionaryServing(
+  d: DictionaryItem,
+  qty: number,
+  unit: FoodUnit,
+  gramsPerUnitResolved: number | null
+): LogEntry {
+  if (!Number.isFinite(qty) || qty <= 0) {
+    return {
+      id: `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
+      food: d.food,
+      calories: 0,
+      quantity: 0,
+      unit,
+      createdAt: new Date().toISOString(),
+      verified: false,
+    };
+  }
+
+  const k100 =
+    d.caloriesPer100g != null && Number.isFinite(d.caloriesPer100g)
+      ? Math.max(0, d.caloriesPer100g)
+      : null;
+  const p100 =
+    d.proteinPer100g != null && Number.isFinite(d.proteinPer100g)
+      ? Math.max(0, d.proteinPer100g)
+      : null;
+  const c100 =
+    d.carbsPer100g != null && Number.isFinite(d.carbsPer100g)
+      ? Math.max(0, d.carbsPer100g)
+      : null;
+  const f100 =
+    d.fatPer100g != null && Number.isFinite(d.fatPer100g)
+      ? Math.max(0, d.fatPer100g)
+      : null;
+
+  const totalG = servingTotalGrams(qty, unit, gramsPerUnitResolved);
+  const scaleR = servingScaleRatioFromDictionaryDefault(
+    d,
+    qty,
+    unit,
+    gramsPerUnitResolved
+  );
+
+  let calories: number;
+  let proteinG: number | undefined;
+  let carbsG: number | undefined;
+  let fatG: number | undefined;
+
+  if (k100 != null && totalG != null && totalG > 0) {
+    const factor = totalG / 100;
+    calories = Math.max(0, Math.round(k100 * factor));
+    if (p100 != null) proteinG = Math.round(p100 * factor * 10) / 10;
+    if (c100 != null) carbsG = Math.round(c100 * factor * 10) / 10;
+    if (f100 != null) fatG = Math.round(f100 * factor * 10) / 10;
+  } else if (
+    scaleR != null &&
+    d.lastCalories != null &&
+    Number.isFinite(d.lastCalories) &&
+    d.lastCalories > 0
+  ) {
+    calories = Math.max(0, Math.round(d.lastCalories * scaleR));
+    if (d.lastProteinG != null && Number.isFinite(d.lastProteinG)) {
+      proteinG = Math.round(d.lastProteinG * scaleR * 10) / 10;
+    }
+    if (d.lastCarbsG != null && Number.isFinite(d.lastCarbsG)) {
+      carbsG = Math.round(d.lastCarbsG * scaleR * 10) / 10;
+    }
+    if (d.lastFatG != null && Number.isFinite(d.lastFatG)) {
+      fatG = Math.round(d.lastFatG * scaleR * 10) / 10;
+    }
+  } else if (
+    d.lastCalories != null &&
+    Number.isFinite(d.lastCalories) &&
+    d.lastCalories > 0
+  ) {
+    calories = Math.max(0, Math.round(d.lastCalories));
+    if (d.lastProteinG != null && Number.isFinite(d.lastProteinG)) {
+      proteinG = Math.round(d.lastProteinG * 10) / 10;
+    }
+    if (d.lastCarbsG != null && Number.isFinite(d.lastCarbsG)) {
+      carbsG = Math.round(d.lastCarbsG * 10) / 10;
+    }
+    if (d.lastFatG != null && Number.isFinite(d.lastFatG)) {
+      fatG = Math.round(d.lastFatG * 10) / 10;
+    }
+  } else if (k100 != null) {
+    calories = Math.max(0, Math.round(k100));
+    if (p100 != null) proteinG = Math.round(p100 * 10) / 10;
+    if (c100 != null) carbsG = Math.round(c100 * 10) / 10;
+    if (f100 != null) fatG = Math.round(f100 * 10) / 10;
+  } else {
+    calories = 0;
+  }
+
+  return {
+    id: `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
+    food: d.food,
+    calories,
+    quantity: qty,
+    unit,
+    createdAt: new Date().toISOString(),
+    verified: false,
+    ...(proteinG != null ? { proteinG } : {}),
+    ...(carbsG != null ? { carbsG } : {}),
+    ...(fatG != null ? { fatG } : {}),
+  };
+}
+
 function servingTotalGrams(
   qty: number,
   unit: FoodUnit,
   gramsPerUnit: number | null
 ): number | null {
-  if (unit === "גרם") return clampGramQty(qty);
+  if (unit === "גרם") {
+    if (!Number.isFinite(qty) || qty <= 0) return 0;
+    return clampGramQty(qty);
+  }
   if (unit === "יחידה" && gramsPerUnit != null && gramsPerUnit > 0) {
+    if (!Number.isFinite(qty) || qty <= 0) return 0;
     return clampGramQty(qty * gramsPerUnit);
   }
   return null;
@@ -212,6 +403,26 @@ function servingTotalGrams(
 function fmtMacroG(n: number | undefined): string {
   if (typeof n !== "number" || !Number.isFinite(n)) return "—";
   return n.toFixed(1);
+}
+
+/** נשמר מהיומן (או רשומה ישנה בלי source) — מציגים רק את המנה שנרשמה */
+function isDictionaryFromJournal(d: DictionaryItem): boolean {
+  return d.source === "journal" || d.source == null;
+}
+
+/** למנה של 100 ג׳ שקק״ל שלה תואם לל־100 ג׳ — לא מציגים שורת למנה כפולה */
+function dictionaryPortionRedundantWithPer100(d: DictionaryItem): boolean {
+  if (d.unit !== "גרם") return false;
+  if (Math.abs(d.quantity - 100) > 1e-6) return false;
+  if (
+    d.caloriesPer100g == null ||
+    !Number.isFinite(d.caloriesPer100g) ||
+    d.lastCalories == null ||
+    !Number.isFinite(d.lastCalories)
+  ) {
+    return false;
+  }
+  return Math.round(d.lastCalories) === Math.round(d.caloriesPer100g);
 }
 
 function sortSavedByQuery(items: DictionaryItem[], query: string): DictionaryItem[] {
@@ -243,6 +454,7 @@ function renderHighlighted(text: string, ranges: MatchRange[]) {
 }
 
 export default function DictionaryPage() {
+  useDocumentScrollOnlyIfOverflowing();
   const gender = loadProfile().gender;
   const [saved, setSaved] = useState<DictionaryItem[]>([]);
   const [presetMap, setPresetMap] = useState<Map<string, MealPreset>>(
@@ -255,14 +467,20 @@ export default function DictionaryPage() {
   const [extSearchLoading, setExtSearchLoading] = useState(false);
   const [explorerUiTick, setExplorerUiTick] = useState(0);
   const [shopTick, setShopTick] = useState(0);
-  const [editTarget, setEditTarget] = useState<DictionaryItem | null>(null);
-  const [editFood, setEditFood] = useState("");
+  const [quantityEditTarget, setQuantityEditTarget] =
+    useState<DictionaryItem | null>(null);
   const [editQtyText, setEditQtyText] = useState("1");
   const [editUnit, setEditUnit] = useState<FoodUnit>("גרם");
   const [editGramsPerUnitText, setEditGramsPerUnitText] = useState("");
-  const [editError, setEditError] = useState<string | null>(null);
-  const editTitleId = useId();
+  const quantityEditTitleId = useId();
+  const journalAddTitleId = useId();
   const searchInputRef = useRef<HTMLInputElement>(null);
+  const [journalAddTarget, setJournalAddTarget] = useState<DictionaryItem | null>(
+    null
+  );
+  const [journalQtyText, setJournalQtyText] = useState("1");
+  const [journalUnit, setJournalUnit] = useState<FoodUnit>("גרם");
+  const [journalGPerUText, setJournalGPerUText] = useState("");
   const [activeLetter, setActiveLetter] = useState<string | null>(null);
   const [openSavedId, setOpenSavedId] = useState<string | null>(null);
   const [dictTab, setDictTab] = useState<"all" | "foods" | "meals">("all");
@@ -293,6 +511,12 @@ export default function DictionaryPage() {
     window.addEventListener("focus", onFocus);
     return () => window.removeEventListener("focus", onFocus);
   }, [refresh]);
+
+  useEffect(() => {
+    const openHelp = () => setHelpOpen(true);
+    window.addEventListener("cj-dictionary-help", openHelp);
+    return () => window.removeEventListener("cj-dictionary-help", openHelp);
+  }, []);
 
   const filteredSaved = useMemo(() => {
     const t = rawQ.trim();
@@ -359,6 +583,42 @@ export default function DictionaryPage() {
     }
     return visibleSaved;
   }, [exportSelectMode, exportSelectedIds, saved, visibleSaved]);
+
+  const journalAddPreview = useMemo(() => {
+    if (!journalAddTarget) return null;
+    const d = journalAddTarget;
+    const qty = parseQtyAllowZero(
+      journalQtyText.trim() === "" ? "1" : journalQtyText,
+      journalUnit
+    );
+    let gResolved: number | null = null;
+    if (journalUnit === "יחידה") {
+      const fromField = parseGramsPerUnitField(journalGPerUText);
+      gResolved =
+        fromField != null && fromField > 0
+          ? fromField
+          : d.gramsPerUnit != null && d.gramsPerUnit > 0
+            ? d.gramsPerUnit
+            : null;
+    }
+    return buildLogEntryFromDictionaryServing(d, qty, journalUnit, gResolved);
+  }, [journalAddTarget, journalQtyText, journalUnit, journalGPerUText]);
+
+  const journalModalParsedQty = useMemo(() => {
+    if (!journalAddTarget) return 1;
+    return parseQtyAllowZero(
+      journalQtyText.trim() === "" ? "1" : journalQtyText,
+      journalUnit
+    );
+  }, [journalAddTarget, journalQtyText, journalUnit]);
+
+  const quantityEditParsedQty = useMemo(() => {
+    if (!quantityEditTarget) return 1;
+    return parseQtyAllowZero(
+      editQtyText.trim() === "" ? "1" : editQtyText,
+      editUnit
+    );
+  }, [quantityEditTarget, editQtyText, editUnit]);
 
   const externalResultsTitle = "תוצאות חיפוש";
 
@@ -496,9 +756,9 @@ export default function DictionaryPage() {
           d.proteinPer100g != null ||
           d.carbsPer100g != null ||
           d.fatPer100g != null
-            ? ` · ח ${d.proteinPer100g ?? ""} · פחם ${d.carbsPer100g ?? ""} · שומן ${
-                d.fatPer100g ?? ""
-              }`
+            ? ` · חלבון ${d.proteinPer100g ?? ""} ג׳ · פחמימות ${
+                d.carbsPer100g ?? ""
+              } ג׳ · שומן ${d.fatPer100g ?? ""} ג׳`
             : "";
         const cals100 =
           d.caloriesPer100g != null ? `ל־100 גרם: ${d.caloriesPer100g} קק״ל` : "";
@@ -597,25 +857,9 @@ export default function DictionaryPage() {
         }
         if (offRes.ok) {
           const offData = (await offRes.json()) as {
-            items?: Array<{
-              id: string;
-              name: string;
-              calories: number;
-              protein: number;
-              fat: number;
-              carbs: number;
-            }>;
+            items?: ExplorerFoodRow[];
           };
-          const mapped = (offData.items ?? []).map((r) => ({
-            id: r.id,
-            name: r.name,
-            calories: r.calories,
-            protein: r.protein,
-            fat: r.fat,
-            carbs: r.carbs,
-            category: "Open Food Facts",
-          }));
-          setOffRows(mapped);
+          setOffRows(offData.items ?? []);
         } else {
           setOffRows([]);
         }
@@ -667,25 +911,26 @@ export default function DictionaryPage() {
       protein: row.protein,
       fat: row.fat,
       carbs: row.carbs,
+      category: row.category,
+      brand: row.brand,
     });
     setExplorerUiTick((x) => x + 1);
     refresh();
     flashAdded(row.id);
   }
 
-  function onCartDictionaryItem(d: DictionaryItem) {
+  async function onCartDictionaryItem(d: DictionaryItem) {
     const k100 =
       d.caloriesPer100g != null && Number.isFinite(d.caloriesPer100g)
         ? Math.round(d.caloriesPer100g)
         : 0;
+    const category = await resolveShoppingCategoryForDictionaryItem(d);
     const added = addToShopping({
       foodId: `dictionary:${d.id}`,
       name: d.food.trim(),
-      category: "מילון אישי",
+      category,
       calories: k100,
-      protein: d.proteinPer100g,
-      carbs: d.carbsPer100g,
-      fat: d.fatPer100g,
+      brand: d.brand?.trim() || undefined,
     });
     setShopTick((x) => x + 1);
     if (added) {
@@ -697,70 +942,68 @@ export default function DictionaryPage() {
   }
 
   function onSavedJournal(d: DictionaryItem) {
-    const dateKey = resolveJournalTargetDateKey({ allowFuture: true });
-    const existing = getEntriesForDate(dateKey);
-
-    const k100 =
-      d.caloriesPer100g != null && Number.isFinite(d.caloriesPer100g)
-        ? Math.max(0, d.caloriesPer100g)
-        : null;
-    const p100 =
-      d.proteinPer100g != null && Number.isFinite(d.proteinPer100g)
-        ? Math.max(0, d.proteinPer100g)
-        : null;
-    const c100 =
-      d.carbsPer100g != null && Number.isFinite(d.carbsPer100g)
-        ? Math.max(0, d.carbsPer100g)
-        : null;
-    const f100 =
-      d.fatPer100g != null && Number.isFinite(d.fatPer100g)
-        ? Math.max(0, d.fatPer100g)
-        : null;
-
     const gPerU =
       d.gramsPerUnit != null && Number.isFinite(d.gramsPerUnit) && d.gramsPerUnit > 0
         ? d.gramsPerUnit
         : null;
-    const totalG = servingTotalGrams(d.quantity, d.unit, gPerU);
-
-    let calories: number;
-    let proteinG: number | undefined;
-    let carbsG: number | undefined;
-    let fatG: number | undefined;
-
-    if (k100 != null && totalG != null && totalG > 0) {
-      const factor = totalG / 100;
-      calories = Math.max(1, Math.round(k100 * factor));
-      if (p100 != null) proteinG = Math.round(p100 * factor * 10) / 10;
-      if (c100 != null) carbsG = Math.round(c100 * factor * 10) / 10;
-      if (f100 != null) fatG = Math.round(f100 * factor * 10) / 10;
-    } else if (d.lastCalories != null && Number.isFinite(d.lastCalories) && d.lastCalories > 0) {
-      calories = Math.max(1, Math.round(d.lastCalories));
-    } else if (k100 != null) {
-      calories = Math.max(1, Math.round(k100));
-      if (p100 != null) proteinG = Math.round(p100 * 10) / 10;
-      if (c100 != null) carbsG = Math.round(c100 * 10) / 10;
-      if (f100 != null) fatG = Math.round(f100 * 10) / 10;
-    } else {
-      calories = 1;
-    }
-
-    const entry: LogEntry = {
-      id: `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
-      food: d.food,
-      calories,
-      quantity: d.quantity,
-      unit: d.unit,
-      createdAt: new Date().toISOString(),
-      verified: false,
-      ...(proteinG != null ? { proteinG } : {}),
-      ...(carbsG != null ? { carbsG } : {}),
-      ...(fatG != null ? { fatG } : {}),
-    };
+    const entry = buildLogEntryFromDictionaryServing(
+      d,
+      d.quantity,
+      d.unit,
+      gPerU
+    );
+    const dateKey = resolveJournalTargetDateKey({ allowFuture: true });
+    const existing = getEntriesForDate(dateKey);
     saveDayLogEntries(dateKey, [entry, ...existing]);
     setJustAddedId(`journal:${d.id}`);
     if (justAddedTimerRef.current) window.clearTimeout(justAddedTimerRef.current);
     justAddedTimerRef.current = window.setTimeout(() => setJustAddedId(null), 900);
+  }
+
+  function openJournalAddModal(d: DictionaryItem) {
+    setJournalAddTarget(d);
+    setJournalQtyText(String(d.quantity));
+    setJournalUnit(d.unit);
+    setJournalGPerUText(
+      d.gramsPerUnit != null && d.gramsPerUnit > 0 ? String(d.gramsPerUnit) : ""
+    );
+  }
+
+  function closeJournalAddModal() {
+    setJournalAddTarget(null);
+  }
+
+  function confirmJournalAdd() {
+    if (!journalAddTarget) return;
+    const d = journalAddTarget;
+    const qty = parseQtyAllowZero(
+      journalQtyText.trim() === "" ? "1" : journalQtyText,
+      journalUnit
+    );
+    if (qty <= 0) return;
+    let gResolved: number | null = null;
+    if (journalUnit === "יחידה") {
+      const fromField = parseGramsPerUnitField(journalGPerUText);
+      gResolved =
+        fromField != null && fromField > 0
+          ? fromField
+          : d.gramsPerUnit != null && d.gramsPerUnit > 0
+            ? d.gramsPerUnit
+            : null;
+    }
+    const entry = buildLogEntryFromDictionaryServing(
+      d,
+      qty,
+      journalUnit,
+      gResolved
+    );
+    const dateKey = resolveJournalTargetDateKey({ allowFuture: true });
+    const existing = getEntriesForDate(dateKey);
+    saveDayLogEntries(dateKey, [entry, ...existing]);
+    setJustAddedId(`journal:${d.id}`);
+    if (justAddedTimerRef.current) window.clearTimeout(justAddedTimerRef.current);
+    justAddedTimerRef.current = window.setTimeout(() => setJustAddedId(null), 900);
+    closeJournalAddModal();
   }
 
   function applyPreset(preset: MealPreset) {
@@ -772,10 +1015,8 @@ export default function DictionaryPage() {
 
   // Dictionary screen is focused on saving foods; no journal/shopping actions here.
 
-  function openEdit(d: DictionaryItem) {
-    setEditError(null);
-    setEditTarget(d);
-    setEditFood(d.food);
+  function openQuantityEdit(d: DictionaryItem) {
+    setQuantityEditTarget(d);
     setEditQtyText(String(d.quantity));
     setEditUnit(d.unit);
     setEditGramsPerUnitText(
@@ -783,90 +1024,95 @@ export default function DictionaryPage() {
     );
   }
 
-  function closeEdit() {
-    setEditTarget(null);
-    setEditError(null);
+  function closeQuantityEdit() {
+    setQuantityEditTarget(null);
   }
 
-  function saveDictionaryEdit() {
-    if (!editTarget) return;
-    const name = editFood.trim();
-    if (!name) {
-      setEditError(dictionaryEditFoodError(gender));
-      return;
-    }
-    if (editTarget.mealPresetId) {
-      const next = patchDictionaryItemById(editTarget.id, { food: name });
-      if (next) {
-        setSaved(next);
-        closeEdit();
-      }
-      return;
-    }
-    const qty = parseQtyForUnit(editQtyText, editUnit);
+  function saveQuantityEdit() {
+    if (!quantityEditTarget) return;
+    const prev = quantityEditTarget;
+    const qty = parseQtyAllowZero(
+      editQtyText.trim() === "" ? "1" : editQtyText,
+      editUnit
+    );
+    if (qty <= 0) return;
     const gPerU = parseGramsPerUnitField(editGramsPerUnitText);
     const totalG = servingTotalGrams(qty, editUnit, gPerU);
 
     const patch: Parameters<typeof patchDictionaryItemById>[1] = {
-      food: name,
       quantity: qty,
       unit: editUnit,
-      lastCalories: editTarget.lastCalories,
     };
 
-    const c100 = editTarget.caloriesPer100g;
-    if (c100 != null && Number.isFinite(c100) && totalG != null) {
-      patch.lastCalories = Math.max(1, Math.round(c100 * (totalG / 100)));
+    const c100 = prev.caloriesPer100g;
+    const p100 = prev.proteinPer100g;
+    const carb100 = prev.carbsPer100g;
+    const f100 = prev.fatPer100g;
+
+    if (
+      c100 != null &&
+      Number.isFinite(c100) &&
+      totalG != null &&
+      totalG > 0
+    ) {
+      patch.lastCalories = Math.max(0, Math.round(c100 * (totalG / 100)));
+      if (p100 != null && Number.isFinite(p100)) {
+        patch.lastProteinG = Math.round(((p100 * totalG) / 100) * 10) / 10;
+      }
+      if (carb100 != null && Number.isFinite(carb100)) {
+        patch.lastCarbsG = Math.round(((carb100 * totalG) / 100) * 10) / 10;
+      }
+      if (f100 != null && Number.isFinite(f100)) {
+        patch.lastFatG = Math.round(((f100 * totalG) / 100) * 10) / 10;
+      }
+    } else {
+      const scaleR = servingScaleRatioFromDictionaryDefault(
+        prev,
+        qty,
+        editUnit,
+        gPerU
+      );
+      if (
+        scaleR != null &&
+        prev.lastCalories != null &&
+        Number.isFinite(prev.lastCalories) &&
+        prev.lastCalories > 0
+      ) {
+        patch.lastCalories = Math.max(
+          0,
+          Math.round(prev.lastCalories * scaleR)
+        );
+        if (prev.lastProteinG != null && Number.isFinite(prev.lastProteinG)) {
+          patch.lastProteinG =
+            Math.round(prev.lastProteinG * scaleR * 10) / 10;
+        }
+        if (prev.lastCarbsG != null && Number.isFinite(prev.lastCarbsG)) {
+          patch.lastCarbsG =
+            Math.round(prev.lastCarbsG * scaleR * 10) / 10;
+        }
+        if (prev.lastFatG != null && Number.isFinite(prev.lastFatG)) {
+          patch.lastFatG = Math.round(prev.lastFatG * scaleR * 10) / 10;
+        }
+      }
     }
 
     if (editUnit === "יחידה") {
       patch.gramsPerUnit = gPerU ?? undefined;
     }
 
-    const next = patchDictionaryItemById(editTarget.id, patch);
+    const next = patchDictionaryItemById(prev.id, patch);
     if (next) {
       setSaved(next);
-      closeEdit();
+      closeQuantityEdit();
     }
   }
 
   return (
     <div
-      className={`mx-auto max-w-lg px-4 py-8 pb-28 md:py-12 ${fontFood}`}
+      className={`mx-auto max-w-lg px-3 pb-28 pt-0 ${fontFood}`}
       dir="rtl"
     >
-      <motion.h1
-        className="heading-page mb-6 text-center text-3xl md:text-4xl"
-        initial={{ opacity: 0, y: -8 }}
-        animate={{ opacity: 1, y: 0 }}
-      >
-        <span className="inline-flex items-center justify-center gap-2">
-          <span>המילון האישי שלי</span>
-          <button
-            type="button"
-            className="inline-flex h-8 w-8 items-center justify-center rounded-full border-2 border-[var(--border-cherry-soft)] bg-white text-base font-extrabold text-[var(--cherry)] shadow-sm transition hover:bg-[var(--cherry-muted)]"
-            aria-label="הסבר"
-            title="הסבר"
-            onClick={() => setHelpOpen((x) => !x)}
-          >
-            ?
-          </button>
-        </span>
-      </motion.h1>
-
-      {helpOpen ? (
-        <motion.div
-          className="mb-5 rounded-2xl border-2 border-[var(--border-cherry-soft)] bg-white/90 px-4 py-3 text-right shadow-[0_8px_24px_var(--panel-shadow-soft)]"
-          initial={{ opacity: 0, y: 6 }}
-          animate={{ opacity: 1, y: 0 }}
-        >
-          <p className="text-sm leading-relaxed text-[var(--text)]/85">
-            {dictionaryIntroBody(gender)}
-          </p>
-        </motion.div>
-      ) : null}
-
-      <div className="sticky top-0 z-40 -mx-4 mb-5 border-b border-[var(--border-cherry-soft)]/70 bg-white/90 px-4 pb-4 pt-3 backdrop-blur">
+      <div className="sticky top-0 z-50 mb-4 rounded-b-xl border-b border-[var(--border-cherry-soft)]/80 bg-[color-mix(in_srgb,white_87%,var(--cherry)_13%)] px-2.5 py-2.5 shadow-[0_1px_0_rgba(155,27,48,0.05)] sm:px-3 sm:py-3">
         <label className="block">
           <div className="relative">
             <input
@@ -903,6 +1149,49 @@ export default function DictionaryPage() {
           </div>
         </label>
       </div>
+
+      <AnimatePresence>
+        {helpOpen && (
+          <motion.div
+            className="fixed inset-0 z-[600] flex items-center justify-center bg-black/30 p-4 backdrop-blur-[2px]"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            role="presentation"
+            onClick={(e) => {
+              if (e.target === e.currentTarget) setHelpOpen(false);
+            }}
+          >
+            <motion.div
+              role="dialog"
+              aria-modal
+              className="w-full max-w-md rounded-2xl border-2 border-[var(--border-cherry-soft)] bg-white p-4 shadow-2xl"
+              initial={{ scale: 0.96, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.97, opacity: 0 }}
+              transition={{ type: "spring", damping: 26, stiffness: 320 }}
+              onClick={(e) => e.stopPropagation()}
+              dir="rtl"
+            >
+              <div className="flex items-start justify-between gap-3">
+                <h2 className="text-lg font-extrabold tracking-tight text-[var(--cherry)]">
+                  המילון האישי
+                </h2>
+                <button
+                  type="button"
+                  className="rounded-lg border-2 border-[var(--border-cherry-soft)] bg-white px-3 py-1.5 text-sm font-semibold text-[var(--text)] transition hover:bg-[var(--cherry-muted)]"
+                  onClick={() => setHelpOpen(false)}
+                >
+                  סגירה
+                </button>
+              </div>
+              <p className="mt-2 text-base leading-relaxed text-[var(--stem)]/85">
+                {dictionaryIntroBody(gender)}
+              </p>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {showSearchFab ? (
         <button
@@ -1099,22 +1388,22 @@ export default function DictionaryPage() {
       )}
 
       <motion.section
-        className={`glass-panel p-4 ${isSearching ? "mt-4" : ""}`}
+        className={isSearching ? "mt-4" : "mt-1"}
         initial={{ opacity: 0, y: 8 }}
         animate={{ opacity: 1, y: 0 }}
       >
-        <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
-          <h2 className="panel-title-cherry text-xl">המילון שלי</h2>
-          <div className="flex w-[8.75rem] flex-col gap-1.5">
+        <div className="mb-3 flex flex-wrap items-start justify-between gap-3">
+          <h2 className="panel-title-cherry pt-1 text-lg sm:text-xl">המילון שלי</h2>
+          <div className="flex min-w-[10rem] flex-1 flex-col gap-2 sm:min-w-[11rem] sm:flex-none">
             <Link
               href="/explorer"
-              className="w-full rounded-lg border-2 border-[var(--border-cherry-soft)] bg-white px-2.5 py-1 text-center text-[11px] font-extrabold text-[var(--cherry)] shadow-sm transition hover:bg-[var(--cherry-muted)]"
+              className="w-full rounded-xl border-2 border-[var(--border-cherry-soft)] bg-white px-3 py-2.5 text-center text-sm font-extrabold text-[var(--cherry)] shadow-sm transition hover:bg-[var(--cherry-muted)] sm:text-base"
             >
               גלה מזונות
             </Link>
             <button
               type="button"
-              className={`w-full rounded-lg border-2 px-2.5 py-1 text-center text-[11px] font-extrabold leading-tight shadow-sm transition ${
+              className={`w-full rounded-xl border-2 px-3 py-2.5 text-center text-sm font-extrabold leading-snug shadow-sm transition sm:text-base ${
                 exportSelectMode
                   ? "border-[var(--border-cherry-soft)] bg-cherry-faint text-[var(--cherry)]"
                   : "border-[var(--border-cherry-soft)] bg-white text-[var(--stem)]/85 hover:bg-[var(--cherry-muted)]"
@@ -1130,14 +1419,14 @@ export default function DictionaryPage() {
             </button>
             <button
               type="button"
-              className="w-full rounded-lg border-2 border-[var(--border-cherry-soft)] bg-white px-2.5 py-1 text-center text-[11px] font-extrabold text-[var(--stem)] shadow-sm transition hover:bg-[var(--cherry-muted)]"
+              className="w-full rounded-xl border-2 border-[var(--border-cherry-soft)] bg-white px-3 py-2.5 text-center text-sm font-extrabold text-[var(--stem)] shadow-sm transition hover:bg-[var(--cherry-muted)] sm:text-base"
               onClick={() => setExportOpen(true)}
             >
               ייצוא
             </button>
           </div>
         </div>
-        <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+        <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
           <div className="flex flex-wrap gap-2">
             {(
               [
@@ -1151,7 +1440,7 @@ export default function DictionaryPage() {
                 <button
                   key={id}
                   type="button"
-                  className={`rounded-full border-2 px-3 py-1.5 text-xs font-extrabold transition-colors ${
+                  className={`rounded-full border-2 px-3 py-2 text-sm font-extrabold transition-colors ${
                     on
                       ? "border-[var(--border-cherry-soft)] bg-cherry-faint text-[var(--cherry)]"
                       : "border-[var(--border-cherry-soft)] bg-white text-[var(--stem)]/85 hover:bg-[var(--cherry-muted)]"
@@ -1167,27 +1456,29 @@ export default function DictionaryPage() {
           {activeLetter ? (
             <button
               type="button"
-              className="rounded-lg border border-[var(--border-cherry-soft)] bg-white px-2.5 py-1 text-[11px] font-extrabold text-[var(--cherry)] shadow-sm"
+              className="rounded-lg border border-[var(--border-cherry-soft)] bg-white px-2.5 py-1.5 text-sm font-extrabold text-[var(--cherry)] shadow-sm"
               onClick={() => setActiveLetter(null)}
             >
               ניקוי אות
             </button>
           ) : null}
         </div>
-        <div className="mb-4">
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <p className="text-[11px] font-semibold text-[var(--stem)]/70">
-              א-ת (לחצי על אות לסינון)
-            </p>
-          </div>
-          <div className="mt-2 grid grid-cols-11 gap-1">
+        <div className="mb-4 border-t border-[var(--border-cherry-soft)]/60 pt-3">
+          <p className="text-sm font-semibold text-[var(--stem)]/75">
+            {gf(
+              gender,
+              "א-ת — לחצי על אות לסינון",
+              "א-ת — לחץ על אות לסינון"
+            )}
+          </p>
+          <div className="mt-2 grid w-full grid-cols-11 gap-1">
             {HEB_LETTERS.map((l) => {
               const on = activeLetter === l;
               return (
                 <button
                   key={l}
                   type="button"
-                  className={`rounded-lg border-2 py-2 text-xs font-extrabold shadow-sm transition ${
+                  className={`min-h-[2.5rem] rounded-lg border py-1.5 text-sm font-extrabold shadow-sm transition sm:text-base ${
                     on
                       ? "border-[var(--border-cherry-soft)] bg-cherry-faint text-[var(--cherry)]"
                       : "border-[var(--border-cherry-soft)] bg-white text-[var(--stem)]/85 hover:bg-[var(--cherry-muted)]"
@@ -1269,31 +1560,68 @@ export default function DictionaryPage() {
                         />
                       </button>
                     ) : null}
-                    <button
-                      type="button"
-                      className="flex min-w-0 flex-1 items-center gap-2 text-right"
-                      onClick={() => setOpenSavedId((x) => (x === d.id ? null : d.id))}
-                      aria-expanded={isOpen}
-                    >
+                    <div className="flex min-w-0 flex-1 items-center gap-2 text-right">
                       <span className="text-xs" aria-hidden>
                         🍒
                       </span>
-                      <span className="min-w-0 flex-1 break-words text-base font-extrabold leading-snug text-[var(--cherry)]">
-                        {savedHits
-                          ? renderHighlighted(
-                              d.food,
-                              savedHits.find((x) => x.item.id === d.id)?.ranges ?? []
-                            )
-                          : d.food}
-                      </span>
+                      <button
+                        type="button"
+                        className="min-w-0 flex-1 text-right"
+                        onClick={() =>
+                          setOpenSavedId((x) => (x === d.id ? null : d.id))
+                        }
+                        aria-expanded={isOpen}
+                      >
+                        <span className="flex min-w-0 items-center justify-end gap-1.5">
+                          <span className="min-w-0 flex-1 break-words text-base font-extrabold leading-snug text-[var(--cherry)]">
+                            {savedHits
+                              ? renderHighlighted(
+                                  d.food,
+                                  savedHits.find((x) => x.item.id === d.id)
+                                    ?.ranges ?? []
+                                )
+                              : d.food}
+                          </span>
+                          <span
+                            className="shrink-0 text-xs font-bold text-[var(--stem)]/55"
+                            aria-hidden
+                          >
+                            {isOpen ? "▲" : "▼"}
+                          </span>
+                        </span>
+                      </button>
                       {isMeal && (
                         <span className="shrink-0 rounded-md bg-[var(--cherry-muted)] px-2 py-0.5 text-xs font-semibold text-[var(--cherry)]">
                           ארוחה
                         </span>
                       )}
-                    </button>
+                    </div>
 
                     <div className="flex shrink-0 items-center gap-1.5">
+                      {!isMeal && !exportSelectMode ? (
+                        <button
+                          type="button"
+                          className="rounded-md border border-[var(--border-cherry-soft)] bg-white p-1.5 text-[var(--cherry)] shadow-sm transition hover:bg-[var(--cherry-muted)]"
+                          onClick={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            onSavedJournal(d);
+                          }}
+                          aria-label="הוספה מהירה ליומן לפי ברירת המחדל במילון"
+                          title="הוספה מהירה ליומן"
+                        >
+                          <span
+                            className={`grid h-4 w-4 place-items-center text-[15px] font-black leading-none ${
+                              justAddedId === `journal:${d.id}`
+                                ? "text-[var(--stem)]"
+                                : "text-[var(--cherry)]"
+                            }`}
+                            aria-hidden
+                          >
+                            ✓
+                          </span>
+                        </button>
+                      ) : null}
                       <button
                         type="button"
                         className="rounded-md border border-[var(--border-cherry-soft)] bg-white p-1.5 text-[var(--cherry)] shadow-sm transition hover:bg-[var(--cherry-muted)]"
@@ -1307,9 +1635,6 @@ export default function DictionaryPage() {
                       >
                         <IconTrash className="h-4 w-4" />
                       </button>
-                      <div className="shrink-0 text-xs font-bold text-[var(--stem)]/55">
-                        {isOpen ? "▲" : "▼"}
-                      </div>
                     </div>
                   </div>
 
@@ -1322,12 +1647,6 @@ export default function DictionaryPage() {
                         exit={{ opacity: 0, y: -4 }}
                       >
                         <div className="flex min-w-0 flex-col gap-2">
-                          {!isMeal && (
-                            <p className="text-sm text-[var(--text)]/80">
-                              {d.quantity} {d.unit}
-                            </p>
-                          )}
-
                           {isMeal && preset && (
                             <>
                               <ul className="space-y-1 text-sm text-[var(--text)]/90">
@@ -1337,9 +1656,9 @@ export default function DictionaryPage() {
                                     קק״ל)
                                     <span className="text-[var(--stem)]/75">
                                       {" "}
-                                      · ח {fmtMacroG(c.proteinG)} · פחם{" "}
-                                      {fmtMacroG(c.carbsG)} · שומן {fmtMacroG(c.fatG)}{" "}
-                                      ג׳
+                                      · חלבון {fmtMacroG(c.proteinG)} ג׳ · פחמימות{" "}
+                                      {fmtMacroG(c.carbsG)} ג׳ · שומן{" "}
+                                      {fmtMacroG(c.fatG)} ג׳
                                     </span>
                                   </li>
                                 ))}
@@ -1357,37 +1676,96 @@ export default function DictionaryPage() {
                             </>
                           )}
 
-                          {d.caloriesPer100g != null && !isMeal && (
-                            <p className="text-xs text-[var(--text)]/70">
-                              ל־100 גרם: {Math.round(d.caloriesPer100g)} קק״ל
-                              {d.proteinPer100g != null &&
-                                d.carbsPer100g != null &&
-                                d.fatPer100g != null && (
-                                  <>
-                                    {" "}
-                                    · ח {d.proteinPer100g.toFixed(1)} · פחם{" "}
-                                    {d.carbsPer100g.toFixed(1)} · שומן{" "}
-                                    {d.fatPer100g.toFixed(1)} ג׳
-                                  </>
-                                )}
-                              {d.barcode ? ` · ברקוד ${d.barcode}` : ""}
-                            </p>
-                          )}
+                          {!isMeal &&
+                            (() => {
+                              const fromJournal = isDictionaryFromJournal(d);
+                              const hasK100 =
+                                d.caloriesPer100g != null &&
+                                Number.isFinite(d.caloriesPer100g);
+                              const showPer100 = hasK100 && !fromJournal;
+                              const redundant =
+                                dictionaryPortionRedundantWithPer100(d);
+                              const hasPortion =
+                                d.lastCalories != null ||
+                                d.lastProteinG != null ||
+                                d.lastCarbsG != null ||
+                                d.lastFatG != null;
+                              const showPortionLine =
+                                hasPortion && (fromJournal || !redundant);
+
+                              return (
+                                <>
+                                  {showPer100 && (
+                                    <p className="text-xs text-[var(--text)]/70">
+                                      ל־100 גרם:{" "}
+                                      {Math.round(d.caloriesPer100g!)} קק״ל
+                                      {d.proteinPer100g != null &&
+                                        d.carbsPer100g != null &&
+                                        d.fatPer100g != null && (
+                                          <>
+                                            {" "}
+                                            · חלבון{" "}
+                                            {d.proteinPer100g.toFixed(1)} ג׳ ·
+                                            פחמימות{" "}
+                                            {d.carbsPer100g.toFixed(1)} ג׳ · שומן{" "}
+                                            {d.fatPer100g.toFixed(1)} ג׳
+                                          </>
+                                        )}
+                                      {d.barcode ? ` · ברקוד ${d.barcode}` : ""}
+                                    </p>
+                                  )}
+                                  {showPortionLine && (
+                                    <p className="text-xs font-semibold text-[var(--stem)]/85">
+                                      {fromJournal ? "מנה" : "למנה"} (
+                                      {d.quantity} {d.unit}
+                                      {d.unit === "יחידה" &&
+                                      d.gramsPerUnit != null &&
+                                      d.gramsPerUnit > 0
+                                        ? ` · ${d.gramsPerUnit} ג׳ ליחידה`
+                                        : ""}
+                                      ):{" "}
+                                      {d.lastCalories != null
+                                        ? `${Math.round(d.lastCalories)} קק״ל`
+                                        : "—"}
+                                      {d.lastProteinG != null ||
+                                      d.lastCarbsG != null ||
+                                      d.lastFatG != null ? (
+                                        <>
+                                          {" "}
+                                          · חלבון {fmtMacroG(d.lastProteinG)}{" "}
+                                          ג׳ · פחמימות{" "}
+                                          {fmtMacroG(d.lastCarbsG)} ג׳ · שומן{" "}
+                                          {fmtMacroG(d.lastFatG)} ג׳
+                                        </>
+                                      ) : null}
+                                    </p>
+                                  )}
+                                </>
+                              );
+                            })()}
 
                           <div className="mt-2 flex w-full max-w-full flex-wrap items-center justify-center gap-2 border-t border-[var(--border-cherry-soft)]/60 bg-gradient-to-b from-[var(--cherry-muted)]/35 to-transparent px-1 py-2.5 sm:gap-3">
                             {!isMeal ? (
                               <>
                                 <StampAction
-                                  label="ליומן"
-                                  tone="journal"
-                                  pressed={justAddedId === `journal:${d.id}`}
-                                  onClick={() => onSavedJournal(d)}
-                                >
-                                  {justAddedId === `journal:${d.id}` ? (
-                                    <span className="text-[12px] font-extrabold">✓</span>
-                                  ) : (
-                                    <IconPlusCircle className="h-4 w-4" />
+                                  label={gf(
+                                    gender,
+                                    "עריכת כמות במילון",
+                                    "עריכת כמות במילון"
                                   )}
+                                  tone="journal"
+                                  pressed={false}
+                                  onClick={() => openQuantityEdit(d)}
+                                >
+                                  <SlidersHorizontal className="h-4 w-4" />
+                                </StampAction>
+                                <StampAction
+                                  label={gf(gender, "הוספה ליומן", "הוספה ליומן")}
+                                  tone="journal"
+                                  pressed={false}
+                                  onClick={() => openJournalAddModal(d)}
+                                >
+                                  <IconPlusCircle className="h-4 w-4" />
                                 </StampAction>
                                 <StampAction
                                   label="לקניות"
@@ -1416,14 +1794,6 @@ export default function DictionaryPage() {
                                 )}
                               </StampAction>
                             ) : null}
-
-                            <StampAction
-                              label="עריכה"
-                              tone="edit"
-                              onClick={() => openEdit(d)}
-                            >
-                              <IconPencil className="h-4 w-4" />
-                            </StampAction>
                           </div>
                         </div>
                       </motion.div>
@@ -1524,7 +1894,206 @@ export default function DictionaryPage() {
       {/* No shopping toast in Dictionary screen */}
 
       <AnimatePresence>
-        {editTarget && (
+        {journalAddTarget && (
+          <motion.div
+            className="fixed inset-0 z-[500] flex items-center justify-center bg-black/30 p-4 backdrop-blur-[2px]"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            role="presentation"
+            onClick={(e) => {
+              if (e.target === e.currentTarget) closeJournalAddModal();
+            }}
+          >
+            <motion.div
+              role="dialog"
+              aria-modal
+              aria-labelledby={journalAddTitleId}
+              className="glass-panel w-full max-w-md space-y-4 p-5 shadow-2xl"
+              initial={{ scale: 0.94, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.96, opacity: 0 }}
+              transition={{ type: "spring", damping: 26, stiffness: 320 }}
+              onClick={(e) => e.stopPropagation()}
+              dir="rtl"
+            >
+              <div className="flex items-start justify-between gap-3">
+                <h2
+                  id={journalAddTitleId}
+                  className="panel-title-cherry text-lg"
+                >
+                  {gf(gender, "הוספה ליומן", "הוספה ליומן")}
+                </h2>
+                <button
+                  type="button"
+                  onClick={closeJournalAddModal}
+                  className="rounded-lg border-2 border-[var(--border-cherry-soft)] bg-white px-3 py-1.5 text-sm font-semibold text-[var(--text)] transition hover:bg-[var(--cherry-muted)]"
+                >
+                  סגירה
+                </button>
+              </div>
+              <p className="text-sm font-semibold text-[var(--stem)]">
+                {journalAddTarget.food}
+              </p>
+              <p className="text-xs leading-relaxed text-[var(--stem)]/75">
+                {gf(
+                  gender,
+                  "הכמות כאן רק לרישום ביומן — המילון לא משתנה. לעדכון ברירת המחדל במילון השתמשי ב״עריכת כמות במילון״.",
+                  "הכמות כאן רק לרישום ביומן — המילון לא משתנה. לעדכון ברירת המחדל במילון השתמש ב״עריכת כמות במילון״."
+                )}
+              </p>
+              <div className="flex flex-wrap gap-3">
+                <label className="min-w-[6rem] flex-1">
+                  <span className="mb-1 block text-xs font-semibold text-[var(--cherry)]">
+                    {gf(gender, "כמות", "כמות")}
+                  </span>
+                  <input
+                    type="text"
+                    inputMode="decimal"
+                    value={journalQtyText}
+                    onFocus={(e) => e.currentTarget.select()}
+                    onChange={(e) => {
+                      if ((e.nativeEvent as InputEvent).isComposing) return;
+                      const raw = e.target.value;
+                      if (raw.trim() === "") {
+                        setJournalQtyText("");
+                        return;
+                      }
+                      const cleaned = raw
+                        .replace(",", ".")
+                        .replace(/[^\d.]/g, "")
+                        .replace(/^0+(?=\d)/, "");
+                      const parts = cleaned.split(".");
+                      setJournalQtyText(
+                        parts.length <= 1
+                          ? parts[0]!
+                          : `${parts[0]}.${parts.slice(1).join("")}`
+                      );
+                    }}
+                    onBlur={() =>
+                      setJournalQtyText((x) => {
+                        const n = parseFloat(x.replace(",", "."));
+                        if (!Number.isFinite(n)) return "1";
+                        if (n <= 0) return "0";
+                        return String(parseQtyForUnit(x, journalUnit));
+                      })
+                    }
+                    className="input-luxury-dark w-full"
+                  />
+                </label>
+                <label className="min-w-[8rem] flex-[2]">
+                  <span className="mb-1 block text-xs font-semibold text-[var(--cherry)]">
+                    יחידה
+                  </span>
+                  <select
+                    value={journalUnit}
+                    onChange={(e) => {
+                      const u = e.target.value as FoodUnit;
+                      setJournalUnit(u);
+                      setJournalQtyText((q) => {
+                        const raw = q.trim() === "" ? "1" : q;
+                        if (parseQtyAllowZero(raw, u) === 0) return "0";
+                        return String(parseQtyForUnit(raw, u));
+                      });
+                      if (u !== "יחידה") setJournalGPerUText("");
+                    }}
+                    className="select-luxury w-full"
+                  >
+                    {UNITS.map((u) => (
+                      <option key={u} value={u}>
+                        {u}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              </div>
+              {journalUnit === "יחידה" && (
+                <label className="block">
+                  <span className="mb-1 block text-xs font-semibold text-[var(--cherry)]">
+                    {gf(
+                      gender,
+                      "משקל יחידה (גרם)",
+                      "משקל יחידה (גרם)"
+                    )}
+                  </span>
+                  <input
+                    type="text"
+                    inputMode="decimal"
+                    value={journalGPerUText}
+                    onChange={(e) => {
+                      if ((e.nativeEvent as InputEvent).isComposing) return;
+                      const raw = e.target.value;
+                      if (raw.trim() === "") {
+                        setJournalGPerUText("");
+                        return;
+                      }
+                      const cleaned = raw
+                        .replace(",", ".")
+                        .replace(/[^\d.]/g, "")
+                        .replace(/^0+(?=\d)/, "");
+                      const parts = cleaned.split(".");
+                      setJournalGPerUText(
+                        parts.length <= 1
+                          ? parts[0]!
+                          : `${parts[0]}.${parts.slice(1).join("")}`
+                      );
+                    }}
+                    onBlur={() => {
+                      const g = parseGramsPerUnitField(journalGPerUText);
+                      setJournalGPerUText(g != null ? String(g) : "");
+                    }}
+                    placeholder={gf(gender, "כמו במילון", "כמו במילון")}
+                    className="input-luxury-dark w-full"
+                  />
+                </label>
+              )}
+              {journalModalParsedQty <= 0 ? (
+                <p className="text-center text-sm font-semibold text-[#a94444]">
+                  {gf(
+                    gender,
+                    "כמות חייבת להיות גדולה מ־0 כדי להוסיף ליומן.",
+                    "כמות חייבת להיות גדולה מ־0 כדי להוסיף ליומן."
+                  )}
+                </p>
+              ) : journalAddPreview ? (
+                <p className="text-center text-base font-extrabold text-[var(--cherry)]">
+                  {gf(gender, "סיכום למנה:", "סיכום למנה:")}{" "}
+                  {journalAddPreview.calories.toLocaleString("he-IL")} קק״ל
+                  {journalAddPreview.proteinG != null &&
+                  journalAddPreview.carbsG != null &&
+                  journalAddPreview.fatG != null ? (
+                    <span className="mt-1 block text-sm font-semibold text-[var(--stem)]">
+                      · חלבון {journalAddPreview.proteinG} ג׳ · פחמימות{" "}
+                      {journalAddPreview.carbsG} ג׳ · שומן {journalAddPreview.fatG}{" "}
+                      ג׳
+                    </span>
+                  ) : null}
+                </p>
+              ) : null}
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  className="btn-stem flex-1 rounded-xl py-3 font-semibold disabled:cursor-not-allowed disabled:opacity-45"
+                  onClick={confirmJournalAdd}
+                  disabled={journalModalParsedQty <= 0}
+                >
+                  {gf(gender, "הוסיפי ליומן", "הוסף ליומן")}
+                </button>
+                <button
+                  type="button"
+                  className="flex-1 rounded-xl border-2 border-[var(--border-cherry-soft)] bg-white py-3 font-semibold text-[var(--text)]"
+                  onClick={closeJournalAddModal}
+                >
+                  ביטול
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {quantityEditTarget && (
           <motion.div
             className="fixed inset-0 z-[400] flex items-center justify-center bg-black/30 p-4 backdrop-blur-[2px]"
             initial={{ opacity: 0 }}
@@ -1532,13 +2101,13 @@ export default function DictionaryPage() {
             exit={{ opacity: 0 }}
             role="presentation"
             onClick={(e) => {
-              if (e.target === e.currentTarget) closeEdit();
+              if (e.target === e.currentTarget) closeQuantityEdit();
             }}
           >
             <motion.div
               role="dialog"
               aria-modal
-              aria-labelledby={editTitleId}
+              aria-labelledby={quantityEditTitleId}
               className="glass-panel w-full max-w-md space-y-4 p-5 shadow-2xl"
               initial={{ scale: 0.94, opacity: 0 }}
               animate={{ scale: 1, opacity: 1 }}
@@ -1548,168 +2117,152 @@ export default function DictionaryPage() {
             >
               <div className="flex items-start justify-between gap-3">
                 <h2
-                  id={editTitleId}
+                  id={quantityEditTitleId}
                   className="panel-title-cherry text-lg"
                 >
-                  {editTarget.mealPresetId
-                    ? "עריכת ארוחה במילון"
-                    : "עריכת פריט במילון"}
+                  {gf(gender, "עריכת כמות במילון", "עריכת כמות במילון")}
                 </h2>
                 <button
                   type="button"
-                  onClick={closeEdit}
+                  onClick={closeQuantityEdit}
                   className="rounded-lg border-2 border-[var(--border-cherry-soft)] bg-white px-3 py-1.5 text-sm font-semibold text-[var(--text)] transition hover:bg-[var(--cherry-muted)]"
                 >
                   סגירה
                 </button>
               </div>
-              <label className="block">
-                <span className="mb-1 block text-xs font-semibold text-[var(--cherry)]">
-                  שם
-                </span>
-                <input
-                  type="text"
-                  value={editFood}
-                  onChange={(e) => setEditFood(e.target.value)}
-                  className="input-luxury-dark w-full"
-                  autoComplete="off"
-                />
-              </label>
-              {editTarget.mealPresetId ? (
-                <p className="text-xs font-medium leading-relaxed text-[var(--stem)]/75">
+              <p className="text-sm font-semibold text-[var(--stem)]">
+                {quantityEditTarget.food}
+              </p>
+              <div className="flex flex-wrap gap-3">
+                <label className="min-w-[6rem] flex-1">
+                  <span className="mb-1 block text-xs font-semibold text-[var(--cherry)]">
+                    {gf(gender, "כמות", "כמות")}
+                  </span>
+                  <input
+                    type="text"
+                    inputMode="decimal"
+                    value={editQtyText}
+                    onFocus={(e) => e.currentTarget.select()}
+                    onChange={(e) => {
+                      if ((e.nativeEvent as InputEvent).isComposing) return;
+                      const raw = e.target.value;
+                      if (raw.trim() === "") {
+                        setEditQtyText("");
+                        return;
+                      }
+                      const cleaned = raw
+                        .replace(",", ".")
+                        .replace(/[^\d.]/g, "")
+                        .replace(/^0+(?=\d)/, "");
+                      const parts = cleaned.split(".");
+                      setEditQtyText(
+                        parts.length <= 1
+                          ? parts[0]!
+                          : `${parts[0]}.${parts.slice(1).join("")}`
+                      );
+                    }}
+                    onBlur={() =>
+                      setEditQtyText((x) => {
+                        const n = parseFloat(x.replace(",", "."));
+                        if (!Number.isFinite(n)) return "1";
+                        if (n <= 0) return "0";
+                        return String(parseQtyForUnit(x, editUnit));
+                      })
+                    }
+                    className="input-luxury-dark w-full"
+                  />
+                </label>
+                <label className="min-w-[8rem] flex-[2]">
+                  <span className="mb-1 block text-xs font-semibold text-[var(--cherry)]">
+                    יחידה
+                  </span>
+                  <select
+                    value={editUnit}
+                    onChange={(e) => {
+                      const u = e.target.value as FoodUnit;
+                      setEditUnit(u);
+                      setEditQtyText((q) => {
+                        const raw = q.trim() === "" ? "1" : q;
+                        if (parseQtyAllowZero(raw, u) === 0) return "0";
+                        return String(parseQtyForUnit(raw, u));
+                      });
+                      if (u !== "יחידה") setEditGramsPerUnitText("");
+                    }}
+                    className="select-luxury w-full"
+                  >
+                    {UNITS.map((u) => (
+                      <option key={u} value={u}>
+                        {u}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              </div>
+              {editUnit === "יחידה" && (
+                <label className="block">
+                  <span className="mb-1 block text-xs font-semibold text-[var(--cherry)]">
+                    משקל יחידה (גרם, אופציונלי)
+                  </span>
+                  <input
+                    type="text"
+                    inputMode="decimal"
+                    value={editGramsPerUnitText}
+                    onChange={(e) => {
+                      if ((e.nativeEvent as InputEvent).isComposing) return;
+                      const raw = e.target.value;
+                      if (raw.trim() === "") {
+                        setEditGramsPerUnitText("");
+                        return;
+                      }
+                      const cleaned = raw
+                        .replace(",", ".")
+                        .replace(/[^\d.]/g, "")
+                        .replace(/^0+(?=\d)/, "");
+                      const parts = cleaned.split(".");
+                      setEditGramsPerUnitText(
+                        parts.length <= 1
+                          ? parts[0]!
+                          : `${parts[0]}.${parts.slice(1).join("")}`
+                      );
+                    }}
+                    onBlur={() => {
+                      const g = parseGramsPerUnitField(editGramsPerUnitText);
+                      setEditGramsPerUnitText(g != null ? String(g) : "");
+                    }}
+                    placeholder="למשל 120"
+                    className="input-luxury-dark w-full"
+                  />
+                </label>
+              )}
+              {quantityEditParsedQty <= 0 ? (
+                <p className="text-center text-sm font-semibold text-[#a94444]">
                   {gf(
                     gender,
-                    "עריכת שם הארוחה בלבד. רכיבי הארוחה נשארים כפי ששמרת מהיומן.",
-                    "עריכת שם הארוחה בלבד. רכיבי הארוחה נשארים כפי ששמרת מהיומן."
+                    "כמות חייבת להיות גדולה מ־0.",
+                    "כמות חייבת להיות גדולה מ־0."
                   )}
                 </p>
-              ) : (
-                <>
-                  <div className="flex flex-wrap gap-3">
-                    <label className="min-w-[6rem] flex-1">
-                      <span className="mb-1 block text-xs font-semibold text-[var(--cherry)]">
-                        כמות
-                      </span>
-                      <input
-                        type="text"
-                        inputMode="decimal"
-                        value={editQtyText}
-                        onFocus={(e) => e.currentTarget.select()}
-                        onChange={(e) => {
-                          if ((e.nativeEvent as InputEvent).isComposing) return;
-                          const raw = e.target.value;
-                          if (raw.trim() === "") {
-                            setEditQtyText("");
-                            return;
-                          }
-                          const cleaned = raw
-                            .replace(",", ".")
-                            .replace(/[^\d.]/g, "")
-                            .replace(/^0+(?=\d)/, "");
-                          const parts = cleaned.split(".");
-                          setEditQtyText(
-                            parts.length <= 1
-                              ? parts[0]
-                              : `${parts[0]}.${parts.slice(1).join("")}`
-                          );
-                        }}
-                        onBlur={() =>
-                          setEditQtyText((x) => {
-                            const n = parseFloat(x.replace(",", "."));
-                            if (!Number.isFinite(n)) return "1";
-                            return String(parseQtyForUnit(x, editUnit));
-                          })
-                        }
-                        className="input-luxury-dark w-full"
-                      />
-                    </label>
-                    <label className="min-w-[8rem] flex-[2]">
-                      <span className="mb-1 block text-xs font-semibold text-[var(--cherry)]">
-                        יחידה
-                      </span>
-                      <select
-                        value={editUnit}
-                        onChange={(e) => {
-                          const u = e.target.value as FoodUnit;
-                          setEditUnit(u);
-                          setEditQtyText((q) =>
-                            String(parseQtyForUnit(q, u))
-                          );
-                          if (u !== "יחידה") setEditGramsPerUnitText("");
-                        }}
-                        className="select-luxury w-full"
-                      >
-                        {UNITS.map((u) => (
-                          <option key={u} value={u}>
-                            {u}
-                          </option>
-                        ))}
-                      </select>
-                    </label>
-                  </div>
-                  {editUnit === "יחידה" && (
-                    <label className="block">
-                      <span className="mb-1 block text-xs font-semibold text-[var(--cherry)]">
-                        משקל יחידה (גרם, אופציונלי)
-                      </span>
-                      <input
-                        type="text"
-                        inputMode="decimal"
-                        value={editGramsPerUnitText}
-                        onChange={(e) => {
-                          if ((e.nativeEvent as InputEvent).isComposing) return;
-                          const raw = e.target.value;
-                          if (raw.trim() === "") {
-                            setEditGramsPerUnitText("");
-                            return;
-                          }
-                          const cleaned = raw
-                            .replace(",", ".")
-                            .replace(/[^\d.]/g, "")
-                            .replace(/^0+(?=\d)/, "");
-                          const parts = cleaned.split(".");
-                          setEditGramsPerUnitText(
-                            parts.length <= 1
-                              ? parts[0]
-                              : `${parts[0]}.${parts.slice(1).join("")}`
-                          );
-                        }}
-                        onBlur={() => {
-                          const g = parseGramsPerUnitField(editGramsPerUnitText);
-                          setEditGramsPerUnitText(
-                            g != null ? String(g) : ""
-                          );
-                        }}
-                        placeholder="למשל 120"
-                        className="input-luxury-dark w-full"
-                      />
-                    </label>
-                  )}
-                </>
-              )}
-              {editTarget.caloriesPer100g != null && !editTarget.mealPresetId && (
+              ) : null}
+              {quantityEditTarget.caloriesPer100g != null &&
+              quantityEditParsedQty > 0 ? (
                 <p className="text-xs text-[var(--text)]/75">
-                  יש ערכי קלוריות ל־100 ג׳ — הקק״ל למנה יחושבו מחדש כשהכמות
-                  בגרם או ביחידה עם משקל יחידה.
+                  יש ערכי תזונה ל־100 ג׳ — הקק״ל והמאקרו למנה יעודכנו לפי הכמות
+                  בגרם או ליחידה עם משקל יחידה.
                 </p>
-              )}
-              {editError && (
-                <p className="text-sm font-semibold text-[#a94444]">
-                  {editError}
-                </p>
-              )}
+              ) : null}
               <div className="flex gap-2">
                 <button
                   type="button"
-                  className="btn-stem flex-1 rounded-xl py-3 font-semibold"
-                  onClick={saveDictionaryEdit}
+                  className="btn-stem flex-1 rounded-xl py-3 font-semibold disabled:cursor-not-allowed disabled:opacity-45"
+                  onClick={saveQuantityEdit}
+                  disabled={quantityEditParsedQty <= 0}
                 >
                   שמירה
                 </button>
                 <button
                   type="button"
                   className="btn-gold flex-1 rounded-xl py-3 font-semibold"
-                  onClick={closeEdit}
+                  onClick={closeQuantityEdit}
                 >
                   ביטול
                 </button>

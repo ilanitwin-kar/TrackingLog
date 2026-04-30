@@ -975,9 +975,6 @@ export function AssistantClient() {
       name: p.displayName,
       category: item.category,
       calories: p.calories,
-      protein: p.protein,
-      carbs: p.carbs,
-      fat: p.fat,
     });
     setToast(
       added

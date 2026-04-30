@@ -173,14 +173,6 @@ export default function ShoppingPage() {
             <ul className="space-y-2">
               {items.map((it) => {
                 const qty = it.qty ?? 1;
-                const macroParts = [
-                  it.protein != null && it.protein > 0
-                    ? `חלבון ${it.protein}`
-                    : null,
-                  it.carbs != null && it.carbs > 0 ? `פחמימות ${it.carbs}` : null,
-                  it.fat != null && it.fat > 0 ? `שומן ${it.fat}` : null,
-                ].filter(Boolean) as string[];
-                const hasMacros = macroParts.length > 0;
                 return (
                   <motion.li
                     key={it.id}
@@ -222,11 +214,6 @@ export default function ShoppingPage() {
                         <span className="mt-0.5 block text-sm text-[var(--stem)]/85">
                           ~{Math.round(it.calories)} קק״ל ל־100 גרם
                         </span>
-                        {hasMacros ? (
-                          <span className="mt-0.5 block text-xs text-[var(--stem)]/80">
-                            {macroParts.join(" · ")}
-                          </span>
-                        ) : null}
                       </span>
                     </label>
                     <div className="flex shrink-0 gap-1.5">
