@@ -111,7 +111,7 @@ export function CalorieBoardGrid({ profileRev = 0 }: { profileRev?: number }) {
   if (board === undefined) {
     return (
       <section
-        className={`py-10 text-center text-base font-semibold text-[var(--cherry)]/75 ${fontBoard}`}
+        className="py-10 text-center text-base font-semibold text-[var(--cherry)]/75"
         aria-busy
       >
         טוען מפת דרך…
@@ -122,7 +122,7 @@ export function CalorieBoardGrid({ profileRev = 0 }: { profileRev?: number }) {
   if (board === null) {
     return (
       <section
-        className={`rounded-2xl border-2 border-[var(--border-cherry-soft)] bg-white/90 px-4 py-8 text-center shadow-[0_6px_24px_rgba(250,218,221,0.35)] ${fontBoard}`}
+        className="rounded-2xl border-2 border-[var(--border-cherry-soft)] bg-white/90 px-4 py-8 text-center shadow-[0_6px_24px_rgba(250,218,221,0.35)]"
       >
         <p className="text-base font-bold text-[var(--cherry)]">
           אין עדיין מפת דרך להצגה
@@ -134,7 +134,7 @@ export function CalorieBoardGrid({ profileRev = 0 }: { profileRev?: number }) {
   const { dateKeys, tdeeKcal, today, firstName, gender } = board;
 
   return (
-    <section className={`space-y-4 overflow-visible ${fontBoard}`}>
+    <section className="space-y-4 overflow-visible">
       <div
         className="overflow-visible rounded-2xl border border-[var(--border-cherry-soft)] bg-gradient-to-b from-[#fffafd] to-[#f6faf3] p-2.5 sm:p-3.5"
         dir="rtl"
@@ -275,7 +275,7 @@ export function CalorieBoardGrid({ profileRev = 0 }: { profileRev?: number }) {
                   role="listitem"
                   aria-disabled
                   tabIndex={-1}
-                  className={`${cellShell} ${fontBoard} ${futureGrey3d}`}
+                  className={`${cellShell} ${futureGrey3d}`}
                 >
                   {innerTop}
                   <div className="flex min-h-0 flex-1 flex-col items-center justify-center overflow-hidden px-0.5">
@@ -292,7 +292,7 @@ export function CalorieBoardGrid({ profileRev = 0 }: { profileRev?: number }) {
               : stem3d;
 
             const interactive = isClosed;
-            const commonClass = `${cellShell} ${fontBoard} ${palette3d} ${
+            const commonClass = `${cellShell} ${palette3d} ${
               interactive
                 ? "cursor-pointer transition-shadow focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--cherry)] focus-visible:ring-offset-2 active:shadow-[inset_0_4px_10px_rgba(0,0,0,0.15)]"
                 : "cursor-default opacity-[0.97]"
