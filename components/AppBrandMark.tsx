@@ -111,7 +111,9 @@ export function AppBrandMark() {
   const showBack = !isHome;
   const title = titleForPathname(pathname);
   const titleSizeClass =
-    pathname === "/journal" || pathname === "/dictionary"
+    pathname === "/journal" ||
+    pathname === "/dictionary" ||
+    pathname === "/shopping"
       ? "text-base sm:text-[1.05rem]"
       : "text-sm";
 
@@ -145,8 +147,11 @@ export function AppBrandMark() {
   }
 
   const flowHeader =
-    pathname === "/journal" || pathname === "/dictionary";
+    pathname === "/journal" ||
+    pathname === "/dictionary" ||
+    pathname === "/shopping";
   const isDictionary = pathname === "/dictionary";
+  const isShopping = pathname === "/shopping";
 
   return (
     <header
@@ -172,6 +177,22 @@ export function AppBrandMark() {
                 onClick={() => {
                   try {
                     window.dispatchEvent(new CustomEvent("cj-dictionary-help"));
+                  } catch {
+                    /* ignore */
+                  }
+                }}
+              >
+                ?
+              </button>
+            ) : isShopping ? (
+              <button
+                type="button"
+                className="inline-flex h-8 w-8 items-center justify-center rounded-full border-2 border-[var(--border-cherry-soft)] bg-white text-sm font-extrabold text-[var(--cherry)] shadow-sm transition hover:bg-[var(--cherry-muted)]"
+                aria-label="הסבר על רשימת הקניות"
+                title="הסבר"
+                onClick={() => {
+                  try {
+                    window.dispatchEvent(new CustomEvent("cj-shopping-help"));
                   } catch {
                     /* ignore */
                   }

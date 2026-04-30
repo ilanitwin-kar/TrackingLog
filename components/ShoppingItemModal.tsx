@@ -4,17 +4,9 @@ import { AnimatePresence, motion } from "framer-motion";
 import { useEffect, useId, useState } from "react";
 import {
   addPersonalShoppingItem,
-  isPersonalShoppingFood,
   type ShoppingItem,
   updateShoppingItem,
 } from "@/lib/explorerStorage";
-import {
-  explorerFoodSourceKey,
-  loadDictionary,
-  patchDictionaryItemNutritionById,
-  upsertDictionaryFromShoppingPersonal,
-  upsertExplorerFoodInDictionary,
-} from "@/lib/storage";
 
 function parseNum(s: string, fallback = 0): number {
   const t = s.trim().replace(",", ".");
@@ -40,6 +32,7 @@ export function ShoppingItemModal({
   const titleId = useId();
   const [name, setName] = useState("");
   const [brand, setBrand] = useState("");
+  const [category, setCategory] = useState("");
   const [calories, setCalories] = useState("");
   const [qty, setQty] = useState("1");
   const [error, setError] = useState("");
@@ -50,6 +43,8 @@ export function ShoppingItemModal({
     if (editingItem) {
       setName(editingItem.name);
       setBrand(editingItem.brand ?? "");
+      const cat = editingItem.category?.trim() ?? "";
+      setCategory(cat === "אישי" ? "" : cat);
       setCalories(
         editingItem.calories != null ? String(Math.round(editingItem.calories)) : ""
       );
@@ -61,6 +56,7 @@ export function ShoppingItemModal({
     } else {
       setName("");
       setBrand("");
+      setCategory("");
       setCalories("");
       setQty("1");
     }
@@ -74,59 +70,14 @@ export function ShoppingItemModal({
 
   function applyShoppingPatch(): Partial<ShoppingItem> {
     const { k100, q } = buildNutrition();
+    const catTrim = category.trim();
     return {
       name: name.trim(),
       brand: brand.trim() || undefined,
+      category: catTrim || "אישי",
       calories: k100,
       qty: q,
     };
-  }
-
-  function saveDictionaryForRow(
-    shoppingId: string,
-    foodIdForLink: string,
-    personal: boolean
-  ) {
-    const { k100 } = buildNutrition();
-    const foodName = name.trim();
-    const dictItems = loadDictionary();
-    if (personal) {
-      upsertDictionaryFromShoppingPersonal(shoppingId, {
-        food: foodName,
-        brand: brand.trim() || undefined,
-        caloriesPer100g: k100,
-        proteinPer100g: 0,
-        carbsPer100g: 0,
-        fatPer100g: 0,
-      });
-      return;
-    }
-    if (foodIdForLink.startsWith("dictionary-meal:")) {
-      return;
-    }
-    if (foodIdForLink.startsWith("dictionary:")) {
-      const dictId = foodIdForLink.slice("dictionary:".length);
-      const prev = dictItems.find((d) => d.id === dictId);
-      patchDictionaryItemNutritionById(dictId, {
-        food: foodName,
-        brand: brand.trim() || undefined,
-        caloriesPer100g: k100,
-        proteinPer100g: prev?.proteinPer100g ?? 0,
-        carbsPer100g: prev?.carbsPer100g ?? 0,
-        fatPer100g: prev?.fatPer100g ?? 0,
-      });
-      return;
-    }
-    const src = explorerFoodSourceKey(foodIdForLink);
-    const prevEx = dictItems.find((d) => d.source === src);
-    upsertExplorerFoodInDictionary({
-      id: foodIdForLink,
-      name: foodName,
-      calories: k100,
-      protein: prevEx?.proteinPer100g ?? 0,
-      fat: prevEx?.fatPer100g ?? 0,
-      carbs: prevEx?.carbsPer100g ?? 0,
-    });
   }
 
   function handleSaveShoppingOnly() {
@@ -141,36 +92,11 @@ export function ShoppingItemModal({
     } else {
       addPersonalShoppingItem({
         name: n,
-        category: "אישי",
+        category: patch.category ?? "אישי",
         calories: patch.calories ?? 0,
         brand: patch.brand,
         qty: patch.qty,
       });
-    }
-    onSaved();
-    onClose();
-  }
-
-  function handleSaveWithDictionary() {
-    const n = name.trim();
-    if (!n) {
-      setError("נא למלא שם מוצר.");
-      return;
-    }
-    const patch = applyShoppingPatch();
-    if (editingItem) {
-      updateShoppingItem(editingItem.id, patch);
-      const personal = isPersonalShoppingFood(editingItem);
-      saveDictionaryForRow(editingItem.id, editingItem.foodId, personal);
-    } else {
-      const row = addPersonalShoppingItem({
-        name: n,
-        category: "אישי",
-        calories: patch.calories ?? 0,
-        brand: patch.brand,
-        qty: patch.qty,
-      });
-      saveDictionaryForRow(row.id, row.foodId, true);
     }
     onSaved();
     onClose();
@@ -231,6 +157,17 @@ export function ShoppingItemModal({
                   autoComplete="off"
                 />
               </label>
+              <label className="block text-sm font-semibold text-[var(--stem)]">
+                קטגוריה (אופציונלי)
+                <input
+                  type="text"
+                  value={category}
+                  onChange={(e) => setCategory(e.target.value)}
+                  className={inputClass}
+                  autoComplete="off"
+                  placeholder="למשל: חלב, ירקות…"
+                />
+              </label>
               <p className="text-xs font-semibold text-[var(--cherry)]/90">
                 קלוריות ל־100 גרם (אופציונלי — לרשימת הקניות)
               </p>
@@ -262,22 +199,13 @@ export function ShoppingItemModal({
               </p>
             ) : null}
 
-            <div className="mt-6 flex flex-col gap-2 sm:flex-row sm:gap-3">
+            <div className="mt-6">
               <button
                 type="button"
-                className="btn-stem flex-1 rounded-xl py-3 text-center text-sm font-bold"
+                className="btn-stem w-full rounded-xl py-3 text-center text-sm font-bold"
                 onClick={handleSaveShoppingOnly}
               >
-                {editingItem ? "עדכן את הסל בלבד" : "הוסף לסל הקניות בלבד"}
-              </button>
-              <button
-                type="button"
-                className="btn-stem flex-1 rounded-xl border-2 border-[var(--border-cherry-soft)] bg-[var(--cherry-muted)] py-3 text-center text-sm font-bold text-[var(--cherry)] shadow-sm hover:bg-white/90"
-                onClick={handleSaveWithDictionary}
-              >
-                {editingItem
-                  ? "עדכן ושמור במילון"
-                  : "שמור גם במילון האישי שלי"}
+                {editingItem ? "עדכן" : "הוסף לסל הקניות"}
               </button>
             </div>
 

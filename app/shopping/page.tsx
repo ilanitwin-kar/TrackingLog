@@ -1,8 +1,7 @@
 "use client";
 
-import { motion } from "framer-motion";
+import { AnimatePresence, motion } from "framer-motion";
 import { useCallback, useEffect, useState } from "react";
-import { InfoCard } from "@/components/InfoCard";
 import {
   IconEnvelope,
   IconPrinter,
@@ -23,12 +22,15 @@ import {
   SHOPPING_LIST_SHARE_HEADER,
 } from "@/lib/shoppingExport";
 import { loadProfile } from "@/lib/storage";
+import { useDocumentScrollOnlyIfOverflowing } from "@/lib/useDocumentScrollOnlyIfOverflowing";
 
 export default function ShoppingPage() {
   const gender = loadProfile().gender;
+  useDocumentScrollOnlyIfOverflowing();
   const [items, setItems] = useState<ShoppingItem[]>([]);
   const [modalOpen, setModalOpen] = useState(false);
   const [editTarget, setEditTarget] = useState<ShoppingItem | null>(null);
+  const [helpOpen, setHelpOpen] = useState(false);
 
   const refresh = useCallback(() => {
     setItems(loadShopping());
@@ -44,6 +46,12 @@ export default function ShoppingPage() {
       window.removeEventListener("storage", onFocus);
     };
   }, [refresh]);
+
+  useEffect(() => {
+    const openHelp = () => setHelpOpen(true);
+    window.addEventListener("cj-shopping-help", openHelp);
+    return () => window.removeEventListener("cj-shopping-help", openHelp);
+  }, []);
 
   function toggle(id: string) {
     setItems(toggleShoppingChecked(id));
@@ -89,33 +97,59 @@ export default function ShoppingPage() {
   return (
     <>
       <div
-        className="mx-auto max-w-lg px-4 pb-28 pt-8 md:pt-12 print:hidden"
+        className="mx-auto max-w-lg px-3 pb-28 pt-0 print:hidden"
         dir="rtl"
       >
         <ShoppingTopNav onAddPersonal={openAdd} />
 
+        <AnimatePresence>
+          {helpOpen && (
+            <motion.div
+              className="fixed inset-0 z-[600] flex items-center justify-center bg-black/30 p-4 backdrop-blur-[2px]"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              role="presentation"
+              onClick={(e) => {
+                if (e.target === e.currentTarget) setHelpOpen(false);
+              }}
+            >
+              <motion.div
+                role="dialog"
+                aria-modal
+                className="w-full max-w-md rounded-2xl border-2 border-[var(--border-cherry-soft)] bg-white p-4 shadow-2xl"
+                initial={{ scale: 0.96, opacity: 0 }}
+                animate={{ scale: 1, opacity: 1 }}
+                exit={{ scale: 0.97, opacity: 0 }}
+                transition={{ type: "spring", damping: 26, stiffness: 320 }}
+                onClick={(e) => e.stopPropagation()}
+                dir="rtl"
+              >
+                <div className="flex items-start justify-between gap-3">
+                  <h2 className="text-lg font-extrabold tracking-tight text-[var(--cherry)]">
+                    {shoppingIntroTitle()}
+                  </h2>
+                  <button
+                    type="button"
+                    className="rounded-lg border-2 border-[var(--border-cherry-soft)] bg-white px-3 py-1.5 text-sm font-semibold text-[var(--text)] transition hover:bg-[var(--cherry-muted)]"
+                    onClick={() => setHelpOpen(false)}
+                  >
+                    סגירה
+                  </button>
+                </div>
+                <p className="mt-2 text-base leading-relaxed text-[var(--stem)]/85">
+                  {shoppingIntroBody(gender)}
+                </p>
+              </motion.div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
         <motion.div
           initial={{ opacity: 0, y: 6 }}
           animate={{ opacity: 1, y: 0 }}
+          className="mb-6 flex flex-col items-center gap-4 sm:flex-row sm:flex-wrap sm:justify-center sm:gap-x-3 sm:gap-y-2"
         >
-          <InfoCard
-            gender={gender}
-            icon="🧺"
-            title={shoppingIntroTitle()}
-            body={shoppingIntroBody(gender)}
-            className="mb-5"
-          />
-        </motion.div>
-
-        <motion.h1
-          className="heading-page mb-6 text-center text-3xl md:text-4xl"
-          initial={{ opacity: 0, y: -8 }}
-          animate={{ opacity: 1, y: 0 }}
-        >
-          רשימת קניות
-        </motion.h1>
-
-        <div className="mb-6 flex flex-col items-center gap-4 sm:flex-row sm:flex-wrap sm:justify-center sm:gap-x-3 sm:gap-y-2">
           <nav
             className="flex flex-wrap items-center justify-center gap-2"
             aria-label="ייצוא רשימת קניות"
@@ -160,10 +194,10 @@ export default function ShoppingPage() {
               </span>
             </button>
           </nav>
-        </div>
+        </motion.div>
 
         <motion.section
-          className="glass-panel p-4"
+          className="min-w-0"
           initial={{ opacity: 0, y: 8 }}
           animate={{ opacity: 1, y: 0 }}
         >
@@ -211,9 +245,13 @@ export default function ShoppingPage() {
                         <span className="text-xs text-[var(--cherry)]/75">
                           {it.category}
                         </span>
-                        <span className="mt-0.5 block text-sm text-[var(--stem)]/85">
-                          ~{Math.round(it.calories)} קק״ל ל־100 גרם
-                        </span>
+                        {typeof it.calories === "number" &&
+                        Number.isFinite(it.calories) &&
+                        it.calories > 0 ? (
+                          <span className="mt-0.5 block text-sm text-[var(--stem)]/85">
+                            ~{Math.round(it.calories)} קק״ל ל־100 גרם
+                          </span>
+                        ) : null}
                       </span>
                     </label>
                     <div className="flex shrink-0 gap-1.5">
