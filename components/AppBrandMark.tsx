@@ -1,5 +1,6 @@
 "use client";
 
+import type { ReactNode } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { CherryMark } from "@/components/CherryMark";
 import { ArrowRight } from "lucide-react";
@@ -12,7 +13,7 @@ function titleForPathname(pathname: string): string {
   if (pathname === "/journal") return "היומן שלי";
   if (pathname === "/add-food") return "הוספת מזון";
   if (pathname === "/add-food-ai") return "הוספת מזון (AI)";
-  if (pathname === "/dictionary") return "המילון האישי";
+  if (pathname === "/dictionary") return "מילון אישי";
   if (pathname === "/explorer") return "מגלה מזונות";
   if (pathname === "/shopping-list" || pathname === "/shopping") return "רשימת קניות";
   if (pathname === "/library") return "הספרייה שלי";
@@ -31,6 +32,7 @@ function titleForPathname(pathname: string): string {
   if (pathname === "/privacy") return "מדיניות פרטיות";
   if (pathname === "/terms") return "תנאי שימוש";
   if (pathname === "/presets") return "ערכות מוכנות";
+  if (pathname === "/experiment") return "נסיון";
   if (pathname === "/control-center") return "מרכז השליטה";
   if (pathname === "/assistant") return "עוזר";
   if (pathname === "/settings") return "הגדרות";
@@ -42,11 +44,13 @@ function HeaderBarContent({
   showBack,
   title,
   titleClassName,
+  titleAccessory,
   onBack,
 }: {
   showBack: boolean;
   title: string;
   titleClassName: string;
+  titleAccessory?: ReactNode;
   onBack: () => void;
 }) {
   const router = useRouter();
@@ -68,12 +72,15 @@ function HeaderBarContent({
         )}
       </div>
 
-      <div className="pointer-events-none absolute inset-x-0 top-0 flex h-[60px] items-center justify-center">
+      <div className="pointer-events-none absolute inset-x-0 top-0 flex h-[60px] items-center justify-center gap-1.5 px-14">
         <p
-          className={`pointer-events-none max-w-[14rem] truncate text-center font-extrabold text-[var(--cherry)] ${titleClassName}`}
+          className={`pointer-events-none max-w-[11rem] truncate text-center font-extrabold text-[var(--cherry)] sm:max-w-[13rem] ${titleClassName}`}
         >
           {title}
         </p>
+        {titleAccessory ? (
+          <span className="pointer-events-auto shrink-0">{titleAccessory}</span>
+        ) : null}
       </div>
 
       <div
@@ -103,7 +110,10 @@ export function AppBrandMark() {
   const isHome = pathname === "/";
   const showBack = !isHome;
   const title = titleForPathname(pathname);
-  const titleSizeClass = pathname === "/journal" ? "text-base sm:text-[1.05rem]" : "text-sm";
+  const titleSizeClass =
+    pathname === "/journal" || pathname === "/dictionary"
+      ? "text-base sm:text-[1.05rem]"
+      : "text-sm";
 
   function onBack() {
     try {
@@ -134,8 +144,16 @@ export function AppBrandMark() {
     router.push("/");
   }
 
+  const flowHeader =
+    pathname === "/journal" || pathname === "/dictionary";
+  const isDictionary = pathname === "/dictionary";
+
   return (
-    <header className="pointer-events-none sticky top-0 z-[250] w-full shrink-0 bg-[var(--cherry-muted)]/45">
+    <header
+      className={`pointer-events-none w-full shrink-0 bg-[var(--cherry-muted)]/45 ${
+        flowHeader ? "relative z-[1]" : "sticky top-0 z-[250]"
+      }`}
+    >
       <div
         className="pointer-events-auto relative mx-auto flex w-full max-w-lg flex-col px-3 pt-[env(safe-area-inset-top)]"
         dir="rtl"
@@ -144,6 +162,25 @@ export function AppBrandMark() {
           showBack={showBack}
           title={title}
           titleClassName={titleSizeClass}
+          titleAccessory={
+            isDictionary ? (
+              <button
+                type="button"
+                className="inline-flex h-8 w-8 items-center justify-center rounded-full border-2 border-[var(--border-cherry-soft)] bg-white text-sm font-extrabold text-[var(--cherry)] shadow-sm transition hover:bg-[var(--cherry-muted)]"
+                aria-label="הסבר על המילון"
+                title="הסבר"
+                onClick={() => {
+                  try {
+                    window.dispatchEvent(new CustomEvent("cj-dictionary-help"));
+                  } catch {
+                    /* ignore */
+                  }
+                }}
+              >
+                ?
+              </button>
+            ) : undefined
+          }
           onBack={onBack}
         />
       </div>

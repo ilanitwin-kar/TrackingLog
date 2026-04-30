@@ -86,6 +86,8 @@ function mapProductsToItems(products: unknown[]): Array<{
   protein: number;
   fat: number;
   carbs: number;
+  category: string;
+  brand?: string;
 }> {
   const items: Array<{
     id: string;
@@ -94,6 +96,8 @@ function mapProductsToItems(products: unknown[]): Array<{
     protein: number;
     fat: number;
     carbs: number;
+    category: string;
+    brand?: string;
   }> = [];
 
   for (const raw of products) {
@@ -111,6 +115,11 @@ function mapProductsToItems(products: unknown[]): Array<{
     const protein = num100g(nut, "proteins_100g");
     const carbs = num100g(nut, "carbohydrates_100g");
     const fat = num100g(nut, "fat_100g");
+    const brandsRaw = p.brands ?? p.brand;
+    let brand: string | undefined;
+    if (typeof brandsRaw === "string" && brandsRaw.trim()) {
+      brand = brandsRaw.split(",")[0]?.trim();
+    }
 
     items.push({
       id,
@@ -119,6 +128,8 @@ function mapProductsToItems(products: unknown[]): Array<{
       protein: Number.isFinite(protein) ? protein : 0,
       carbs: Number.isFinite(carbs) ? carbs : 0,
       fat: Number.isFinite(fat) ? fat : 0,
+      category: "Open Food Facts",
+      ...(brand ? { brand } : {}),
     });
   }
   return items;
@@ -158,7 +169,8 @@ async function fetchOpenFoodFactsTextSearch(
     page_size: String(pageSize),
     /** עברית + אנגלית — שמות מוצרים מקומיים ומילוליים ביחד */
     langs: "he,en",
-    fields: "code,product_name,product_name_en,generic_name,nutriments",
+    fields:
+      "code,product_name,product_name_en,generic_name,nutriments,brands,brand",
   });
 
   const url = `https://search.openfoodfacts.org/search?${params.toString()}`;

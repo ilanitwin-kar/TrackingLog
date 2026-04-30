@@ -9,18 +9,12 @@ import {
   updateShoppingItem,
 } from "@/lib/explorerStorage";
 import {
+  explorerFoodSourceKey,
+  loadDictionary,
   patchDictionaryItemNutritionById,
   upsertDictionaryFromShoppingPersonal,
   upsertExplorerFoodInDictionary,
 } from "@/lib/storage";
-
-function parseOptionalNum(s: string): number | undefined {
-  const t = s.trim().replace(",", ".");
-  if (t === "") return undefined;
-  const n = parseFloat(t);
-  if (!Number.isFinite(n)) return undefined;
-  return Math.max(0, n);
-}
 
 function parseNum(s: string, fallback = 0): number {
   const t = s.trim().replace(",", ".");
@@ -47,9 +41,6 @@ export function ShoppingItemModal({
   const [name, setName] = useState("");
   const [brand, setBrand] = useState("");
   const [calories, setCalories] = useState("");
-  const [protein, setProtein] = useState("");
-  const [carbs, setCarbs] = useState("");
-  const [fat, setFat] = useState("");
   const [qty, setQty] = useState("1");
   const [error, setError] = useState("");
 
@@ -62,11 +53,6 @@ export function ShoppingItemModal({
       setCalories(
         editingItem.calories != null ? String(Math.round(editingItem.calories)) : ""
       );
-      setProtein(
-        editingItem.protein != null ? String(editingItem.protein) : ""
-      );
-      setCarbs(editingItem.carbs != null ? String(editingItem.carbs) : "");
-      setFat(editingItem.fat != null ? String(editingItem.fat) : "");
       setQty(
         editingItem.qty != null && editingItem.qty > 0
           ? String(editingItem.qty)
@@ -76,31 +62,22 @@ export function ShoppingItemModal({
       setName("");
       setBrand("");
       setCalories("");
-      setProtein("");
-      setCarbs("");
-      setFat("");
       setQty("1");
     }
   }, [open, editingItem]);
 
   function buildNutrition() {
     const k100 = parseNum(calories, 0);
-    const p = parseOptionalNum(protein) ?? 0;
-    const c = parseOptionalNum(carbs) ?? 0;
-    const f = parseOptionalNum(fat) ?? 0;
     const q = Math.max(0.01, parseNum(qty, 1));
-    return { k100, p, c, f, q };
+    return { k100, q };
   }
 
   function applyShoppingPatch(): Partial<ShoppingItem> {
-    const { k100, p, c, f, q } = buildNutrition();
+    const { k100, q } = buildNutrition();
     return {
       name: name.trim(),
       brand: brand.trim() || undefined,
       calories: k100,
-      protein: p || undefined,
-      carbs: c || undefined,
-      fat: f || undefined,
       qty: q,
     };
   }
@@ -110,16 +87,17 @@ export function ShoppingItemModal({
     foodIdForLink: string,
     personal: boolean
   ) {
-    const { k100, p, c, f } = buildNutrition();
+    const { k100 } = buildNutrition();
     const foodName = name.trim();
+    const dictItems = loadDictionary();
     if (personal) {
       upsertDictionaryFromShoppingPersonal(shoppingId, {
         food: foodName,
         brand: brand.trim() || undefined,
         caloriesPer100g: k100,
-        proteinPer100g: p,
-        carbsPer100g: c,
-        fatPer100g: f,
+        proteinPer100g: 0,
+        carbsPer100g: 0,
+        fatPer100g: 0,
       });
       return;
     }
@@ -128,23 +106,26 @@ export function ShoppingItemModal({
     }
     if (foodIdForLink.startsWith("dictionary:")) {
       const dictId = foodIdForLink.slice("dictionary:".length);
+      const prev = dictItems.find((d) => d.id === dictId);
       patchDictionaryItemNutritionById(dictId, {
         food: foodName,
         brand: brand.trim() || undefined,
         caloriesPer100g: k100,
-        proteinPer100g: p,
-        carbsPer100g: c,
-        fatPer100g: f,
+        proteinPer100g: prev?.proteinPer100g ?? 0,
+        carbsPer100g: prev?.carbsPer100g ?? 0,
+        fatPer100g: prev?.fatPer100g ?? 0,
       });
       return;
     }
+    const src = explorerFoodSourceKey(foodIdForLink);
+    const prevEx = dictItems.find((d) => d.source === src);
     upsertExplorerFoodInDictionary({
       id: foodIdForLink,
       name: foodName,
       calories: k100,
-      protein: p,
-      fat: f,
-      carbs: c,
+      protein: prevEx?.proteinPer100g ?? 0,
+      fat: prevEx?.fatPer100g ?? 0,
+      carbs: prevEx?.carbsPer100g ?? 0,
     });
   }
 
@@ -163,9 +144,6 @@ export function ShoppingItemModal({
         category: "אישי",
         calories: patch.calories ?? 0,
         brand: patch.brand,
-        protein: patch.protein,
-        carbs: patch.carbs,
-        fat: patch.fat,
         qty: patch.qty,
       });
     }
@@ -190,9 +168,6 @@ export function ShoppingItemModal({
         category: "אישי",
         calories: patch.calories ?? 0,
         brand: patch.brand,
-        protein: patch.protein,
-        carbs: patch.carbs,
-        fat: patch.fat,
         qty: patch.qty,
       });
       saveDictionaryForRow(row.id, row.foodId, true);
@@ -257,50 +232,18 @@ export function ShoppingItemModal({
                 />
               </label>
               <p className="text-xs font-semibold text-[var(--cherry)]/90">
-                ערכים תזונתיים ל־100 גרם (אופציונלי)
+                קלוריות ל־100 גרם (אופציונלי — לרשימת הקניות)
               </p>
-              <div className="grid grid-cols-2 gap-3">
-                <label className="block text-xs font-semibold text-[var(--stem)]">
-                  קלוריות
-                  <input
-                    type="text"
-                    inputMode="decimal"
-                    value={calories}
-                    onChange={(e) => setCalories(e.target.value)}
-                    className={inputClass}
-                  />
-                </label>
-                <label className="block text-xs font-semibold text-[var(--stem)]">
-                  חלבון (גרם)
-                  <input
-                    type="text"
-                    inputMode="decimal"
-                    value={protein}
-                    onChange={(e) => setProtein(e.target.value)}
-                    className={inputClass}
-                  />
-                </label>
-                <label className="block text-xs font-semibold text-[var(--stem)]">
-                  פחמימה (גרם)
-                  <input
-                    type="text"
-                    inputMode="decimal"
-                    value={carbs}
-                    onChange={(e) => setCarbs(e.target.value)}
-                    className={inputClass}
-                  />
-                </label>
-                <label className="block text-xs font-semibold text-[var(--stem)]">
-                  שומן (גרם)
-                  <input
-                    type="text"
-                    inputMode="decimal"
-                    value={fat}
-                    onChange={(e) => setFat(e.target.value)}
-                    className={inputClass}
-                  />
-                </label>
-              </div>
+              <label className="block text-xs font-semibold text-[var(--stem)]">
+                קלוריות
+                <input
+                  type="text"
+                  inputMode="decimal"
+                  value={calories}
+                  onChange={(e) => setCalories(e.target.value)}
+                  className={inputClass}
+                />
+              </label>
               <label className="block text-sm font-semibold text-[var(--stem)]">
                 כמות
                 <input

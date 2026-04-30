@@ -4,7 +4,7 @@ import Link from "next/link";
 import { AnimatePresence, motion } from "framer-motion";
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Menu, Library, ShieldCheck, Info, LogOut, UserCircle2, Settings, SlidersHorizontal } from "lucide-react";
+import { Menu, Library, ShieldCheck, Info, LogOut, UserCircle2, Settings, SlidersHorizontal, Sparkles } from "lucide-react";
 import { ADMIN_EMAIL } from "@/lib/adminConstants";
 import { onFirebaseAuthChanged } from "@/lib/firebaseUserAuth";
 import {
@@ -179,6 +179,15 @@ export function HomeDrawer({ displayName = "אילנית" }: Props) {
                 >
                   <SlidersHorizontal className="h-5 w-5 text-[var(--cherry)]" />
                   מרכז השליטה
+                </Link>
+
+                <Link
+                  href="/experiment"
+                  className={itemClass}
+                  onClick={() => close()}
+                >
+                  <Sparkles className="h-5 w-5 text-[var(--cherry)]" />
+                  נסיון — בית אישי
                 </Link>
 
                 <Link

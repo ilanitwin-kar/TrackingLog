@@ -811,9 +811,6 @@ export default function PlannerPage() {
                           name: it.name,
                           category: "תפריט",
                           calories: it.caloriesPer100g,
-                          protein: it.proteinPer100g,
-                          carbs: it.carbsPer100g,
-                          fat: it.fatPer100g,
                         });
                         if (added) window.alert(gf(gender, "נוסף לרשימת הקניות.", "נוסף לרשימת הקניות."));
                       }}

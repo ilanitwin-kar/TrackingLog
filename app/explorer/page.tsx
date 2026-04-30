@@ -146,6 +146,7 @@ export default function ExplorerPage() {
       protein: row.protein,
       fat: row.fat,
       carbs: row.carbs,
+      category: row.category,
     });
     setDictTick((x) => x + 1);
   }
@@ -156,9 +157,6 @@ export default function ExplorerPage() {
       name: row.name,
       category: row.category,
       calories: row.calories,
-      protein: row.protein,
-      carbs: row.carbs,
-      fat: row.fat,
     });
     setShopTick((x) => x + 1);
     if (added) setToast(true);
