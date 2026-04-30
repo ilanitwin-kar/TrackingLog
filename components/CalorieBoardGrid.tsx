@@ -25,9 +25,6 @@ import { CelebrationFireworks } from "@/components/CelebrationFireworks";
 import { useAppVariant } from "@/components/useAppVariant";
 import { uiCloseJournalToUnlockCube } from "@/lib/hebrewGenderUi";
 
-const fontBoard =
-  "font-[Calibri,'Segoe_UI','Helvetica_Neue',system-ui,sans-serif]";
-
 const stem3d =
   "border-[color-mix(in_srgb,var(--stem)_42%,#9ca3af_58%)] bg-gradient-to-b from-[#e8f5e9] via-[#c8e6c9] to-[#7cb342] shadow-[inset_0_3px_6px_rgba(255,255,255,0.88),inset_0_-3px_8px_rgba(0,0,0,0.12),0_5px_0_rgba(61,107,40,0.42),0_8px_16px_rgba(74,124,35,0.22)]";
 const cherry3d =

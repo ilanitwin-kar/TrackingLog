@@ -40,7 +40,7 @@ import {
 } from "@/lib/hebrewGenderUi";
 import { useDocumentScrollOnlyIfOverflowing } from "@/lib/useDocumentScrollOnlyIfOverflowing";
 import Link from "next/link";
-import { SlidersHorizontal } from "lucide-react";
+import { Check, ChevronDown, Pencil, Plus, ShoppingCart } from "lucide-react";
 import { rankedFuzzySearchByText, type MatchRange } from "@/lib/rankedSearch";
 import { matchesAllQueryWords } from "@/lib/foodSearchRules";
 
@@ -446,7 +446,14 @@ function renderHighlighted(text: string, ranges: MatchRange[]) {
     const start = Math.max(0, Math.min(text.length, s));
     const end = Math.max(0, Math.min(text.length - 1, e));
     if (start > at) out.push(<span key={`t-${at}`}>{text.slice(at, start)}</span>);
-    out.push(<strong key={`b-${start}`}>{text.slice(start, end + 1)}</strong>);
+    out.push(
+      <span
+        key={`b-${start}`}
+        className="rounded-sm bg-[var(--cherry-muted)]/90 px-0.5 font-normal"
+      >
+        {text.slice(start, end + 1)}
+      </span>
+    );
     at = end + 1;
   }
   if (at < text.length) out.push(<span key={`t-${at}-end`}>{text.slice(at)}</span>);
@@ -475,6 +482,8 @@ export default function DictionaryPage() {
   const quantityEditTitleId = useId();
   const journalAddTitleId = useId();
   const searchInputRef = useRef<HTMLInputElement>(null);
+  const searchResultsAnchorRef = useRef<HTMLDivElement>(null);
+  const wasSearchingRef = useRef(false);
   const [journalAddTarget, setJournalAddTarget] = useState<DictionaryItem | null>(
     null
   );
@@ -494,6 +503,11 @@ export default function DictionaryPage() {
   const isSearching = rawQ.trim().length >= 2;
   const [showSearchFab, setShowSearchFab] = useState(false);
   const [helpOpen, setHelpOpen] = useState(false);
+  /** מקלדת א–ת מקופלת עד לחיצה על המשפט המסביר */
+  const [hebrewLetterPickerOpen, setHebrewLetterPickerOpen] = useState(false);
+  /** גלה מזונות / בחירה לייצוא / ייצוא — מקופלים מאחורי «עוד» */
+  const [dictionaryMoreActionsOpen, setDictionaryMoreActionsOpen] =
+    useState(false);
 
   const refresh = useCallback(() => {
     setSaved(loadDictionary());
@@ -517,6 +531,24 @@ export default function DictionaryPage() {
     window.addEventListener("cj-dictionary-help", openHelp);
     return () => window.removeEventListener("cj-dictionary-help", openHelp);
   }, []);
+
+  /** אחרי גלילה במסך — כניסה לחיפוש לא מציגה את כותרת תוצאות החיפוש; מיישרים לתחילת הבלוק */
+  useEffect(() => {
+    if (!isSearching) {
+      wasSearchingRef.current = false;
+      return;
+    }
+    const justStarted = !wasSearchingRef.current;
+    wasSearchingRef.current = true;
+    if (!justStarted) return;
+    const tid = window.setTimeout(() => {
+      searchResultsAnchorRef.current?.scrollIntoView({
+        behavior: "smooth",
+        block: "start",
+      });
+    }, 120);
+    return () => window.clearTimeout(tid);
+  }, [isSearching]);
 
   const filteredSaved = useMemo(() => {
     const t = rawQ.trim();
@@ -1112,7 +1144,7 @@ export default function DictionaryPage() {
       className={`mx-auto max-w-lg px-3 pb-28 pt-0 ${fontFood}`}
       dir="rtl"
     >
-      <div className="sticky top-0 z-50 mb-4 rounded-b-xl border-b border-[var(--border-cherry-soft)]/80 bg-[color-mix(in_srgb,white_87%,var(--cherry)_13%)] px-2.5 py-2.5 shadow-[0_1px_0_rgba(155,27,48,0.05)] sm:px-3 sm:py-3">
+      <div className="sticky top-0 z-50 mb-4 rounded-b-xl border-b border-[var(--border-cherry-soft)]/80 bg-white px-2.5 py-2.5 shadow-[0_1px_0_rgba(155,27,48,0.05)] sm:px-3 sm:py-3">
         <label className="block">
           <div className="relative">
             <input
@@ -1211,13 +1243,17 @@ export default function DictionaryPage() {
       ) : null}
 
       {isSearching && (
-        <motion.section
-          className="glass-panel mt-4 p-4"
-          initial={{ opacity: 0, y: 8 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.03 }}
+        <div
+          ref={searchResultsAnchorRef}
+          className="scroll-mt-[calc(env(safe-area-inset-top,0px)+7.5rem)]"
         >
-          <h2 className="panel-title-cherry mb-1 text-lg">{externalResultsTitle}</h2>
+          <motion.section
+            className="glass-panel mt-4 p-4"
+            initial={{ opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.03 }}
+          >
+            <h2 className="panel-title-cherry mb-1 text-lg">{externalResultsTitle}</h2>
           {debouncedQ.length < 2 ? null : extSearchLoading ? (
             <p className="text-center text-sm text-[var(--cherry)]/80">
               {gf(gender, "טוען תוצאות…", "טוען תוצאות…")}
@@ -1384,7 +1420,8 @@ export default function DictionaryPage() {
               )}
             </>
           )}
-        </motion.section>
+          </motion.section>
+        </div>
       )}
 
       <motion.section
@@ -1392,106 +1429,155 @@ export default function DictionaryPage() {
         initial={{ opacity: 0, y: 8 }}
         animate={{ opacity: 1, y: 0 }}
       >
-        <div className="mb-3 flex flex-wrap items-start justify-between gap-3">
-          <h2 className="panel-title-cherry pt-1 text-lg sm:text-xl">המילון שלי</h2>
-          <div className="flex min-w-[10rem] flex-1 flex-col gap-2 sm:min-w-[11rem] sm:flex-none">
-            <Link
-              href="/explorer"
-              className="w-full rounded-xl border-2 border-[var(--border-cherry-soft)] bg-white px-3 py-2.5 text-center text-sm font-extrabold text-[var(--cherry)] shadow-sm transition hover:bg-[var(--cherry-muted)] sm:text-base"
-            >
-              גלה מזונות
-            </Link>
-            <button
-              type="button"
-              className={`w-full rounded-xl border-2 px-3 py-2.5 text-center text-sm font-extrabold leading-snug shadow-sm transition sm:text-base ${
-                exportSelectMode
-                  ? "border-[var(--border-cherry-soft)] bg-cherry-faint text-[var(--cherry)]"
-                  : "border-[var(--border-cherry-soft)] bg-white text-[var(--stem)]/85 hover:bg-[var(--cherry-muted)]"
-              }`}
-              onClick={() => {
-                setExportSelectMode((x) => !x);
-                setExportSelectedIds(new Set());
-                setOpenSavedId(null);
-              }}
-              aria-pressed={exportSelectMode}
-            >
-              {exportSelectMode ? "סיום בחירה" : "בחירה לייצוא"}
-            </button>
-            <button
-              type="button"
-              className="w-full rounded-xl border-2 border-[var(--border-cherry-soft)] bg-white px-3 py-2.5 text-center text-sm font-extrabold text-[var(--stem)] shadow-sm transition hover:bg-[var(--cherry-muted)] sm:text-base"
-              onClick={() => setExportOpen(true)}
-            >
-              ייצוא
-            </button>
-          </div>
-        </div>
-        <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-          <div className="flex flex-wrap gap-2">
-            {(
-              [
-                ["all", "הכל"],
-                ["foods", "מוצרים"],
-                ["meals", "ארוחות"],
-              ] as const
-            ).map(([id, label]) => {
-              const on = dictTab === id;
-              return (
+        <div className="mb-4 border-t border-[var(--border-cherry-soft)]/60 pt-3">
+          {/* שורה 1: א–ת + טאבים + עוד; שורה 2: ניקוי אות (רוחב מלא); מתחת — פעולות נוספות */}
+          <div className="overflow-hidden rounded-xl border-2 border-[var(--border-cherry-soft)]/70 bg-white/80 shadow-sm">
+            <div className="flex flex-wrap items-center gap-x-2 gap-y-1.5 px-2.5 py-2 sm:gap-2 sm:px-3 sm:py-2.5">
+              <button
+                type="button"
+                id="dictionary-letter-filter-toggle"
+                className="flex max-w-full items-center gap-1.5 rounded-lg py-0.5 text-start transition hover:bg-[var(--cherry-muted)]/45 sm:gap-2"
+                aria-expanded={hebrewLetterPickerOpen}
+                aria-controls="dictionary-letter-filter-grid"
+                onClick={() => setHebrewLetterPickerOpen((o) => !o)}
+              >
+                <span className="text-sm font-extrabold leading-snug text-[var(--stem)] sm:text-base">
+                  {gf(
+                    gender,
+                    "א-ת — לחצי על אות לסינון",
+                    "א-ת — לחץ על אות לסינון"
+                  )}
+                </span>
+                <ChevronDown
+                  className={`h-4 w-4 shrink-0 text-[var(--cherry)] transition-transform duration-200 sm:h-5 sm:w-5 ${
+                    hebrewLetterPickerOpen ? "rotate-180" : ""
+                  }`}
+                  aria-hidden
+                />
+              </button>
+              <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
+                {(
+                  [
+                    ["all", "הכל"],
+                    ["foods", "מוצרים"],
+                    ["meals", "ארוחות"],
+                  ] as const
+                ).map(([id, label]) => {
+                  const on = dictTab === id;
+                  return (
+                    <button
+                      key={id}
+                      type="button"
+                      className={`rounded-lg border-2 px-2.5 py-1.5 text-xs font-extrabold shadow-sm transition-colors hover:bg-[var(--cherry-muted)] sm:px-3 sm:py-2 sm:text-sm ${
+                        on
+                          ? "border-[var(--border-cherry-soft)] bg-cherry-faint text-[var(--cherry)]"
+                          : "border-[var(--border-cherry-soft)] bg-white text-[var(--stem)]/85"
+                      }`}
+                      onClick={() => setDictTab(id)}
+                      aria-pressed={on}
+                    >
+                      {label}
+                    </button>
+                  );
+                })}
+              </div>
+              <button
+                type="button"
+                id="dictionary-more-actions-toggle"
+                className="ms-auto flex shrink-0 items-center gap-1 rounded-lg border-2 border-[var(--border-cherry-soft)] bg-white px-2.5 py-1.5 text-xs font-extrabold text-[var(--cherry)] shadow-sm transition hover:bg-[var(--cherry-muted)] sm:gap-1.5 sm:px-3 sm:py-2 sm:text-sm"
+                aria-expanded={dictionaryMoreActionsOpen}
+                aria-controls="dictionary-more-actions"
+                onClick={() => setDictionaryMoreActionsOpen((o) => !o)}
+              >
+                {gf(gender, "עוד", "עוד")}
+                <ChevronDown
+                  className={`h-3.5 w-3.5 shrink-0 transition-transform duration-200 sm:h-4 sm:w-4 ${
+                    dictionaryMoreActionsOpen ? "rotate-180" : ""
+                  }`}
+                  aria-hidden
+                />
+              </button>
+            </div>
+            {activeLetter ? (
+              <div className="border-t border-[var(--border-cherry-soft)]/50 px-2.5 pb-2 pt-1.5 sm:px-3 sm:pb-2.5 sm:pt-2">
                 <button
-                  key={id}
                   type="button"
-                  className={`rounded-full border-2 px-3 py-2 text-sm font-extrabold transition-colors ${
-                    on
+                  className="flex min-h-[2.75rem] w-full items-center justify-center rounded-lg border-2 border-[var(--border-cherry-soft)] bg-white px-3 py-2 text-sm font-extrabold text-[var(--cherry)] shadow-sm transition hover:bg-[var(--cherry-muted)]"
+                  onClick={() => setActiveLetter(null)}
+                >
+                  ניקוי אות
+                </button>
+              </div>
+            ) : null}
+            {dictionaryMoreActionsOpen ? (
+              <div
+                id="dictionary-more-actions"
+                className="flex flex-col gap-2 border-t border-[var(--border-cherry-soft)]/60 bg-[var(--cherry-muted)]/20 px-2.5 py-2.5 sm:flex-row sm:px-3"
+              >
+                <Link
+                  href="/explorer"
+                  className="flex min-h-[2.75rem] min-w-0 flex-1 items-center justify-center rounded-xl border-2 border-[var(--border-cherry-soft)] bg-white px-2 py-2.5 text-center text-xs font-extrabold text-[var(--cherry)] shadow-sm transition hover:bg-[var(--cherry-muted)] sm:px-3 sm:text-sm"
+                >
+                  גלה מזונות
+                </Link>
+                <button
+                  type="button"
+                  className={`flex min-h-[2.75rem] min-w-0 flex-1 items-center justify-center rounded-xl border-2 px-2 py-2.5 text-center text-xs font-extrabold leading-snug shadow-sm transition sm:px-3 sm:text-sm ${
+                    exportSelectMode
                       ? "border-[var(--border-cherry-soft)] bg-cherry-faint text-[var(--cherry)]"
                       : "border-[var(--border-cherry-soft)] bg-white text-[var(--stem)]/85 hover:bg-[var(--cherry-muted)]"
                   }`}
-                  onClick={() => setDictTab(id)}
-                  aria-pressed={on}
+                  onClick={() => {
+                    setExportSelectMode((x) => !x);
+                    setExportSelectedIds(new Set());
+                    setOpenSavedId(null);
+                  }}
+                  aria-pressed={exportSelectMode}
                 >
-                  {label}
+                  {exportSelectMode ? "סיום בחירה" : "בחירה לייצוא"}
                 </button>
-              );
-            })}
-          </div>
-          {activeLetter ? (
-            <button
-              type="button"
-              className="rounded-lg border border-[var(--border-cherry-soft)] bg-white px-2.5 py-1.5 text-sm font-extrabold text-[var(--cherry)] shadow-sm"
-              onClick={() => setActiveLetter(null)}
-            >
-              ניקוי אות
-            </button>
-          ) : null}
-        </div>
-        <div className="mb-4 border-t border-[var(--border-cherry-soft)]/60 pt-3">
-          <p className="text-sm font-semibold text-[var(--stem)]/75">
-            {gf(
-              gender,
-              "א-ת — לחצי על אות לסינון",
-              "א-ת — לחץ על אות לסינון"
-            )}
-          </p>
-          <div className="mt-2 grid w-full grid-cols-11 gap-1">
-            {HEB_LETTERS.map((l) => {
-              const on = activeLetter === l;
-              return (
                 <button
-                  key={l}
                   type="button"
-                  className={`min-h-[2.5rem] rounded-lg border py-1.5 text-sm font-extrabold shadow-sm transition sm:text-base ${
-                    on
-                      ? "border-[var(--border-cherry-soft)] bg-cherry-faint text-[var(--cherry)]"
-                      : "border-[var(--border-cherry-soft)] bg-white text-[var(--stem)]/85 hover:bg-[var(--cherry-muted)]"
-                  } ${debouncedQ.length >= 2 ? "opacity-50" : ""}`}
-                  disabled={debouncedQ.length >= 2}
-                  aria-pressed={on}
-                  onClick={() => setActiveLetter(l)}
+                  className="flex min-h-[2.75rem] min-w-0 flex-1 items-center justify-center rounded-xl border-2 border-[var(--border-cherry-soft)] bg-white px-2 py-2.5 text-center text-xs font-extrabold text-[var(--stem)] shadow-sm transition hover:bg-[var(--cherry-muted)] sm:px-3 sm:text-sm"
+                  onClick={() => setExportOpen(true)}
                 >
-                  {l}
+                  ייצוא
                 </button>
-              );
-            })}
+              </div>
+            ) : null}
           </div>
+          {hebrewLetterPickerOpen ? (
+            <div
+              id="dictionary-letter-filter-grid"
+              className="mt-2 grid w-full grid-cols-11 gap-1"
+              role="group"
+              aria-label={gf(
+                gender,
+                "בחירת אות לסינון המילון",
+                "בחירת אות לסינון המילון"
+              )}
+            >
+              {HEB_LETTERS.map((l) => {
+                const on = activeLetter === l;
+                return (
+                  <button
+                    key={l}
+                    type="button"
+                    className={`min-h-[2.5rem] rounded-lg border py-1.5 text-sm font-extrabold shadow-sm transition sm:text-base ${
+                      on
+                        ? "border-[var(--border-cherry-soft)] bg-cherry-faint text-[var(--cherry)]"
+                        : "border-[var(--border-cherry-soft)] bg-white text-[var(--stem)]/85 hover:bg-[var(--cherry-muted)]"
+                    } ${debouncedQ.length >= 2 ? "opacity-50" : ""}`}
+                    disabled={debouncedQ.length >= 2}
+                    aria-pressed={on}
+                    onClick={() => setActiveLetter(l)}
+                  >
+                    {l}
+                  </button>
+                );
+              })}
+            </div>
+          ) : null}
         </div>
         {filteredSaved.length === 0 ? (
           <p className="text-[var(--text)]/85">
@@ -1573,7 +1659,7 @@ export default function DictionaryPage() {
                         aria-expanded={isOpen}
                       >
                         <span className="flex min-w-0 items-center justify-end gap-1.5">
-                          <span className="min-w-0 flex-1 break-words text-base font-extrabold leading-snug text-[var(--cherry)]">
+                          <span className="min-w-0 flex-1 break-words text-base font-normal leading-snug text-[var(--cherry)]">
                             {savedHits
                               ? renderHighlighted(
                                   d.food,
@@ -1583,7 +1669,7 @@ export default function DictionaryPage() {
                               : d.food}
                           </span>
                           <span
-                            className="shrink-0 text-xs font-bold text-[var(--stem)]/55"
+                            className="shrink-0 text-xs font-normal text-[var(--stem)]/55"
                             aria-hidden
                           >
                             {isOpen ? "▲" : "▼"}
@@ -1591,7 +1677,7 @@ export default function DictionaryPage() {
                         </span>
                       </button>
                       {isMeal && (
-                        <span className="shrink-0 rounded-md bg-[var(--cherry-muted)] px-2 py-0.5 text-xs font-semibold text-[var(--cherry)]">
+                        <span className="shrink-0 rounded-md bg-[var(--cherry-muted)] px-2 py-0.5 text-xs font-normal text-[var(--cherry)]">
                           ארוחה
                         </span>
                       )}
@@ -1611,7 +1697,7 @@ export default function DictionaryPage() {
                           title="הוספה מהירה ליומן"
                         >
                           <span
-                            className={`grid h-4 w-4 place-items-center text-[15px] font-black leading-none ${
+                            className={`grid h-4 w-4 place-items-center text-[15px] font-normal leading-none ${
                               justAddedId === `journal:${d.id}`
                                 ? "text-[var(--stem)]"
                                 : "text-[var(--cherry)]"
@@ -1666,7 +1752,7 @@ export default function DictionaryPage() {
                               {(() => {
                                 const s = sumPresetTotals(preset);
                                 return (
-                                  <p className="text-sm font-extrabold text-[var(--stem)]">
+                                  <p className="text-sm font-normal text-[var(--stem)]">
                                     סה״כ ארוחה: {Math.round(s.kcal)} קק״ל · ח{" "}
                                     {s.protein.toFixed(1)} · פחם {s.carbs.toFixed(1)} ·
                                     שומן {s.fat.toFixed(1)} ג׳
@@ -1715,7 +1801,7 @@ export default function DictionaryPage() {
                                     </p>
                                   )}
                                   {showPortionLine && (
-                                    <p className="text-xs font-semibold text-[var(--stem)]/85">
+                                    <p className="text-xs font-normal text-[var(--stem)]/85">
                                       {fromJournal ? "מנה" : "למנה"} (
                                       {d.quantity} {d.unit}
                                       {d.unit === "יחידה" &&
@@ -1757,7 +1843,12 @@ export default function DictionaryPage() {
                                   pressed={false}
                                   onClick={() => openQuantityEdit(d)}
                                 >
-                                  <SlidersHorizontal className="h-4 w-4" />
+                                  <Pencil
+                                    size={18}
+                                    strokeWidth={1.5}
+                                    className="shrink-0 text-current"
+                                    aria-hidden
+                                  />
                                 </StampAction>
                                 <StampAction
                                   label={gf(gender, "הוספה ליומן", "הוספה ליומן")}
@@ -1765,7 +1856,12 @@ export default function DictionaryPage() {
                                   pressed={false}
                                   onClick={() => openJournalAddModal(d)}
                                 >
-                                  <IconPlusCircle className="h-4 w-4" />
+                                  <Plus
+                                    size={18}
+                                    strokeWidth={1.5}
+                                    className="shrink-0 text-current"
+                                    aria-hidden
+                                  />
                                 </StampAction>
                                 <StampAction
                                   label="לקניות"
@@ -1774,9 +1870,19 @@ export default function DictionaryPage() {
                                   onClick={() => onCartDictionaryItem(d)}
                                 >
                                   {justAddedId === `shop:${d.id}` ? (
-                                    <span className="text-[12px] font-extrabold">✓</span>
+                                    <Check
+                                      size={18}
+                                      strokeWidth={1.5}
+                                      className="shrink-0 text-current"
+                                      aria-hidden
+                                    />
                                   ) : (
-                                    <IconPlusCircle className="h-4 w-4" />
+                                    <ShoppingCart
+                                      size={18}
+                                      strokeWidth={1.5}
+                                      className="shrink-0 text-current"
+                                      aria-hidden
+                                    />
                                   )}
                                 </StampAction>
                               </>
@@ -1788,9 +1894,19 @@ export default function DictionaryPage() {
                                 onClick={() => applyPreset(preset)}
                               >
                                 {justAddedId === `journal:meal:${preset.id}` ? (
-                                  <span className="text-[12px] font-extrabold">✓</span>
+                                  <Check
+                                    size={18}
+                                    strokeWidth={1.5}
+                                    className="shrink-0 text-current"
+                                    aria-hidden
+                                  />
                                 ) : (
-                                  <IconPlusCircle className="h-4 w-4" />
+                                  <Plus
+                                    size={18}
+                                    strokeWidth={1.5}
+                                    className="shrink-0 text-current"
+                                    aria-hidden
+                                  />
                                 )}
                               </StampAction>
                             ) : null}
