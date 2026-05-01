@@ -24,6 +24,7 @@ import {
   type ExerciseActivityDay,
 } from "@/lib/exerciseActivity";
 import {
+  applyJournalFoodDisplayRename,
   type FoodUnit,
   type LogEntry,
   type MealPresetComponent,
@@ -32,6 +33,7 @@ import {
   type UserProfile,
   getJournalStreakDays,
   isFoodStarred,
+  loadDayLogs,
   loadDayJournalClosedMap,
   loadWeightSkipDayKey,
   loadWeights,
@@ -51,11 +53,15 @@ import {
   homeJournalIntroBody,
   homeJournalIntroTitle,
 } from "@/lib/hebrewGenderUi";
-import { optionalMacroGram, sumMacroGrams } from "@/lib/macroGrams";
+import {
+  formatMacroGramAmount,
+  formatMacroGramWithUnit,
+  optionalMacroGram,
+  sumMacroGrams,
+} from "@/lib/macroGrams";
 import { dailyCalorieTarget } from "@/lib/tdee";
 import { weeklyCalorieSavingsClosedDays } from "@/lib/weeklyCalorieSavings";
 import { useDocumentScrollOnlyIfOverflowing } from "@/lib/useDocumentScrollOnlyIfOverflowing";
-import { loadDayLogs } from "@/lib/storage";
 import { CelebrationConfetti } from "./Fireworks";
 import { useAppVariant } from "./useAppVariant";
 import { QuickWeightModal } from "./QuickWeightModal";
@@ -122,8 +128,7 @@ function formatEntryTime(iso: string): string {
 }
 
 function formatMacroCell(n: number | undefined): string {
-  if (n == null || !Number.isFinite(n)) return "—";
-  return `${Math.round(n)} ג׳`;
+  return formatMacroGramWithUnit(n);
 }
 
 function formatQtyLabel(q: number, u: FoodUnit): string {
@@ -467,6 +472,11 @@ export function HomeClient({ mode = "dashboard" }: { mode?: "dashboard" | "journ
   const [mealCtaEntryId, setMealCtaEntryId] = useState<string | null>(null);
   const [journalInfoOpen, setJournalInfoOpen] = useState(false);
   const [journalExpandedId, setJournalExpandedId] = useState<string | null>(null);
+  const [journalFoodNameEditId, setJournalFoodNameEditId] = useState<
+    string | null
+  >(null);
+  const [journalFoodNameDraft, setJournalFoodNameDraft] = useState("");
+  const journalFoodNameInputRef = useRef<HTMLInputElement>(null);
 
   const datePickerRef = useRef<HTMLInputElement | null>(null);
   const [journalTransitionDir, setJournalTransitionDir] = useState(0);
@@ -632,15 +642,15 @@ export function HomeClient({ mode = "dashboard" }: { mode?: "dashboard" | "journ
 
   const remainingKcal = useMemo(() => Math.round(target - total), [target, total]);
   const remainingProteinG = useMemo(
-    () => Math.round(macroGoals.proteinG - totalProteinG),
+    () => Math.round((macroGoals.proteinG - totalProteinG) * 10) / 10,
     [macroGoals.proteinG, totalProteinG]
   );
   const remainingCarbsG = useMemo(
-    () => Math.round(macroGoals.carbsG - totalCarbsG),
+    () => Math.round((macroGoals.carbsG - totalCarbsG) * 10) / 10,
     [macroGoals.carbsG, totalCarbsG]
   );
   const remainingFatG = useMemo(
-    () => Math.round(macroGoals.fatG - totalFatG),
+    () => Math.round((macroGoals.fatG - totalFatG) * 10) / 10,
     [macroGoals.fatG, totalFatG]
   );
 
@@ -960,6 +970,53 @@ export function HomeClient({ mode = "dashboard" }: { mode?: "dashboard" | "journ
     saveDayLogEntries(viewDateKey, next);
     setEntries(next);
   }, [viewDateKey]);
+
+  useEffect(() => {
+    if (!journalFoodNameEditId) return;
+    const tid = window.setTimeout(
+      () => journalFoodNameInputRef.current?.focus(),
+      50
+    );
+    return () => window.clearTimeout(tid);
+  }, [journalFoodNameEditId]);
+
+  useEffect(() => {
+    if (!journalFoodNameEditId) return;
+    if (journalExpandedId !== journalFoodNameEditId) {
+      setJournalFoodNameEditId(null);
+      setJournalFoodNameDraft("");
+    }
+  }, [journalExpandedId, journalFoodNameEditId]);
+
+  useEffect(() => {
+    if (isDayClosed && journalFoodNameEditId) {
+      setJournalFoodNameEditId(null);
+      setJournalFoodNameDraft("");
+    }
+  }, [isDayClosed, journalFoodNameEditId]);
+
+  function cancelJournalFoodNameEdit() {
+    setJournalFoodNameEditId(null);
+    setJournalFoodNameDraft("");
+  }
+
+  function saveJournalFoodNameEdit() {
+    if (!journalFoodNameEditId || isDayClosed) return;
+    const name = journalFoodNameDraft.trim();
+    if (!name) return;
+    if (
+      !applyJournalFoodDisplayRename(
+        viewDateKey,
+        journalFoodNameEditId,
+        name
+      )
+    ) {
+      return;
+    }
+    cancelJournalFoodNameEdit();
+    setEntries(getEntriesForDate(viewDateKey));
+    setDictTick((t) => t + 1);
+  }
 
   useEffect(() => {
     setEntries(getEntriesForDate(viewDateKey));
@@ -1296,7 +1353,9 @@ export function HomeClient({ mode = "dashboard" }: { mode?: "dashboard" | "journ
               >
                 עריכת כמות
               </h2>
-              <p className="text-sm text-[var(--text)]/90">{editEntry.food}</p>
+              <p className="text-sm text-[var(--text)]/90">
+                <span className="bidi-isolate-rtl">{editEntry.food}</span>
+              </p>
               <div className="flex flex-wrap gap-3">
                 <label className="min-w-[6rem] flex-1">
                   <span className="mb-1 block text-xs font-semibold text-[var(--text)]">
@@ -1526,7 +1585,8 @@ export function HomeClient({ mode = "dashboard" }: { mode?: "dashboard" | "journ
                   {label}
                 </p>
                 <p className="mt-0.5 text-center text-[13px] font-bold tabular-nums leading-tight text-[var(--stem)] sm:mt-1 sm:text-base">
-                  {Math.round(consumed)}ג/{Math.round(goal)}ג
+                  {formatMacroGramAmount(consumed)}ג/
+                  {formatMacroGramAmount(goal)}ג
                 </p>
                 <div className="mt-2 h-1 overflow-hidden rounded-full bg-[#f0f0f0] sm:mt-4 sm:h-2.5">
                   <div
@@ -2001,20 +2061,126 @@ export function HomeClient({ mode = "dashboard" }: { mode?: "dashboard" | "journ
                     flex-col — כותרת ומאקרו ברוחב מלא; פס פעולות אופקי למטה בלבד.
                   */}
                   <div className="flex min-w-0 w-full flex-col gap-2">
-                    <button
-                      type="button"
-                      className="w-full max-w-full text-start"
-                      onClick={() => setJournalExpandedId((x) => (x === item.id ? null : item.id))}
-                      aria-expanded={isExpanded}
-                    >
-                      <span className="flex w-full max-w-full items-start justify-between gap-2">
-                        <span className="min-w-0 flex-1">
-                          <span className="flex min-w-0 items-start gap-2">
-                            <span className="mt-0.5 text-xs" aria-hidden>
-                              🍒
+                    {journalFoodNameEditId === item.id && !isDayClosed ? (
+                      <div
+                        className="flex min-w-0 w-full flex-col gap-2 sm:flex-row sm:items-center"
+                        dir="rtl"
+                      >
+                        <span
+                          className="mt-0.5 shrink-0 text-xs self-start sm:mt-1"
+                          aria-hidden
+                        >
+                          🍒
+                        </span>
+                        <input
+                          ref={journalFoodNameInputRef}
+                          type="text"
+                          value={journalFoodNameDraft}
+                          onChange={(e) => setJournalFoodNameDraft(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === "Escape") cancelJournalFoodNameEdit();
+                            if (e.key === "Enter") saveJournalFoodNameEdit();
+                          }}
+                          className="min-w-0 flex-1 rounded-lg border-2 border-[var(--border-cherry-soft)] bg-white px-2.5 py-1.5 text-base font-normal text-[var(--stem)] shadow-sm outline-none focus:ring-2 focus:ring-[var(--stem)]/25"
+                          aria-label={gf(
+                            gender,
+                            "שם להצגה ביומן",
+                            "שם להצגה ביומן"
+                          )}
+                        />
+                        <div className="flex shrink-0 items-center justify-end gap-1.5">
+                          <button
+                            type="button"
+                            className="rounded-lg border-2 border-[var(--border-cherry-soft)] bg-white px-3 py-1.5 text-xs font-extrabold text-[var(--stem)] shadow-sm transition hover:bg-[var(--cherry-muted)]"
+                            onClick={(e) => {
+                              e.preventDefault();
+                              e.stopPropagation();
+                              saveJournalFoodNameEdit();
+                            }}
+                          >
+                            {gf(gender, "שמור", "שמור")}
+                          </button>
+                          <button
+                            type="button"
+                            className="rounded-lg border-2 border-[var(--border-cherry-soft)] bg-white px-3 py-1.5 text-xs font-extrabold text-[var(--text)]/80 shadow-sm transition hover:bg-[var(--cherry-muted)]"
+                            onClick={(e) => {
+                              e.preventDefault();
+                              e.stopPropagation();
+                              cancelJournalFoodNameEdit();
+                            }}
+                          >
+                            {gf(gender, "ביטול", "ביטול")}
+                          </button>
+                        </div>
+                      </div>
+                    ) : !isExpanded ? (
+                      <button
+                        type="button"
+                        className="w-full max-w-full text-start"
+                        onClick={() =>
+                          setJournalExpandedId((x) =>
+                            x === item.id ? null : item.id
+                          )
+                        }
+                        aria-expanded={false}
+                        title={gf(
+                          gender,
+                          "פתיחת פרטי המנה",
+                          "פתיחת פרטי המנה"
+                        )}
+                      >
+                        <span className="flex w-full max-w-full items-start justify-between gap-2">
+                          <span className="min-w-0 flex-1">
+                            <span className="flex min-w-0 items-start gap-2">
+                              <span className="mt-0.5 text-xs" aria-hidden>
+                                🍒
+                              </span>
+                              <span
+                                className={`bidi-isolate-rtl min-w-0 flex-1 break-words font-extrabold leading-snug text-[var(--stem)] ${
+                                  isJournalMode
+                                    ? "text-lg sm:text-xl"
+                                    : "text-base"
+                                }`}
+                              >
+                                {item.food}
+                              </span>
                             </span>
+                          </span>
+                          <span className="shrink-0 pt-0.5 text-xs font-bold text-[var(--stem)]/55">
+                            ▼
+                          </span>
+                        </span>
+                      </button>
+                    ) : (
+                      <div className="flex w-full max-w-full items-start gap-2">
+                        <span className="mt-0.5 shrink-0 text-xs" aria-hidden>
+                          🍒
+                        </span>
+                        <div className="flex min-w-0 flex-1 items-start gap-1">
+                          <button
+                            type="button"
+                            disabled={isDayClosed}
+                            className="min-w-0 flex-1 rounded-md px-1 py-0.5 text-start transition hover:bg-[var(--cherry-muted)]/45 disabled:opacity-50"
+                            onClick={(e) => {
+                              e.preventDefault();
+                              e.stopPropagation();
+                              if (isDayClosed) return;
+                              setJournalFoodNameEditId(item.id);
+                              setJournalFoodNameDraft(item.food);
+                            }}
+                            title={gf(
+                              gender,
+                              "לחצי לעריכת השם (כרטיס פתוח)",
+                              "לחץ לעריכת השם (כרטיס פתוח)"
+                            )}
+                            aria-label={gf(
+                              gender,
+                              "עריכת שם להצגה",
+                              "עריכת שם להצגה"
+                            )}
+                          >
                             <span
-                              className={`min-w-0 flex-1 break-words font-extrabold leading-snug text-[var(--stem)] ${
+                              className={`bidi-isolate-rtl block min-w-0 break-words font-extrabold leading-snug text-[var(--stem)] ${
                                 isJournalMode
                                   ? "text-lg sm:text-xl"
                                   : "text-base"
@@ -2022,13 +2188,30 @@ export function HomeClient({ mode = "dashboard" }: { mode?: "dashboard" | "journ
                             >
                               {item.food}
                             </span>
-                          </span>
-                        </span>
-                        <span className="shrink-0 pt-0.5 text-xs font-bold text-[var(--stem)]/55">
-                          {isExpanded ? "▲" : "▼"}
-                        </span>
-                      </span>
-                    </button>
+                          </button>
+                          <button
+                            type="button"
+                            className="shrink-0 rounded-md p-1 pt-0.5 text-xs font-bold text-[var(--stem)]/55 transition hover:bg-[var(--cherry-muted)]/40"
+                            onClick={(e) => {
+                              e.preventDefault();
+                              e.stopPropagation();
+                              setJournalExpandedId((x) =>
+                                x === item.id ? null : x
+                              );
+                            }}
+                            aria-expanded={true}
+                            aria-label={gf(
+                              gender,
+                              "סגירת פרטים",
+                              "סגירת פרטים"
+                            )}
+                            title={gf(gender, "סגירה", "סגירה")}
+                          >
+                            <span aria-hidden>▲</span>
+                          </button>
+                        </div>
+                      </div>
+                    )}
 
                     <p className="w-full text-sm text-[var(--text)]/80">
                       <span className="inline-flex items-center gap-1.5">
@@ -2042,8 +2225,13 @@ export function HomeClient({ mode = "dashboard" }: { mode?: "dashboard" | "journ
                         />
                         <span className="text-[var(--text)]/55">·</span>
                       </span>
-                      {formatQtyLabel(item.quantity, item.unit)} {item.unit} ·{" "}
-                      {item.calories} קק״ל
+                      <span className="bidi-isolate-rtl inline-block">
+                        {formatQtyLabel(item.quantity, item.unit)} {item.unit}
+                      </span>
+                      {" · "}
+                      <span className="bidi-isolate-rtl inline-block">
+                        {item.calories} קק״ל
+                      </span>
                     </p>
                     <AnimatePresence>
                       {isExpanded && (

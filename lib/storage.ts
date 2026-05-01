@@ -688,13 +688,31 @@ function syncMealPresetsIntoDictionary(dict: DictionaryItem[]): DictionaryItem[]
   const additions: DictionaryItem[] = [];
   for (const p of presets) {
     if (linked.has(p.id)) continue;
-    const totalKcal = p.components.reduce((s, c) => s + c.calories, 0);
+    const sumCalories = p.components.reduce(
+      (s, c) => s + (Number.isFinite(c.calories) ? c.calories : 0),
+      0
+    );
+    const sumProtein = p.components.reduce(
+      (s, c) => s + (Number.isFinite(c.proteinG) ? (c.proteinG ?? 0) : 0),
+      0
+    );
+    const sumCarbs = p.components.reduce(
+      (s, c) => s + (Number.isFinite(c.carbsG) ? (c.carbsG ?? 0) : 0),
+      0
+    );
+    const sumFat = p.components.reduce(
+      (s, c) => s + (Number.isFinite(c.fatG) ? (c.fatG ?? 0) : 0),
+      0
+    );
     additions.push({
       id: makeId(),
       food: p.name,
       quantity: 1,
       unit: "יחידה",
-      lastCalories: totalKcal,
+      lastCalories: sumCalories,
+      ...(sumProtein > 0 ? { lastProteinG: Math.round(sumProtein * 10) / 10 } : {}),
+      ...(sumCarbs > 0 ? { lastCarbsG: Math.round(sumCarbs * 10) / 10 } : {}),
+      ...(sumFat > 0 ? { lastFatG: Math.round(sumFat * 10) / 10 } : {}),
       mealPresetId: p.id,
       source: "meal-preset",
     });
@@ -819,6 +837,191 @@ export function removeDictionaryItem(id: string): DictionaryItem[] {
   return next;
 }
 
+/** ימים אחורה מהיום — רשומות יומן עם אותו preset יקבלו שם חדש (לא מעדכן חודשים אחורה) */
+const MEAL_PRESET_JOURNAL_NAME_SYNC_DAYS_BACK = 7;
+
+function rekeyFoodMemoryIfRenamed(oldName: string, newName: string): void {
+  if (typeof window === "undefined") return;
+  const mem = loadFoodMemory();
+  const o = normalizeFoodKey(oldName);
+  const n = normalizeFoodKey(newName.trim());
+  if (o === n) return;
+  if (mem[o] == null) return;
+  const copy = { ...mem };
+  copy[n] = copy[o]!;
+  delete copy[o];
+  localStorage.setItem(KEYS.foodMemory, JSON.stringify(copy));
+}
+
+/**
+ * מסנכרן את תצוגת שם הארוחה ברשומות יומן שמקושרות ל־meal preset (aiBreakdownJson).
+ * רק תאריכים מ־cutoff ואילך (ברירת מחדל: שבוע אחורה מהיום + כל מה שאחרי).
+ */
+export function syncJournalEntriesMealPresetName(
+  presetId: string,
+  newDisplayName: string,
+  opts?: { daysBack?: number }
+): void {
+  if (typeof window === "undefined") return;
+  const trimmed = newDisplayName.trim();
+  if (!trimmed || !presetId) return;
+  const daysBack = opts?.daysBack ?? MEAL_PRESET_JOURNAL_NAME_SYNC_DAYS_BACK;
+  const today = getTodayKey();
+  const cutoff = addDaysToDateKey(today, -daysBack);
+
+  const all = loadDayLogs();
+  for (const [dateKey, entries] of Object.entries(all)) {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(dateKey)) continue;
+    if (dateKey < cutoff) continue;
+
+    let changed = false;
+    const next = entries.map((e) => {
+      if (!e.aiBreakdownJson) return e;
+      try {
+        const j = JSON.parse(e.aiBreakdownJson) as {
+          type?: string;
+          presetId?: string;
+          name?: string;
+          components?: unknown;
+        };
+        if (j.type !== "meal-preset" || j.presetId !== presetId) return e;
+        const nextJson = JSON.stringify({
+          ...j,
+          name: trimmed,
+        });
+        if (e.food === trimmed && e.aiBreakdownJson === nextJson) return e;
+        changed = true;
+        return {
+          ...e,
+          food: trimmed,
+          aiBreakdownJson: nextJson,
+        };
+      } catch {
+        return e;
+      }
+    });
+
+    if (changed) {
+      saveDayLogEntries(dateKey, next);
+    }
+  }
+}
+
+/** מזהה preset מהיומן — רק לסוג meal-preset ב-aiBreakdownJson */
+export function getMealPresetIdFromJournalEntry(e: LogEntry): string | null {
+  if (typeof e.aiBreakdownJson !== "string" || !e.aiBreakdownJson.trim()) {
+    return null;
+  }
+  try {
+    const j = JSON.parse(e.aiBreakdownJson) as {
+      type?: string;
+      presetId?: string;
+    };
+    if (
+      j?.type === "meal-preset" &&
+      typeof j.presetId === "string" &&
+      j.presetId.length > 0
+    ) {
+      return j.presetId;
+    }
+  } catch {
+    /* ignore */
+  }
+  return null;
+}
+
+function journalEntryIsMealPresetRow(e: LogEntry): boolean {
+  return getMealPresetIdFromJournalEntry(e) != null;
+}
+
+/**
+ * רשומות יומן רגילות (לא ארוחת preset) עם אותו שם תצוגה — בתוך טווח התאריכים.
+ */
+export function syncJournalEntriesPlainFoodName(
+  oldName: string,
+  newDisplayName: string,
+  opts?: { daysBack?: number }
+): void {
+  if (typeof window === "undefined") return;
+  const trimmed = newDisplayName.trim();
+  if (!trimmed) return;
+  const oldK = normalizeFoodKey(oldName);
+  const daysBack = opts?.daysBack ?? MEAL_PRESET_JOURNAL_NAME_SYNC_DAYS_BACK;
+  const cutoff = addDaysToDateKey(getTodayKey(), -daysBack);
+
+  const all = loadDayLogs();
+  for (const [dateKey, entries] of Object.entries(all)) {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(dateKey)) continue;
+    if (dateKey < cutoff) continue;
+
+    let changed = false;
+    const next = entries.map((e) => {
+      if (journalEntryIsMealPresetRow(e)) return e;
+      if (normalizeFoodKey(e.food) !== oldK) return e;
+      if (e.food.trim() === trimmed) return e;
+      changed = true;
+      return { ...e, food: trimmed };
+    });
+
+    if (changed) {
+      saveDayLogEntries(dateKey, next);
+    }
+  }
+}
+
+/**
+ * שינוי שם תצוגה מהיומן — מסנכרן מילון + שאר היומן (אותם כללי טווח כמו במילון).
+ */
+export function applyJournalFoodDisplayRename(
+  dateKey: string,
+  entryId: string,
+  newDisplayName: string
+): boolean {
+  if (typeof window === "undefined") return false;
+  const trimmed = newDisplayName.trim();
+  if (!trimmed) return false;
+  const list = getEntriesForDate(dateKey);
+  const entry = list.find((e) => e.id === entryId);
+  if (!entry) return false;
+  if (entry.food.trim() === trimmed) return true;
+
+  const oldName = entry.food;
+  const presetId = getMealPresetIdFromJournalEntry(entry);
+
+  if (presetId) {
+    const dict = loadDictionary();
+    const row = dict.find((d) => d.mealPresetId === presetId);
+    if (row) {
+      patchDictionaryItemById(row.id, { food: trimmed });
+    } else {
+      const presets = loadMealPresets();
+      const pi = presets.findIndex((p) => p.id === presetId);
+      if (pi >= 0) {
+        const updated = [...presets];
+        updated[pi] = { ...updated[pi]!, name: trimmed };
+        saveMealPresets(updated);
+      }
+      syncJournalEntriesMealPresetName(presetId, trimmed);
+      rekeyFoodMemoryIfRenamed(oldName, trimmed);
+    }
+    return true;
+  }
+
+  const dict = loadDictionary();
+  const row = dict.find(
+    (d) =>
+      !d.mealPresetId &&
+      normalizeFoodKey(d.food) === normalizeFoodKey(oldName)
+  );
+  if (row) {
+    patchDictionaryItemById(row.id, { food: trimmed });
+  } else {
+    syncJournalEntriesPlainFoodName(oldName, trimmed);
+    rekeyFoodMemoryIfRenamed(oldName, trimmed);
+  }
+  return true;
+}
+
 /** עדכון שדות בפריט מילון לפי מזהה (שומר id ושדות מטא שלא עודכנו) */
 export function patchDictionaryItemById(
   id: string,
@@ -864,12 +1067,23 @@ export function patchDictionaryItemById(
   items[idx] = next;
   saveDictionary(items);
   if (next.mealPresetId && typeof patch.food === "string" && patch.food.trim()) {
+    const nm = patch.food.trim();
     const presets = loadMealPresets();
     const pi = presets.findIndex((mp) => mp.id === next.mealPresetId);
     if (pi >= 0) {
       const updated = [...presets];
-      updated[pi] = { ...updated[pi]!, name: patch.food.trim() };
+      updated[pi] = { ...updated[pi]!, name: nm };
       saveMealPresets(updated);
+    }
+    if (prev.food.trim() !== nm) {
+      syncJournalEntriesMealPresetName(next.mealPresetId, nm);
+      rekeyFoodMemoryIfRenamed(prev.food, nm);
+    }
+  } else if (!next.mealPresetId && typeof patch.food === "string" && patch.food.trim()) {
+    const nm = patch.food.trim();
+    if (prev.food.trim() !== nm) {
+      syncJournalEntriesPlainFoodName(prev.food, nm);
+      rekeyFoodMemoryIfRenamed(prev.food, nm);
     }
   }
   return items;
