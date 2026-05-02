@@ -1954,37 +1954,38 @@ export default function DictionaryPage() {
                             <>
                               <ul className="space-y-1 text-sm text-[var(--text)]/90">
                                 {preset.components.map((c, i) => (
-                                  <li key={`${d.id}-c-${i}`}>
-                                    <span className="font-bold text-neutral-900">
-                                      מנה
-                                    </span>
-                                    {" · "}
-                                    <span className="bidi-isolate-rtl inline-block font-semibold text-[var(--cherry)]">
-                                      {c.food}
-                                    </span>
-                                    {" — "}
-                                    <span className="bidi-isolate-rtl inline-block font-bold text-neutral-900">
-                                      {c.quantity} {c.unit}
-                                    </span>
-                                    {" ("}
-                                    <span className="bidi-isolate-rtl inline-block font-bold text-neutral-900">
-                                      {Math.round(c.calories)} קק״ל
-                                    </span>
-                                    {")"}
-                                    <span className="text-[var(--stem)]/75">
+                                  <li key={`${d.id}-c-${i}`} className="leading-snug">
+                                    <div className="text-sm text-[var(--text)]/90">
+                                      <span className="font-bold text-neutral-900">
+                                        מנה
+                                      </span>
+                                      {" · "}
+                                      <span className="bidi-isolate-rtl inline-block font-semibold text-[var(--cherry)]">
+                                        {c.food}
+                                      </span>
+                                      {" — "}
+                                      <span className="bidi-isolate-rtl inline-block font-bold text-neutral-900">
+                                        {c.quantity} {c.unit}
+                                      </span>
+                                      {" ("}
+                                      <span className="bidi-isolate-rtl inline-block font-bold text-neutral-900">
+                                        {Math.round(c.calories)} קק״ל
+                                      </span>
+                                      {")"}
+                                    </div>
+                                    <div className="mt-0.5 text-xs text-[var(--stem)]/75">
                                       <span className={DICT_CARD_MACRO_P}>
-                                        {" "}
-                                        · חלבון {fmtMacroG(c.proteinG)} ג׳
+                                        חלבון {fmtMacroG(c.proteinG)} ג׳
                                       </span>
                                       <span className={DICT_CARD_MACRO_C}>
-                                        {" "}
-                                        · פחמימות {fmtMacroG(c.carbsG)} ג׳
+                                        {" · "}
+                                        פחמימות {fmtMacroG(c.carbsG)} ג׳
                                       </span>
                                       <span className={DICT_CARD_MACRO_F}>
-                                        {" "}
-                                        · שומן {fmtMacroG(c.fatG)} ג׳
+                                        {" · "}
+                                        שומן {fmtMacroG(c.fatG)} ג׳
                                       </span>
-                                    </span>
+                                    </div>
                                   </li>
                                 ))}
                               </ul>
@@ -2033,10 +2034,10 @@ export default function DictionaryPage() {
                               const showPortionLine =
                                 hasPortion && (fromJournal || !redundant);
 
-                              return (
-                                <>
-                                  {showPer100 && (
-                                    <p className="text-xs text-[var(--text)]/70">
+                              return showPer100 || showPortionLine ? (
+                                <p className="text-xs font-normal leading-snug text-[var(--stem)]/85">
+                                  {showPer100 ? (
+                                    <span className="text-[var(--text)]/70">
                                       <span className="bidi-isolate-rtl inline-block font-bold text-neutral-900">
                                         ל־100 גרם:{" "}
                                         {Math.round(d.caloriesPer100g!)} קק״ל
@@ -2062,10 +2063,16 @@ export default function DictionaryPage() {
                                           </>
                                         )}
                                       {d.barcode ? ` · ברקוד ${d.barcode}` : ""}
-                                    </p>
-                                  )}
-                                  {showPortionLine && (
-                                    <p className="text-xs font-normal text-[var(--stem)]/85">
+                                    </span>
+                                  ) : null}
+                                  {showPer100 && showPortionLine ? (
+                                    <span className="text-[var(--stem)]/40" aria-hidden>
+                                      {" "}
+                                      ·{" "}
+                                    </span>
+                                  ) : null}
+                                  {showPortionLine ? (
+                                    <>
                                       {fromJournal ? "מנה" : "למנה"} (
                                       <span className="bidi-isolate-rtl inline-block font-bold text-neutral-900">
                                         {d.quantity} {d.unit}
@@ -2099,10 +2106,10 @@ export default function DictionaryPage() {
                                           </span>
                                         </>
                                       ) : null}
-                                    </p>
-                                  )}
-                                </>
-                              );
+                                    </>
+                                  ) : null}
+                                </p>
+                              ) : null;
                             })()}
 
                           <div className="mt-2 flex w-full max-w-full flex-wrap items-center justify-center gap-2 border-t border-[var(--border-cherry-soft)]/60 bg-gradient-to-b from-[var(--cherry-muted)]/35 to-transparent px-1 py-2.5 sm:gap-3">

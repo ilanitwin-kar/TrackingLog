@@ -126,6 +126,14 @@ function formatMacroCell(n: number | undefined): string {
   return formatMacroGramWithUnit(n);
 }
 
+/** יתרת מאקרו בכותרת היומן — כולל שלילי כשחורגים מהיעד */
+function formatJournalRemainingMacroG(n: number): string {
+  if (!Number.isFinite(n)) return "—";
+  const v = Math.round(n * 10) / 10;
+  const s = Number.isInteger(v) ? String(v) : v.toFixed(1);
+  return `${s}ג׳`;
+}
+
 function formatQtyLabel(q: number, u: FoodUnit): string {
   if (u === "גרם") return String(Math.round(q));
   if (approxEq(q, 0.25)) return "רבע";
@@ -567,13 +575,13 @@ export function HomeClient({ mode = "dashboard" }: { mode?: "dashboard" | "journ
     if (Math.abs(offset.y) > Math.abs(offset.x) * 1.25) return;
     const threshold = 48;
     const vThresh = 380;
-    // מסך בעברית: החלקה שמאלה = עתיד (יום קדימה), החלקה ימינה = עבר (יום אחורה)
-    // ב-framer: offset.x שלילי = גרירה שמאלה, חיובי = גרירה ימינה
-    if (offset.x < -threshold || velocity.x < -vThresh) {
+    // קבוע לפי המשתמשת: החלקה ימינה = עתיד (+יום), החלקה שמאלה = עבר (−יום).
+    // ב-framer: offset.x חיובי = תזוזה ימינה, שלילי = שמאלה.
+    if (offset.x > threshold || velocity.x > vThresh) {
       if (canGoNextDay) navigateToDate(addDaysToDateKey(viewDateKey, 1));
       return;
     }
-    if (offset.x > threshold || velocity.x > vThresh) {
+    if (offset.x < -threshold || velocity.x < -vThresh) {
       navigateToDate(addDaysToDateKey(viewDateKey, -1));
     }
   }
@@ -1794,7 +1802,7 @@ export function HomeClient({ mode = "dashboard" }: { mode?: "dashboard" | "journ
                       canGoNextDay && navigateToDate(addDaysToDateKey(viewDateKey, 1))
                     }
                     disabled={!canGoNextDay}
-                    aria-label="יום הבא — לכיוון העתיד (שמאל)"
+                    aria-label="יום הבא — עתיד"
                   >
                     ‹
                   </button>
@@ -1827,50 +1835,63 @@ export function HomeClient({ mode = "dashboard" }: { mode?: "dashboard" | "journ
                     type="button"
                     className="flex h-9 w-full items-center justify-center rounded-lg text-lg leading-none text-[var(--stem)]/70 transition hover:bg-[var(--cherry-muted)]/35 active:bg-[var(--cherry-muted)]/45 sm:h-10 sm:text-xl"
                     onClick={() => navigateToDate(addDaysToDateKey(viewDateKey, -1))}
-                    aria-label="יום קודם — לכיוון העבר (ימין)"
+                    aria-label="יום קודם — עבר"
                   >
                     ›
                   </button>
                 </div>
               </div>
 
-              {/* שורה 2 — קלוריות דובדבן; מאקרו בצבעי הסיכום כמו בפריטים */}
+              {/* שורה 2 — יתרה יומית: רשת בשורה אחת; רקעים כמו פילים המקוריים */}
               <div className="border-t border-[var(--border-cherry-soft)]/30 px-2 py-2.5 sm:px-3 sm:py-3">
                 <div
-                  className="flex flex-wrap items-center justify-center gap-2 sm:justify-between sm:gap-2.5"
+                  className="mx-auto grid w-full max-w-xl grid-cols-4 gap-1.5 sm:gap-2"
                   dir="rtl"
                 >
-                  <span
-                    dir="rtl"
-                    className="inline-flex min-h-[2.35rem] items-center gap-1 whitespace-nowrap rounded-full border border-[var(--cherry)]/35 bg-[var(--cherry-muted)]/18 px-3 py-1 text-sm font-extrabold tabular-nums text-[var(--cherry)] shadow-[0_1px_2px_rgba(0,0,0,0.04)] sm:min-h-10 sm:px-3.5 sm:text-[0.95rem]"
-                  >
-                    <span>{remainingKcal}</span>
-                    <span>קק״ל</span>
-                  </span>
-                  <span
-                    dir="rtl"
-                    className="inline-flex min-h-[2.35rem] items-center gap-1 whitespace-nowrap rounded-full border border-[#F5C518]/50 bg-[#FFFBEB] px-3 py-1 text-sm font-semibold tabular-nums text-[#CA8A04] shadow-[0_1px_2px_rgba(0,0,0,0.04)] sm:min-h-10 sm:px-3.5 sm:text-[0.95rem]"
-                  >
-                    <span>{remainingProteinG}</span>
-                    <span>ג׳</span>
-                    <span>חלבון</span>
-                  </span>
-                  <span
-                    dir="rtl"
-                    className="inline-flex min-h-[2.35rem] items-center gap-1 whitespace-nowrap rounded-full border border-[#3B82F6]/40 bg-[#EFF6FF] px-3 py-1 text-sm font-semibold tabular-nums text-[#2563EB] shadow-[0_1px_2px_rgba(0,0,0,0.04)] sm:min-h-10 sm:px-3.5 sm:text-[0.95rem]"
-                  >
-                    <span>{remainingCarbsG}</span>
-                    <span>ג׳</span>
-                    <span>פחמימה</span>
-                  </span>
-                  <span
-                    dir="rtl"
-                    className="inline-flex min-h-[2.35rem] items-center gap-1 whitespace-nowrap rounded-full border border-[#22C55E]/40 bg-[#F0FDF4] px-3 py-1 text-sm font-semibold tabular-nums text-[#16A34A] shadow-[0_1px_2px_rgba(0,0,0,0.04)] sm:min-h-10 sm:px-3.5 sm:text-[0.95rem]"
-                  >
-                    <span>{remainingFatG}</span>
-                    <span>ג׳</span>
-                    <span>שומן</span>
-                  </span>
+                  <div className="flex min-w-0 flex-col rounded-xl border border-[var(--cherry)]/35 bg-[var(--cherry-muted)]/18 px-1.5 py-2 text-center shadow-[0_1px_2px_rgba(0,0,0,0.04)] sm:rounded-2xl sm:px-2.5 sm:py-2.5">
+                    <p className="text-xs font-semibold leading-snug text-[var(--cherry)] sm:text-sm">
+                      קק״ל
+                    </p>
+                    <p
+                      className="mt-1 text-sm font-extrabold tabular-nums leading-tight text-[var(--cherry)] sm:text-[0.95rem]"
+                      aria-label={`קלוריות נותרו ${remainingKcal}`}
+                    >
+                      {remainingKcal}
+                    </p>
+                  </div>
+                  <div className="flex min-w-0 flex-col rounded-xl border border-[#F5C518]/50 bg-[#FFFBEB] px-1.5 py-2 text-center shadow-[0_1px_2px_rgba(0,0,0,0.04)] sm:rounded-2xl sm:px-2.5 sm:py-2.5">
+                    <p className="text-xs font-semibold leading-snug text-[#CA8A04] sm:text-sm">
+                      חלבון
+                    </p>
+                    <p
+                      className="mt-1 text-sm font-semibold tabular-nums leading-tight text-[#CA8A04] sm:text-[0.95rem]"
+                      aria-label={`חלבון נותר ${formatJournalRemainingMacroG(remainingProteinG)}`}
+                    >
+                      {formatJournalRemainingMacroG(remainingProteinG)}
+                    </p>
+                  </div>
+                  <div className="flex min-w-0 flex-col rounded-xl border border-[#3B82F6]/40 bg-[#EFF6FF] px-1.5 py-2 text-center shadow-[0_1px_2px_rgba(0,0,0,0.04)] sm:rounded-2xl sm:px-2.5 sm:py-2.5">
+                    <p className="text-xs font-semibold leading-snug text-[#2563EB] sm:text-sm">
+                      פחמימה
+                    </p>
+                    <p
+                      className="mt-1 text-sm font-semibold tabular-nums leading-tight text-[#2563EB] sm:text-[0.95rem]"
+                      aria-label={`פחמימה נותרה ${formatJournalRemainingMacroG(remainingCarbsG)}`}
+                    >
+                      {formatJournalRemainingMacroG(remainingCarbsG)}
+                    </p>
+                  </div>
+                  <div className="flex min-w-0 flex-col rounded-xl border border-[#22C55E]/40 bg-[#F0FDF4] px-1.5 py-2 text-center shadow-[0_1px_2px_rgba(0,0,0,0.04)] sm:rounded-2xl sm:px-2.5 sm:py-2.5">
+                    <p className="text-xs font-semibold leading-snug text-[#16A34A] sm:text-sm">
+                      שומן
+                    </p>
+                    <p
+                      className="mt-1 text-sm font-semibold tabular-nums leading-tight text-[#16A34A] sm:text-[0.95rem]"
+                      aria-label={`שומן נותר ${formatJournalRemainingMacroG(remainingFatG)}`}
+                    >
+                      {formatJournalRemainingMacroG(remainingFatG)}
+                    </p>
+                  </div>
                 </div>
               </div>
             </div>
@@ -2009,61 +2030,10 @@ export function HomeClient({ mode = "dashboard" }: { mode?: "dashboard" | "journ
                   <div className="flex min-w-0 w-full flex-col gap-2">
                     {journalFoodNameEditId === item.id && !isDayClosed ? (
                       <div
-                        className="flex min-w-0 w-full flex-col gap-2 sm:flex-row sm:items-center"
+                        className="flex min-w-0 w-full flex-col gap-2"
                         dir="rtl"
                       >
-                        <input
-                          type="time"
-                          className="mt-0.5 shrink-0 self-start rounded-lg border border-[var(--border-cherry-soft)] bg-white px-2 py-1 text-[12px] font-semibold tabular-nums text-[var(--stem)] shadow-sm sm:mt-1"
-                          value={entryTimeHHmm(item.createdAt)}
-                          onChange={(e) => setEntryTime(item.id, e.target.value)}
-                          disabled={isDayClosed}
-                          aria-label="שעה"
-                        />
-                        <input
-                          ref={journalFoodNameInputRef}
-                          type="text"
-                          value={journalFoodNameDraft}
-                          onChange={(e) => setJournalFoodNameDraft(e.target.value)}
-                          onKeyDown={(e) => {
-                            if (e.key === "Escape") cancelJournalFoodNameEdit();
-                            if (e.key === "Enter") saveJournalFoodNameEdit();
-                          }}
-                          className="min-w-0 flex-1 rounded-lg border-2 border-[var(--border-cherry-soft)] bg-white px-2.5 py-1.5 text-base font-normal text-[var(--stem)] shadow-sm outline-none focus:ring-2 focus:ring-[var(--stem)]/25"
-                          aria-label={gf(
-                            gender,
-                            "שם להצגה ביומן",
-                            "שם להצגה ביומן"
-                          )}
-                        />
-                        <div className="flex shrink-0 items-center justify-end gap-1.5">
-                          <button
-                            type="button"
-                            className="rounded-lg border-2 border-[var(--border-cherry-soft)] bg-white px-3 py-1.5 text-xs font-extrabold text-[var(--stem)] shadow-sm transition hover:bg-[var(--cherry-muted)]"
-                            onClick={(e) => {
-                              e.preventDefault();
-                              e.stopPropagation();
-                              saveJournalFoodNameEdit();
-                            }}
-                          >
-                            {gf(gender, "שמור", "שמור")}
-                          </button>
-                          <button
-                            type="button"
-                            className="rounded-lg border-2 border-[var(--border-cherry-soft)] bg-white px-3 py-1.5 text-xs font-extrabold text-[var(--text)]/80 shadow-sm transition hover:bg-[var(--cherry-muted)]"
-                            onClick={(e) => {
-                              e.preventDefault();
-                              e.stopPropagation();
-                              cancelJournalFoodNameEdit();
-                            }}
-                          >
-                            {gf(gender, "ביטול", "ביטול")}
-                          </button>
-                        </div>
-                      </div>
-                    ) : (
-                      <div className="flex w-full max-w-full items-start justify-between gap-2">
-                        <div className="flex min-w-0 flex-1 items-start gap-2">
+                        <div className="flex w-full items-start justify-between gap-2">
                           <input
                             type="time"
                             className="mt-0.5 shrink-0 self-start rounded-lg border border-[var(--border-cherry-soft)] bg-white px-2 py-1 text-[12px] font-semibold tabular-nums text-[var(--stem)] shadow-sm"
@@ -2074,90 +2044,147 @@ export function HomeClient({ mode = "dashboard" }: { mode?: "dashboard" | "journ
                             disabled={isDayClosed}
                             aria-label="שעה"
                           />
-                          <button
-                            type="button"
-                            disabled={isDayClosed}
-                            className="min-w-0 flex-1 rounded-md px-1 py-0.5 text-start transition hover:bg-[var(--cherry-muted)]/45 disabled:opacity-50"
-                            onClick={(e) => {
-                              e.preventDefault();
-                              e.stopPropagation();
-                              if (isDayClosed) return;
-                              setJournalFoodNameEditId(item.id);
-                              setJournalFoodNameDraft(item.food);
-                            }}
-                            title={gf(
-                              gender,
-                              "לחצי לעריכת השם",
-                              "לחץ לעריכת השם"
-                            )}
-                            aria-label={gf(
-                              gender,
-                              "עריכת שם להצגה",
-                              "עריכת שם להצגה"
-                            )}
-                          >
-                            <span className="bidi-isolate-rtl block min-w-0 break-words text-base font-normal leading-snug text-[var(--cherry)]">
-                              {item.food}
-                            </span>
-                          </button>
-                        </div>
-                        {!isDayClosed ? (
-                          <div
-                            className="flex shrink-0 items-center gap-0.5 pt-0.5"
-                            role="group"
-                            aria-label="פעולות על המנה"
-                          >
+                          <div className="flex shrink-0 items-center justify-end gap-1.5 pt-0.5">
                             <button
                               type="button"
-                              className="rounded-md p-1.5 text-[var(--stem)] transition hover:bg-[var(--cherry-muted)]/45"
-                              title="סימון כארוחה קבועה במילון הארוחות"
-                              aria-label="ארוחה קבועה — סימון לשמירה כארוחה במילון"
-                              aria-pressed={mealOn}
+                              className="rounded-lg border-2 border-[var(--border-cherry-soft)] bg-white px-3 py-1.5 text-xs font-extrabold text-[var(--stem)] shadow-sm transition hover:bg-[var(--cherry-muted)]"
                               onClick={(e) => {
                                 e.preventDefault();
                                 e.stopPropagation();
-                                toggleMealStar(item.id);
+                                saveJournalFoodNameEdit();
                               }}
                             >
-                              <IconUtensilsMeal
-                                marked={mealOn}
-                                className={journalToolbarIconClass}
-                              />
+                              {gf(gender, "שמור", "שמור")}
                             </button>
                             <button
                               type="button"
-                              className="rounded-md p-1.5 text-[var(--stem)] transition hover:bg-[var(--cherry-muted)]/45"
-                              title="שמירה במילון האישי שלי"
-                              aria-label="מילון — שמירת הפריט במילון"
-                              aria-pressed={inDictionary}
+                              className="rounded-lg border-2 border-[var(--border-cherry-soft)] bg-white px-3 py-1.5 text-xs font-extrabold text-[var(--text)]/80 shadow-sm transition hover:bg-[var(--cherry-muted)]"
                               onClick={(e) => {
                                 e.preventDefault();
                                 e.stopPropagation();
-                                toggleDictionaryFromEntry(item);
-                                setDictTick((t) => t + 1);
+                                cancelJournalFoodNameEdit();
                               }}
                             >
-                              <IconBookmark
-                                filled={inDictionary}
-                                className={journalToolbarIconClass}
-                              />
-                            </button>
-                            <button
-                              type="button"
-                              className="rounded-md p-1.5 text-red-700 transition hover:bg-red-50/90"
-                              onClick={(e) => {
-                                e.preventDefault();
-                                e.stopPropagation();
-                                removeEntry(item.id);
-                              }}
-                              aria-label="מחיקה — הסרת הרשומה מהיום"
-                              title="מחיקה מהיומן"
-                            >
-                              <IconTrash className={journalToolbarIconClass} />
+                              {gf(gender, "ביטול", "ביטול")}
                             </button>
                           </div>
-                        ) : null}
+                        </div>
+                        <input
+                          ref={journalFoodNameInputRef}
+                          type="text"
+                          value={journalFoodNameDraft}
+                          onChange={(e) =>
+                            setJournalFoodNameDraft(e.target.value)
+                          }
+                          onKeyDown={(e) => {
+                            if (e.key === "Escape") cancelJournalFoodNameEdit();
+                            if (e.key === "Enter") saveJournalFoodNameEdit();
+                          }}
+                          className="min-w-0 w-full rounded-lg border-2 border-[var(--border-cherry-soft)] bg-white px-2.5 py-1.5 text-base font-normal text-[var(--stem)] shadow-sm outline-none focus:ring-2 focus:ring-[var(--stem)]/25"
+                          aria-label={gf(
+                            gender,
+                            "שם להצגה ביומן",
+                            "שם להצגה ביומן"
+                          )}
+                        />
                       </div>
+                    ) : (
+                      <>
+                        <div className="flex w-full max-w-full items-start justify-between gap-2">
+                          <input
+                            type="time"
+                            className="mt-0.5 shrink-0 self-start rounded-lg border border-[var(--border-cherry-soft)] bg-white px-2 py-1 text-[12px] font-semibold tabular-nums text-[var(--stem)] shadow-sm"
+                            value={entryTimeHHmm(item.createdAt)}
+                            onChange={(e) =>
+                              setEntryTime(item.id, e.target.value)
+                            }
+                            disabled={isDayClosed}
+                            aria-label="שעה"
+                          />
+                          {!isDayClosed ? (
+                            <div
+                              className="flex shrink-0 items-center gap-0.5 pt-0.5"
+                              role="group"
+                              aria-label="פעולות על המנה"
+                            >
+                              <button
+                                type="button"
+                                className="rounded-md p-1.5 text-[var(--stem)] transition hover:bg-[var(--cherry-muted)]/45"
+                                title="סימון כארוחה קבועה במילון הארוחות"
+                                aria-label="ארוחה קבועה — סימון לשמירה כארוחה במילון"
+                                aria-pressed={mealOn}
+                                onClick={(e) => {
+                                  e.preventDefault();
+                                  e.stopPropagation();
+                                  toggleMealStar(item.id);
+                                }}
+                              >
+                                <IconUtensilsMeal
+                                  marked={mealOn}
+                                  className={journalToolbarIconClass}
+                                />
+                              </button>
+                              <button
+                                type="button"
+                                className="rounded-md p-1.5 text-[var(--stem)] transition hover:bg-[var(--cherry-muted)]/45"
+                                title="שמירה במילון האישי שלי"
+                                aria-label="מילון — שמירת הפריט במילון"
+                                aria-pressed={inDictionary}
+                                onClick={(e) => {
+                                  e.preventDefault();
+                                  e.stopPropagation();
+                                  toggleDictionaryFromEntry(item);
+                                  setDictTick((t) => t + 1);
+                                }}
+                              >
+                                <IconBookmark
+                                  filled={inDictionary}
+                                  className={journalToolbarIconClass}
+                                />
+                              </button>
+                              <button
+                                type="button"
+                                className="rounded-md p-1.5 text-red-700 transition hover:bg-red-50/90"
+                                onClick={(e) => {
+                                  e.preventDefault();
+                                  e.stopPropagation();
+                                  removeEntry(item.id);
+                                }}
+                                aria-label="מחיקה — הסרת הרשומה מהיום"
+                                title="מחיקה מהיומן"
+                              >
+                                <IconTrash className={journalToolbarIconClass} />
+                              </button>
+                            </div>
+                          ) : null}
+                        </div>
+                        <button
+                          type="button"
+                          disabled={isDayClosed}
+                          className="min-w-0 w-full rounded-md px-1 py-0.5 text-start transition hover:bg-[var(--cherry-muted)]/45 disabled:opacity-50"
+                          onClick={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            if (isDayClosed) return;
+                            setJournalFoodNameEditId(item.id);
+                            setJournalFoodNameDraft(item.food);
+                          }}
+                          title={gf(
+                            gender,
+                            "לחצי לעריכת השם",
+                            "לחץ לעריכת השם"
+                          )}
+                          aria-label={gf(
+                            gender,
+                            "עריכת שם להצגה",
+                            "עריכת שם להצגה"
+                          )}
+                        >
+                          <span className="bidi-isolate-rtl block min-w-0 break-words text-base font-normal leading-snug text-[var(--cherry)]">
+                            {item.food}
+                          </span>
+                        </button>
+                      </>
                     )}
 
                     <p className="w-full text-sm text-[var(--text)]/80">
