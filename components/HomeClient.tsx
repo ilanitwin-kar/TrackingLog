@@ -2187,42 +2187,42 @@ export function HomeClient({ mode = "dashboard" }: { mode?: "dashboard" | "journ
                       </>
                     )}
 
-                    <p className="w-full text-sm text-[var(--text)]/80">
-                      {isDayClosed ? (
-                        <span className="bidi-isolate-rtl inline-block font-bold">
-                          {formatQtyLabel(item.quantity, item.unit)} {item.unit}
+                    <div className="w-full space-y-1 text-[var(--text)]/80" dir="rtl">
+                      <p className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5 text-base font-bold leading-snug">
+                        {isDayClosed ? (
+                          <span className="bidi-isolate-rtl">
+                            {formatQtyLabel(item.quantity, item.unit)} {item.unit}
+                          </span>
+                        ) : (
+                          <button
+                            type="button"
+                            className="bidi-isolate-rtl rounded px-0.5 text-[var(--stem)] underline decoration-dotted decoration-[var(--stem)]/40 underline-offset-2 transition hover:bg-[var(--cherry-muted)]/45 hover:decoration-[var(--stem)]/70"
+                            onClick={(e) => {
+                              e.preventDefault();
+                              e.stopPropagation();
+                              openEdit(item);
+                            }}
+                            aria-label={gf(
+                              gender,
+                              "עריכת כמות ויחידה",
+                              "עריכת כמות ויחידה"
+                            )}
+                          >
+                            {formatQtyLabel(item.quantity, item.unit)} {item.unit}
+                          </button>
+                        )}
+                        <span className="bidi-isolate-rtl text-neutral-900">
+                          {item.calories} קק״ל
                         </span>
-                      ) : (
-                        <button
-                          type="button"
-                          className="bidi-isolate-rtl inline-block rounded px-0.5 font-bold text-[var(--stem)] underline decoration-dotted decoration-[var(--stem)]/40 underline-offset-2 transition hover:bg-[var(--cherry-muted)]/45 hover:decoration-[var(--stem)]/70"
-                          onClick={(e) => {
-                            e.preventDefault();
-                            e.stopPropagation();
-                            openEdit(item);
-                          }}
-                          aria-label={gf(
-                            gender,
-                            "עריכת כמות ויחידה",
-                            "עריכת כמות ויחידה"
-                          )}
-                        >
-                          {formatQtyLabel(item.quantity, item.unit)} {item.unit}
-                        </button>
-                      )}
-                      {" · "}
-                      <span className="bidi-isolate-rtl inline-block font-bold text-neutral-900">
-                        {item.calories} קק״ל
-                      </span>
-                      {" · "}
-                      <span className="bidi-isolate-rtl inline text-xs font-normal text-neutral-900">
+                      </p>
+                      <p className="bidi-isolate-rtl text-xs font-normal text-neutral-900">
                         חלבון {formatMacroCell(item.proteinG)}
                         {" · "}
                         פחמימה {formatMacroCell(item.carbsG)}
                         {" · "}
                         שומן {formatMacroCell(item.fatG)}
-                      </span>
-                    </p>
+                      </p>
+                    </div>
                     <AnimatePresence>
                       {isAiMeal && (
                         <motion.div
