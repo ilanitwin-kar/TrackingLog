@@ -60,9 +60,9 @@ export async function GET(req: Request) {
 
   if (q.length >= 2) {
     rows = rows.filter((r) => matchesAllQueryWords(r.name ?? "", q));
+  } else {
+    rows = sortRows(rows, sort);
   }
-
-  rows = sortRows(rows, sort);
 
   const total = rows.length;
   const start = (page - 1) * pageSize;

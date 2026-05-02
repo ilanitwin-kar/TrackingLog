@@ -2,7 +2,8 @@
 
 import { AnimatePresence, motion } from "framer-motion";
 import Link from "next/link";
-import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { Plus } from "lucide-react";
+import { usePathname, useSearchParams } from "next/navigation";
 import {
   useEffect,
   useId,
@@ -12,8 +13,11 @@ import {
   type MouseEvent as ReactMouseEvent,
 } from "react";
 import { BarcodeScanModal } from "@/components/BarcodeScanModal";
-import { IconCaption } from "@/components/IconCaption";
-import { IconPlusCircle, IconScanBarcode, IconVerified } from "@/components/Icons";
+import {
+  IconScanBarcode,
+  IconSearch,
+  IconVerified,
+} from "@/components/Icons";
 import { getTodayKey } from "@/lib/dateKey";
 import {
   parseMealSlotParam,
@@ -39,6 +43,7 @@ import {
   upsertDictionaryFromScan,
 } from "@/lib/storage";
 import { emitMealLoggedFeedback } from "@/lib/feedbackEvents";
+import { addToShopping } from "@/lib/explorerStorage";
 import { gf } from "@/lib/hebrewGenderUi";
 
 function clampGrams(q: number): number {
@@ -72,7 +77,7 @@ function uid(): string {
   return `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
 }
 
-/** תצוגת «נבחרו לאחרונה»: כמות אחרונה מזיכרון + קלוריות למנה */
+/** תצוגת היסטוריה: כמות אחרונה מזיכרון + קלוריות למנה */
 function recentPickQtyAndKcal(row: HomeSuggestRow): { qtyLine: string; kcal: number } {
   const mem = getFoodMemory(row.name.trim());
   const unit: FoodUnit = mem?.unit ?? "גרם";
@@ -99,6 +104,17 @@ function recentPickQtyAndKcal(row: HomeSuggestRow): { qtyLine: string; kcal: num
   const qtyLine =
     unit === "גרם" ? `${qty} גרם` : `${qty} ${unit}`;
   return { qtyLine, kcal };
+}
+
+/** עד 5 המילים הראשונות מתוך שם המוצר — רשימת ההיסטוריה */
+function foodProductFirstWords(name: string, maxWords = 5): string {
+  const t = name.normalize("NFC").trim();
+  if (!t) return "…";
+  const words = t.split(/\s+/).filter(Boolean);
+  if (words.length === 0) return "…";
+  const slice = words.slice(0, maxWords);
+  const out = slice.join(" ");
+  return words.length > maxWords ? `${out}…` : out;
 }
 
 function pickRandom<T>(arr: readonly T[]): T {
@@ -293,16 +309,17 @@ function AddFoodSearchResultRow({
   const qk = `${src}-${row.id}`;
 
   return (
-    <li className="flex items-stretch gap-1.5">
+    <li dir="rtl" className="flex items-stretch gap-1.5">
       <button
         type="button"
         className="suggestion-item flex min-w-0 flex-1 flex-col items-stretch gap-0.5 rounded-lg px-3 py-2.5 text-right transition hover:bg-[var(--cherry-muted)]"
+        dir="rtl"
         onClick={(e) => onOpenPick(row, e)}
       >
-        <span className="flex flex-wrap items-center justify-end gap-x-2 gap-y-1 font-semibold text-[var(--stem)]">
-          <span>{row.name}</span>
+        <span className="flex w-full flex-wrap items-center justify-start gap-x-2 gap-y-1 font-semibold text-[var(--stem)]">
+          <span className="min-w-0 flex-1 text-right leading-snug">{row.name}</span>
           <span
-            className={`inline-flex items-center gap-1 rounded-md border px-2 py-0.5 ${badge.border} ${badge.bg}`}
+            className={`inline-flex shrink-0 items-center gap-1 rounded-md border px-2 py-0.5 ${badge.border} ${badge.bg}`}
             title={badge.label}
           >
             {badge.verified ? (
@@ -319,11 +336,11 @@ function AddFoodSearchResultRow({
           </span>
         </span>
         {row.category != null ? (
-          <span className="text-[11px] text-[var(--cherry)]/65">{row.category}</span>
+          <span className="block w-full text-right text-[11px] text-[var(--cherry)]/65">{row.category}</span>
         ) : null}
         {row.calories != null ? (
-          <span className="text-[11px] text-[var(--cherry)]/75">
-            קלוריות: {Math.round(row.calories)} · חלבון: {row.protein ?? "—"} · פחמימות:{" "}
+          <span className="block w-full text-right text-[11px] text-[var(--cherry)]/75">
+            קלוריות: {Math.round(row.calories)} · חלבון: {row.protein ?? "—"} · פחמימה:{" "}
             {row.carbs ?? "—"} · שומן: {row.fat ?? "—"}{" "}
             <span className="text-[var(--cherry)]/55">(ל־100 ג׳)</span>
           </span>
@@ -331,26 +348,30 @@ function AddFoodSearchResultRow({
       </button>
       <button
         type="button"
-        className={`flex min-w-[3.35rem] shrink-0 flex-col items-center justify-center rounded-lg border-2 border-[var(--border-cherry-soft)] bg-white px-0.5 py-1 shadow-sm transition hover:bg-[var(--cherry-muted)] active:scale-[0.98] ${
-          quickAddId === qk ? "ring-2 ring-[var(--stem)]" : ""
+        className={`flex h-10 min-w-10 shrink-0 items-center justify-center rounded-full transition active:scale-[0.94] ${
+          quickAddId === qk
+            ? "text-[var(--stem)]"
+            : gender === "male"
+              ? "text-[#1e3a5f] hover:bg-[#1e3a5f]/12"
+              : "text-[var(--cherry)] hover:bg-[var(--cherry-muted)]/35"
         }`}
         aria-label={`הוספת «${row.name}» ליומן`}
         title="הוספה ליומן"
         onClick={() => onQuickAdd(row)}
       >
-        <IconCaption label="הוספה">
-          {quickAddId === qk ? (
-            <span className="text-lg font-extrabold text-[var(--stem)]" aria-hidden>
-              ✓
-            </span>
-          ) : (
-            <IconPlusCircle
-              className={`h-6 w-6 sm:h-7 sm:w-7 ${
-                gender === "male" ? "text-[#1e3a5f]" : "text-[var(--cherry)]"
-              }`}
-            />
-          )}
-        </IconCaption>
+        {quickAddId === qk ? (
+          <span className="text-xl font-extrabold leading-none" aria-hidden>
+            ✓
+          </span>
+        ) : (
+          <Plus
+            className="h-7 w-7 shrink-0"
+            strokeWidth={2.6}
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            aria-hidden
+          />
+        )}
       </button>
     </li>
   );
@@ -367,7 +388,6 @@ export function AddFoodClient({
   screen?: "search" | "ai";
 }) {
   const gender = loadProfile().gender;
-  const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const dateKey = resolveDateKey(searchParams.get("date"));
@@ -384,6 +404,8 @@ export function AddFoodClient({
   const [food, setFood] = useState("");
 
   const [debouncedFoodSearch, setDebouncedFoodSearch] = useState("");
+  /** חיפוש במאגרים החיצוניים רק אחרי לחיצה על זכוכית המגדלת / «חפש בכל המאגרים» */
+  const [catalogSearchEnabled, setCatalogSearchEnabled] = useState(false);
   const [intelRows, setIntelRows] = useState<HomeSuggestRow[]>([]);
   const [mohRows, setMohRows] = useState<HomeSuggestRow[]>([]);
   const [usdaRows, setUsdaRows] = useState<HomeSuggestRow[]>([]);
@@ -434,12 +456,13 @@ export function AddFoodClient({
   const [pickUnitsText, setPickUnitsText] = useState("1");
   const [pickPressedDiary, setPickPressedDiary] = useState(false);
   const [pickPressedDictionary, setPickPressedDictionary] = useState(false);
-  const [pickPressedBothShortcut, setPickPressedBothShortcut] =
-    useState(false);
-  const [pickModalFeedback, setPickModalFeedback] = useState<string | null>(
-    null
-  );
-  const pickFeedbackTimerRef = useRef<number | null>(null);
+  const [pickPressedShopping, setPickPressedShopping] = useState(false);
+  /** טקסט קצר על הכפתור אחרי לחיצה — נעלם אחרי 2 שניות */
+  const [pickFlash, setPickFlash] = useState<{
+    slot: "diary" | "dictionary" | "shopping";
+    text: string;
+  } | null>(null);
+  const pickFlashTimerRef = useRef<number | null>(null);
   const pickTitleId = useId();
   const searchInputRef = useRef<HTMLInputElement>(null);
   const aiSectionRef = useRef<HTMLDivElement>(null);
@@ -659,18 +682,14 @@ export function AddFoodClient({
     commitAiJournal(true);
   }
 
+  /** כפתורי המודאל — גובה נוח ללחיצה, טקסט קריא בלי זוג משקפיים */
   const pickCubeBaseClass =
-    "flex min-h-[5.5rem] flex-col items-center justify-center gap-1 rounded-xl border-2 px-1.5 py-2.5 text-center text-[11px] font-bold leading-snug text-[var(--cherry)] transition-[transform,box-shadow,background-color,border-color] duration-200 ease-out sm:min-h-[5.75rem] sm:text-xs";
+    "flex min-h-[3.5rem] items-center justify-center rounded-xl border px-2 py-3 text-center text-[15px] font-extrabold leading-[1.25] tracking-tight transition-[transform,box-shadow,background-color,border-color] duration-200 ease-out sm:min-h-[3.65rem] sm:text-base sm:leading-snug";
 
-  /** מראה קובייה נלחצת (תלת־ממד) — בלי להחליף לצבעי הצלחה */
-  const pickCubePressedWhite =
-    "translate-y-1 border-[#e8c2cb] bg-[#faf7f8] shadow-[inset_0_3px_10px_rgba(0,0,0,0.11),inset_0_-1px_0_rgba(255,255,255,0.75)]";
-  const pickCubePressedGold =
-    "translate-y-1 border-[#d4b24a] bg-[#fff3dd] shadow-[inset_0_3px_10px_rgba(0,0,0,0.11),inset_0_-1px_0_rgba(255,255,255,0.65)]";
-  const pickCubeIdleWhite =
-    "border-[var(--border-cherry-soft)] bg-white shadow-[0_2px_8px_var(--panel-shadow-soft)] hover:bg-[var(--cherry-muted)]";
-  const pickCubeIdleGold =
-    "border-[#e6c65c] bg-[#fff9e6] shadow-[0_2px_5px_rgba(0,0,0,0.06)] hover:bg-[#fff3cc]";
+  const pickCubePressedGreen =
+    "translate-y-px border-emerald-400/80 bg-emerald-100 text-[var(--stem)] shadow-[inset_0_2px_6px_rgba(16,185,129,0.12)]";
+  const pickCubeIdleGreen =
+    "border-emerald-200/90 bg-emerald-50 text-[var(--stem)] shadow-sm hover:bg-emerald-100/90";
 
   const pickGrams = useMemo(() => {
     const n = parseFloat(pickGramsText.replace(",", "."));
@@ -713,13 +732,28 @@ export function AddFoodClient({
   }, [manUnitsText]);
 
   const searchPanelSync =
-    debouncedFoodSearch.length >= 2 && debouncedFoodSearch === food.trim();
+    catalogSearchEnabled &&
+    debouncedFoodSearch.length >= 2 &&
+    debouncedFoodSearch === food.trim();
   const debouncePending =
-    food.trim().length >= 2 && debouncedFoodSearch !== food.trim();
+    catalogSearchEnabled &&
+    food.trim().length >= 2 &&
+    debouncedFoodSearch !== food.trim();
 
-  const showResultsPanel = food.trim().length >= 2;
+  const showCatalogResultsPanel =
+    catalogSearchEnabled && food.trim().length >= 2;
+
+  const historySearchMatches = useMemo(() => {
+    const q = food.trim().toLowerCase();
+    if (q.length < 1) return [];
+    return recentPicks.filter((r) => r.name.toLowerCase().includes(q));
+  }, [food, recentPicks]);
 
   // todayKey was used for date navigation; keep dateKey from params only.
+
+  useEffect(() => {
+    if (food.trim().length < 2) setCatalogSearchEnabled(false);
+  }, [food]);
 
   useEffect(() => {
     const trimmed = food.trim();
@@ -765,13 +799,11 @@ export function AddFoodClient({
   }, [food, debouncedFoodSearch]);
 
   useEffect(() => {
-    if (debouncedFoodSearch.length < 2) {
+    if (debouncedFoodSearch.length < 2 || !catalogSearchEnabled) {
       setIntelRows([]);
       setMohRows([]);
       setUsdaRows([]);
       setHomeSearchLoading(false);
-      setWorldRows([]);
-      setWorldSearchLoading(false);
       return;
     }
     const ac = new AbortController();
@@ -857,10 +889,10 @@ export function AddFoodClient({
       }
     })();
     return () => ac.abort();
-  }, [debouncedFoodSearch]);
+  }, [debouncedFoodSearch, catalogSearchEnabled]);
 
   useEffect(() => {
-    if (debouncedFoodSearch.length < 2) {
+    if (debouncedFoodSearch.length < 2 || !catalogSearchEnabled) {
       setWorldRows([]);
       setWorldSearchLoading(false);
       return;
@@ -916,7 +948,7 @@ export function AddFoodClient({
       }
     })();
     return () => ac.abort();
-  }, [debouncedFoodSearch]);
+  }, [debouncedFoodSearch, catalogSearchEnabled]);
 
   const totalSearchHits =
     intelRows.length +
@@ -932,8 +964,8 @@ export function AddFoodClient({
 
   useEffect(() => {
     return () => {
-      if (pickFeedbackTimerRef.current) {
-        clearTimeout(pickFeedbackTimerRef.current);
+      if (pickFlashTimerRef.current != null) {
+        window.clearTimeout(pickFlashTimerRef.current);
       }
     };
   }, []);
@@ -947,7 +979,12 @@ export function AddFoodClient({
     if (!pickModalRow?.id) return;
     setPickPressedDiary(false);
     setPickPressedDictionary(false);
-    setPickPressedBothShortcut(false);
+    setPickPressedShopping(false);
+    setPickFlash(null);
+    if (pickFlashTimerRef.current != null) {
+      window.clearTimeout(pickFlashTimerRef.current);
+      pickFlashTimerRef.current = null;
+    }
   }, [
     pickGramsText,
     pickUnitWeightText,
@@ -969,7 +1006,12 @@ export function AddFoodClient({
     }
     setPickPressedDiary(false);
     setPickPressedDictionary(false);
-    setPickPressedBothShortcut(false);
+    setPickPressedShopping(false);
+    setPickFlash(null);
+    if (pickFlashTimerRef.current != null) {
+      window.clearTimeout(pickFlashTimerRef.current);
+      pickFlashTimerRef.current = null;
+    }
     setPickModalRow(row);
     const mem = getFoodMemory(row.name.trim());
     if (
@@ -1021,20 +1063,21 @@ export function AddFoodClient({
   }
 
   function closePickModal() {
-    if (pickFeedbackTimerRef.current) {
-      clearTimeout(pickFeedbackTimerRef.current);
-      pickFeedbackTimerRef.current = null;
+    if (pickFlashTimerRef.current != null) {
+      window.clearTimeout(pickFlashTimerRef.current);
+      pickFlashTimerRef.current = null;
     }
+    setPickFlash(null);
     setPickPressedDiary(false);
     setPickPressedDictionary(false);
-    setPickPressedBothShortcut(false);
-    setPickModalFeedback(null);
+    setPickPressedShopping(false);
     setPickModalRow(null);
     setPickGramsText("100");
     setPickUnitWeightText("");
     setPickUnitsText("1");
     setFood("");
     setDebouncedFoodSearch("");
+    setCatalogSearchEnabled(false);
     setIntelRows([]);
     setMohRows([]);
     setUsdaRows([]);
@@ -1048,15 +1091,44 @@ export function AddFoodClient({
     queueMicrotask(() => searchInputRef.current?.focus());
   }
 
-  function showPickModalNotice(msg: string) {
-    if (pickFeedbackTimerRef.current) {
-      clearTimeout(pickFeedbackTimerRef.current);
+  function armAllCatalogsSearch() {
+    const q = food.trim();
+    if (q.length < 2) return;
+    setDebouncedFoodSearch(q);
+    setCatalogSearchEnabled(true);
+    queueMicrotask(() => searchInputRef.current?.blur());
+  }
+
+  function clearFoodSearchField() {
+    setFood("");
+    setDebouncedFoodSearch("");
+    setCatalogSearchEnabled(false);
+    setIntelRows([]);
+    setMohRows([]);
+    setUsdaRows([]);
+    setWorldRows([]);
+    setHomeSearchLoading(false);
+    setWorldSearchLoading(false);
+    setExpandedIntel(false);
+    setExpandedMoh(false);
+    setExpandedUsda(false);
+    setExpandedWorld(false);
+    queueMicrotask(() => searchInputRef.current?.focus());
+  }
+
+  function flashPickButton(
+    slot: "diary" | "dictionary" | "shopping",
+    text: string
+  ) {
+    if (pickFlashTimerRef.current != null) {
+      window.clearTimeout(pickFlashTimerRef.current);
+      pickFlashTimerRef.current = null;
     }
-    setPickModalFeedback(msg);
-    pickFeedbackTimerRef.current = window.setTimeout(() => {
-      setPickModalFeedback(null);
-      pickFeedbackTimerRef.current = null;
-    }, 3200);
+    setPickFlash({ slot, text });
+    pickFlashTimerRef.current = window.setTimeout(() => {
+      setPickFlash(null);
+      pickFlashTimerRef.current = null;
+    }, 2000);
   }
 
   function macrosFromPickRow(row: HomeSuggestRow, grams: number) {
@@ -1123,6 +1195,11 @@ export function AddFoodClient({
       calories: m.kcal,
       quantity: srv.qty,
       unit: srv.unit,
+      ...(srv.gramsPerUnit != null &&
+      Number.isFinite(srv.gramsPerUnit) &&
+      srv.gramsPerUnit > 0
+        ? { gramsPerUnit: srv.gramsPerUnit }
+        : {}),
       createdAt: new Date().toISOString(),
       mealStarred: false,
       verified: m.verified,
@@ -1143,66 +1220,31 @@ export function AddFoodClient({
         `«${row.name.trim()}» נוסף ליומן`
       )
     );
-    showPickModalNotice(
-      gf(
-        gender,
-        "נוסף ליומן. לשנות כמות — ערכי ולחצי שוב; לסיום — ×",
-        "נוסף ליומן. לשנות כמות — ערוך ולחץ שוב; לסיום — ×"
-      )
-    );
+    flashPickButton("diary", "נוסף ליומן");
   }
 
-  function submitPickDiaryAndDictionary() {
+  function submitPickShoppingOnly() {
     if (!pickModalRow) return;
     const row = pickModalRow;
-    const srv = resolvePickServing();
-    const m = macrosFromPickRow(row, srv.totalG);
-    upsertDictionaryFromScan({
-      food: row.name.trim(),
-      quantity: srv.qty,
-      unit: srv.unit,
-      lastCalories: m.kcal,
-      caloriesPer100g: m.c100,
-      proteinPer100g: m.p100,
-      carbsPer100g: m.car100,
-      fatPer100g: m.f100,
-      gramsPerUnit: srv.gramsPerUnit,
+    const c100 = row.calories ?? 0;
+    if (!Number.isFinite(c100) || c100 <= 0) {
+      flashPickButton("shopping", "חסרות קלוריות");
+      return;
+    }
+    const foodId = `${row.source ?? "local"}:${row.id}`;
+    const added = addToShopping({
+      foodId,
+      name: row.name.trim(),
+      category: row.category?.trim() || "כללי",
+      calories: Math.round(c100),
+      qty: 1,
     });
-    const entry: LogEntry = attachMealSlot({
-      id: uid(),
-      food: row.name.trim(),
-      calories: m.kcal,
-      quantity: srv.qty,
-      unit: srv.unit,
-      createdAt: new Date().toISOString(),
-      mealStarred: false,
-      verified: m.verified,
-      proteinG: m.proteinG,
-      carbsG: m.carbsG,
-      fatG: m.fatG,
-    });
-    const existing = getEntriesForDate(dateKey);
-    saveDayLogEntries(dateKey, [entry, ...existing]);
-    saveFoodMemoryKey(row.name.trim(), srv.qty, srv.unit, srv.gramsPerUnit);
-    rememberFoodPick(row);
-    setRecentPicks(loadRecentFoodPicks());
-    setPickPressedDiary(true);
-    setPickPressedDictionary(true);
-    setPickPressedBothShortcut(true);
-    emitMealLoggedFeedback(
-      gf(
-        gender,
-        `«${row.name.trim()}» נוסף ליומן ולמילון`,
-        `«${row.name.trim()}» נוסף ליומן ולמילון`
-      )
-    );
-    showPickModalNotice(
-      gf(
-        gender,
-        "נוסף ליומן ולמילון. סגירה ב־× כשסיימת",
-        "נוסף ליומן ולמילון. סגירה ב־× כשסיימת"
-      )
-    );
+    setPickPressedShopping(true);
+    if (added) {
+      flashPickButton("shopping", "נוסף לסל");
+    } else {
+      flashPickButton("shopping", "כבר בסל");
+    }
   }
 
   function submitPickDictionaryOnly() {
@@ -1225,13 +1267,7 @@ export function AddFoodClient({
     rememberFoodPick(row);
     setRecentPicks(loadRecentFoodPicks());
     setPickPressedDictionary(true);
-    showPickModalNotice(
-      gf(
-        gender,
-        `«${row.name.trim()}» במילון. אפשר גם ליומן או כמות אחרת; × לסגירה`,
-        `«${row.name.trim()}» במילון. אפשר גם ליומן או כמות אחרת; × לסגירה`
-      )
-    );
+    flashPickButton("dictionary", "נוסף למילון");
   }
 
   function resetManualForm() {
@@ -1278,21 +1314,29 @@ export function AddFoodClient({
       return;
     }
     if (!Number.isFinite(c100) || c100 <= 0) {
-      setManError(
-        gf(
-          gender,
-          "הקלידי קלוריות ל־100 ג׳ (מספר חיובי)",
-          "הקלד קלוריות ל־100 ג׳ (מספר חיובי)"
-        )
-      );
+      setManError("חובה להזין קלוריות וערכי מאקרו");
       return;
     }
     const p100 = parseFloat(manProtein100.replace(",", "."));
     const car100 = parseFloat(manCarbs100.replace(",", "."));
     const f100 = parseFloat(manFat100.replace(",", "."));
-    const protein100 = Number.isFinite(p100) ? Math.max(0, p100) : 0;
-    const carbs100 = Number.isFinite(car100) ? Math.max(0, car100) : 0;
-    const fat100 = Number.isFinite(f100) ? Math.max(0, f100) : 0;
+    const macrosFilled =
+      manProtein100.trim() !== "" &&
+      manCarbs100.trim() !== "" &&
+      manFat100.trim() !== "" &&
+      Number.isFinite(p100) &&
+      Number.isFinite(car100) &&
+      Number.isFinite(f100) &&
+      p100 >= 0 &&
+      car100 >= 0 &&
+      f100 >= 0;
+    if (!macrosFilled) {
+      setManError("חובה להזין קלוריות וערכי מאקרו");
+      return;
+    }
+    const protein100 = p100;
+    const carbs100 = car100;
+    const fat100 = f100;
     const factor = totalG / 100;
     const kcal = Math.max(1, Math.round(c100 * factor));
     setManLoading(true);
@@ -1303,6 +1347,11 @@ export function AddFoodClient({
         calories: kcal,
         quantity: qty,
         unit,
+        ...(gramsPerUnit != null &&
+        Number.isFinite(gramsPerUnit) &&
+        gramsPerUnit > 0
+          ? { gramsPerUnit }
+          : {}),
         createdAt: new Date().toISOString(),
         mealStarred: false,
         verified: false,
@@ -1340,7 +1389,6 @@ export function AddFoodClient({
       emitMealLoggedFeedback(
         gf(gender, `«${name}» נוסף ליומן`, `«${name}» נוסף ליומן`)
       );
-      router.push(`/?date=${encodeURIComponent(dateKey)}`);
     } finally {
       setManLoading(false);
     }
@@ -1389,12 +1437,20 @@ export function AddFoodClient({
     const factor = gramsTotal > 0 ? gramsTotal / 100 : qty / 100;
     const calories = Math.max(1, Math.round(per100 * factor));
 
+    const gPerMem =
+      unit === "יחידה" &&
+      mem?.gramsPerUnit != null &&
+      Number.isFinite(mem.gramsPerUnit) &&
+      mem.gramsPerUnit > 0
+        ? mem.gramsPerUnit
+        : undefined;
     const entry: LogEntry = attachMealSlot({
       id: uid(),
       food: row.name.trim(),
       calories,
       quantity: qty,
       unit,
+      ...(gPerMem != null ? { gramsPerUnit: gPerMem } : {}),
       createdAt: new Date().toISOString(),
       verified: entryVerifiedForQuickAdd(row.source),
       ...(row.protein != null ? { proteinG: Math.round(row.protein * factor * 10) / 10 } : {}),
@@ -1477,45 +1533,14 @@ export function AddFoodClient({
               </div>
             </nav>
 
-            <div className="sticky top-[4.5rem] z-[110] -mx-3 border-b border-[var(--border-cherry-soft)] bg-white/80 px-3 pb-3 pt-1 backdrop-blur-sm">
-              <div className="flex items-center justify-between gap-2 pb-2">
-                <div className="min-w-0 text-sm font-extrabold text-[var(--stem)]/75">
-                  {gf(
-                    gender,
-                    "עוד תיעוד קטן — והיום שלך מקבל צורה.",
-                    "עוד תיעוד קטן — והיום שלך מקבל צורה."
-                  )}
-                </div>
-                {food.trim().length > 0 ? (
-                  <button
-                    type="button"
-                    className="shrink-0 rounded-xl border-2 border-[var(--border-cherry-soft)] bg-white px-3 py-2 text-xs font-extrabold text-[var(--stem)] shadow-sm transition hover:bg-[var(--cherry-muted)]"
-                    onClick={() => {
-                      setFood("");
-                      setDebouncedFoodSearch("");
-                      setIntelRows([]);
-                      setMohRows([]);
-                      setUsdaRows([]);
-                      setWorldRows([]);
-                      setExpandedIntel(false);
-                      setExpandedMoh(false);
-                      setExpandedUsda(false);
-                      setExpandedWorld(false);
-                      queueMicrotask(() => searchInputRef.current?.focus());
-                    }}
-                  >
-                    ניקוי
-                  </button>
-                ) : null}
-              </div>
-
+            <div className="sticky top-[env(safe-area-inset-top)] z-[110] -mx-3 border-b border-[var(--border-cherry-soft)] bg-white/80 px-3 pb-3 pt-1 backdrop-blur-sm">
               <div className="grid grid-cols-2 gap-2 pb-2">
                 <button
                   type="button"
                   className="rounded-xl border-2 border-[var(--border-cherry-soft)] bg-white px-3 py-2 text-xs font-extrabold text-[var(--stem)] shadow-sm transition hover:bg-[var(--cherry-muted)]"
                   onClick={openManualModal}
                 >
-                  הוספת מוצר
+                  הוספת פריט אישי
                 </button>
                 <button
                   type="button"
@@ -1532,9 +1557,23 @@ export function AddFoodClient({
                 </button>
               </div>
 
-              <label className="block">
-                <span className="sr-only">הוסף מזון</span>
-                <div className="relative">
+              <div className="block">
+                <span className="sr-only">חיפוש מזון</span>
+                <div
+                  dir="rtl"
+                  className="flex min-h-[3.25rem] items-center gap-1 rounded-[0.875rem] border-2 border-[var(--border-cherry-soft)] bg-white px-2 shadow-sm transition-[border-color,box-shadow] focus-within:border-[color-mix(in_srgb,var(--stem)_35%,var(--accent-deep)_65%)] focus-within:shadow-[0_0_0_3px_var(--focus-ring-outer),0_0_0_1px_var(--focus-ring-inner)]"
+                >
+                  {food.trim().length > 0 ? (
+                    <button
+                      type="button"
+                      className="flex h-10 min-w-10 shrink-0 items-center justify-center rounded-lg text-lg font-bold leading-none text-[var(--stem)]/65 transition hover:bg-[var(--cherry-muted)]/40 hover:text-[var(--stem)]"
+                      aria-label={gf(gender, "סגירת החיפוש וניקוי השדה", "סגירת החיפוש וניקוי השדה")}
+                      title={gf(gender, "ניקוי", "ניקוי")}
+                      onClick={() => clearFoodSearchField()}
+                    >
+                      <span aria-hidden>×</span>
+                    </button>
+                  ) : null}
                   <input
                     ref={searchInputRef}
                     type="text"
@@ -1549,14 +1588,24 @@ export function AddFoodClient({
                     autoCorrect="off"
                     autoCapitalize="none"
                     spellCheck={false}
-                    placeholder={gf(gender, "הוסיפי מזון…", "הוסף מזון…")}
-                    className="input-luxury-search w-full px-4"
+                    placeholder="חפש מאכל"
+                    className="min-w-0 flex-1 border-0 bg-transparent py-3 text-lg leading-snug text-[#333] outline-none placeholder:text-[#888]"
                   />
+                  <button
+                    type="button"
+                    disabled={food.trim().length < 2}
+                    className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg text-[var(--stem)] transition hover:bg-[var(--cherry-muted)]/45 disabled:pointer-events-none disabled:opacity-35"
+                    aria-label="חיפוש בכל המאגרים"
+                    title="חיפוש בכל המאגרים"
+                    onClick={() => armAllCatalogsSearch()}
+                  >
+                    <IconSearch className="h-6 w-6 shrink-0" />
+                  </button>
                 </div>
-              </label>
+              </div>
             </div>
 
-            {(quickAddToast || dictFeedback || debouncePending || showResultsPanel) && (
+            {(quickAddToast || dictFeedback || food.trim().length >= 1) && (
             <div className="mt-3 scroll-mt-[11rem] rounded-xl border border-[var(--border-cherry-soft)] bg-white/90 p-2 shadow-sm">
               {quickAddToast && (
                 <p
@@ -1568,20 +1617,100 @@ export function AddFoodClient({
               )}
               {dictFeedback && (
                 <p
-                  className="rounded-lg border border-[var(--border-cherry-soft)] bg-[#fff9e6] px-2 py-2 text-center text-xs font-semibold text-[var(--stem)]"
+                  className={`rounded-lg border border-[var(--border-cherry-soft)] bg-[#fff9e6] px-2 py-2 text-center text-xs font-semibold text-[var(--stem)]${food.trim().length >= 1 ? " mb-3" : ""}`}
                   role="status"
                 >
                   {dictFeedback}
                 </p>
               )}
+
+              {food.trim().length >= 1 ? (
+                <div className="space-y-2 pb-2">
+                  <p className="px-2 text-sm font-extrabold text-[var(--cherry)]">היסטוריה</p>
+                  {historySearchMatches.length === 0 ? (
+                    <p className="px-2 text-xs text-[var(--cherry)]/65">
+                      אין התאמות בהיסטוריה לחיפוש הזה.
+                    </p>
+                  ) : (
+                    <ul className="divide-y divide-[var(--cherry)]/25 overflow-hidden rounded-xl border border-[var(--border-cherry-soft)]/70 bg-white/85">
+                      {historySearchMatches.map((r) => {
+                        const { qtyLine, kcal } = recentPickQtyAndKcal(r);
+                        const qk = `${r.source ?? "local"}-${r.id}`;
+                        return (
+                          <li
+                            key={`hist-${qk}-${r.name}`}
+                            className="flex flex-col bg-white"
+                          >
+                            <div className="flex items-center gap-2">
+                              <button
+                                type="button"
+                                title={r.name}
+                                className="flex min-w-0 flex-1 flex-col gap-0.5 px-3 py-2.5 text-start transition hover:bg-[var(--cherry-muted)]/25"
+                                onClick={() => openPickModalFromRow(r)}
+                              >
+                                <span className="line-clamp-2 text-base font-semibold leading-snug text-[var(--cherry)]">
+                                  {foodProductFirstWords(r.name)}
+                                </span>
+                                <span className="text-xs font-semibold tabular-nums text-[var(--stem)]/75">
+                                  {qtyLine} · {kcal} קק״ל
+                                </span>
+                              </button>
+                              <button
+                                type="button"
+                                className="me-2 flex min-h-10 min-w-[2.25rem] shrink-0 items-center justify-center rounded-xl px-1 text-[1.5rem] font-extrabold leading-none text-[var(--cherry)] transition hover:bg-[var(--cherry-muted)]/35 active:scale-[0.96]"
+                                title={gf(gender, "הוספה מהירה ליומן", "הוספה מהירה ליומן")}
+                                aria-label={gf(gender, "הוספה מהירה ליומן", "הוספה מהירה ליומן")}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  quickAddRowToJournal(r);
+                                }}
+                              >
+                                {quickAddId === qk ? (
+                                  <span className="text-xl font-extrabold text-[var(--cherry)]" aria-hidden>
+                                    ✓
+                                  </span>
+                                ) : (
+                                  <span aria-hidden>+</span>
+                                )}
+                              </button>
+                            </div>
+                            <button
+                              type="button"
+                              disabled={food.trim().length < 2}
+                              className="flex w-full items-center justify-center gap-2 border-t border-[var(--border-cherry-soft)]/45 bg-[var(--cherry-muted)]/12 px-3 py-2 text-xs font-extrabold text-[var(--stem)] transition hover:bg-[var(--cherry-muted)]/28 disabled:pointer-events-none disabled:opacity-40"
+                              onClick={() => armAllCatalogsSearch()}
+                            >
+                              <IconSearch className="h-4 w-4 shrink-0 opacity-80" />
+                              חפש בכל המאגרים
+                            </button>
+                          </li>
+                        );
+                      })}
+                    </ul>
+                  )}
+                  {historySearchMatches.length === 0 ? (
+                    <button
+                      type="button"
+                      disabled={food.trim().length < 2}
+                      className="flex w-full items-center justify-center gap-2 rounded-xl border border-[var(--border-cherry-soft)] bg-[var(--cherry-muted)]/15 px-3 py-2.5 text-sm font-extrabold text-[var(--stem)] transition hover:bg-[var(--cherry-muted)]/35 disabled:pointer-events-none disabled:opacity-40"
+                      onClick={() => armAllCatalogsSearch()}
+                    >
+                      <IconSearch className="h-5 w-5 shrink-0 opacity-80" />
+                      חפש בכל המאגרים
+                    </button>
+                  ) : null}
+                </div>
+              ) : null}
+
+              {showCatalogResultsPanel ? (
+                <div
+                  className={`space-y-4${food.trim().length >= 1 ? " mt-3 border-t border-[var(--border-cherry-soft)]/80 pt-3" : ""}`}
+                >
               {debouncePending && (
                 <p className="px-2 py-1 text-xs text-[var(--cherry)]/70" role="status">
                   ממתינים לסיום הקלדה…
                 </p>
               )}
-
-              {showResultsPanel ? (
-                <div className="space-y-4">
                   {searchPanelSync &&
                   (homeSearchLoading || worldSearchLoading) &&
                   totalSearchHits === 0 ? (
@@ -1693,27 +1822,28 @@ export function AddFoodClient({
             </div>
             )}
 
-            {recentPicks.length > 0 && (
-              <div className="mt-3">
-                <p className="mb-2 text-sm font-extrabold text-[var(--cherry)]">
-                  נבחרו לאחרונה
+            {recentPicks.length > 0 && food.trim().length === 0 && (
+              <div className="mt-3 -mx-3 bg-white">
+                <p className="mb-0 px-3 pb-2 pt-0.5 text-sm font-extrabold text-[var(--cherry)]">
+                  היסטוריה
                 </p>
-                <ul className="space-y-2">
+                <ul className="divide-y divide-[var(--cherry)]/35">
                   {recentPicks.map((r) => {
                     const { qtyLine, kcal } = recentPickQtyAndKcal(r);
                     const qk = `${r.source ?? "local"}-${r.id}`;
                     return (
                       <li
                         key={`${r.id}-${r.name}`}
-                        className="flex items-stretch gap-2 rounded-xl border-2 border-[var(--border-cherry-soft)] bg-white shadow-sm"
+                        className="flex items-center gap-2 bg-white"
                       >
                         <button
                           type="button"
-                          className="flex min-w-0 flex-1 flex-col items-stretch gap-0.5 px-3 py-2.5 text-start transition hover:bg-[var(--cherry-muted)]/45"
+                          title={r.name}
+                          className="flex min-w-0 flex-1 flex-col gap-0.5 px-3 py-2.5 text-start transition hover:bg-[var(--cherry-muted)]/25"
                           onClick={() => openPickModalFromRow(r)}
                         >
-                          <span className="text-sm font-extrabold leading-snug text-[var(--stem)]">
-                            {r.name}
+                          <span className="line-clamp-2 text-base font-semibold leading-snug text-[var(--cherry)]">
+                            {foodProductFirstWords(r.name)}
                           </span>
                           <span className="text-xs font-semibold tabular-nums text-[var(--stem)]/75">
                             {qtyLine} · {kcal} קק״ל
@@ -1721,9 +1851,7 @@ export function AddFoodClient({
                         </button>
                         <button
                           type="button"
-                          className={`flex w-[3.25rem] shrink-0 flex-col items-center justify-center border-s-2 border-[var(--border-cherry-soft)]/60 bg-[var(--cherry-muted)]/25 transition hover:bg-[var(--cherry-muted)]/55 active:scale-[0.98] ${
-                            quickAddId === qk ? "ring-2 ring-inset ring-[var(--stem)]" : ""
-                          }`}
+                          className="me-2 flex min-h-10 min-w-[2.25rem] shrink-0 items-center justify-center rounded-xl px-1 text-[1.5rem] font-extrabold leading-none text-[var(--cherry)] transition hover:bg-[var(--cherry-muted)]/35 active:scale-[0.96]"
                           title={gf(gender, "הוספה מהירה ליומן", "הוספה מהירה ליומן")}
                           aria-label={gf(gender, "הוספה מהירה ליומן", "הוספה מהירה ליומן")}
                           onClick={(e) => {
@@ -1732,11 +1860,11 @@ export function AddFoodClient({
                           }}
                         >
                           {quickAddId === qk ? (
-                            <span className="text-lg font-extrabold text-[var(--cherry)]" aria-hidden>
+                            <span className="text-xl font-extrabold text-[var(--cherry)]" aria-hidden>
                               ✓
                             </span>
                           ) : (
-                            <IconPlusCircle className="h-6 w-6 text-[var(--cherry)]" />
+                            <span aria-hidden>+</span>
                           )}
                         </button>
                       </li>
@@ -1856,7 +1984,7 @@ export function AddFoodClient({
                   <p className="font-extrabold">{Math.round(aiPending.totals.protein)} ג׳</p>
                 </div>
                 <div>
-                  <span className="text-[var(--stem)]/70">פחמימות</span>
+                  <span className="text-[var(--stem)]/70">פחמימה</span>
                   <p className="font-extrabold">{Math.round(aiPending.totals.carbs)} ג׳</p>
                 </div>
                 <div>
@@ -1936,7 +2064,7 @@ export function AddFoodClient({
                   id={pickTitleId}
                   className="panel-title-cherry text-lg leading-snug"
                 >
-                  הוספת מזון
+                  עריכת פריט
                 </h2>
                 <button
                   type="button"
@@ -1954,26 +2082,34 @@ export function AddFoodClient({
               </p>
               <div className="mb-4 grid grid-cols-2 gap-2 rounded-xl border border-[var(--border-cherry-soft)] bg-white/80 px-3 py-3 text-sm">
                 <div>
-                  <span className="text-[var(--cherry)]/65">קלוריות</span>
-                  <p className="font-bold text-[var(--stem)]">
+                  <span className="text-xs font-extrabold tracking-wide text-[var(--cherry)]">
+                    קלוריות
+                  </span>
+                  <p className="mt-0.5 text-base font-extrabold tabular-nums text-[var(--stem)]">
                     {Math.round(pickModalRow.calories ?? 0)} קק״ל
                   </p>
                 </div>
                 <div>
-                  <span className="text-[var(--cherry)]/65">חלבון</span>
-                  <p className="font-bold text-[var(--stem)]">
+                  <span className="text-xs font-extrabold tracking-wide text-[var(--cherry)]">
+                    חלבון
+                  </span>
+                  <p className="mt-0.5 text-base font-extrabold tabular-nums text-[var(--stem)]">
                     {pickModalRow.protein ?? "—"} ג׳
                   </p>
                 </div>
                 <div>
-                  <span className="text-[var(--cherry)]/65">פחמימות</span>
-                  <p className="font-bold text-[var(--stem)]">
+                  <span className="text-xs font-extrabold tracking-wide text-[var(--cherry)]">
+                    פחמימה
+                  </span>
+                  <p className="mt-0.5 text-base font-extrabold tabular-nums text-[var(--stem)]">
                     {pickModalRow.carbs ?? "—"} ג׳
                   </p>
                 </div>
                 <div>
-                  <span className="text-[var(--cherry)]/65">שומן</span>
-                  <p className="font-bold text-[var(--stem)]">
+                  <span className="text-xs font-extrabold tracking-wide text-[var(--cherry)]">
+                    שומן
+                  </span>
+                  <p className="mt-0.5 text-base font-extrabold tabular-nums text-[var(--stem)]">
                     {pickModalRow.fat ?? "—"} ג׳
                   </p>
                 </div>
@@ -2070,70 +2206,84 @@ export function AddFoodClient({
                   />
                 </label>
               )}
-              <div className="mb-4 rounded-xl border border-[#e6c65c]/50 bg-[#fff9e6] px-3 py-2.5 text-sm text-[var(--stem)]">
-                <p className="font-bold">
+              <div className="mb-4 rounded-xl border border-[#f0c8d4]/85 bg-[#fdf2f6] px-3 py-3 text-[var(--stem)] shadow-[0_2px_14px_-4px_rgba(185,104,122,0.22)]">
+                <p className="text-base font-bold leading-snug text-[var(--stem)]">
                   {pickUnitWeightG != null
                     ? `למנה: ${pickUnitsQty} יחידות (סה״כ ${pickEffectiveTotalGrams} ג׳)`
                     : `למנה (${pickEffectiveTotalGrams} ג׳)`}
                 </p>
-                <p className="mt-1 text-[13px]">
-                  קק״ל: {pickPreview.kcal}
+                <p className="mt-2 flex flex-wrap items-baseline gap-x-2.5 gap-y-1.5 text-[15px] leading-snug sm:text-base">
+                  <span className="inline-flex items-baseline gap-1">
+                    <span className="font-extrabold text-[var(--cherry)]">קק״ל</span>
+                    <span className="font-extrabold tabular-nums text-[var(--stem)]">
+                      {pickPreview.kcal}
+                    </span>
+                  </span>
                   {pickPreview.proteinG != null && (
-                    <> · חלבון: {pickPreview.proteinG} ג׳</>
+                    <span className="inline-flex items-baseline gap-1">
+                      <span className="font-extrabold text-[var(--cherry)]">חלבון</span>
+                      <span className="font-extrabold tabular-nums text-[var(--stem)]">
+                        {pickPreview.proteinG} ג׳
+                      </span>
+                    </span>
                   )}
                   {pickPreview.carbsG != null && (
-                    <> · פחמימות: {pickPreview.carbsG} ג׳</>
+                    <span className="inline-flex items-baseline gap-1">
+                      <span className="font-extrabold text-[var(--cherry)]">פחמימה</span>
+                      <span className="font-extrabold tabular-nums text-[var(--stem)]">
+                        {pickPreview.carbsG} ג׳
+                      </span>
+                    </span>
                   )}
-                  {pickPreview.fatG != null && <> · שומן: {pickPreview.fatG} ג׳</>}
+                  {pickPreview.fatG != null && (
+                    <span className="inline-flex items-baseline gap-1">
+                      <span className="font-extrabold text-[var(--cherry)]">שומן</span>
+                      <span className="font-extrabold tabular-nums text-[var(--stem)]">
+                        {pickPreview.fatG} ג׳
+                      </span>
+                    </span>
+                  )}
                 </p>
               </div>
               <div className="grid grid-cols-3 gap-2">
                 <motion.button
                   type="button"
                   className={`${pickCubeBaseClass} ${
-                    pickPressedDiary ? pickCubePressedWhite : pickCubeIdleWhite
+                    pickPressedDiary ? pickCubePressedGreen : pickCubeIdleGreen
                   } active:scale-[0.99]`}
                   whileTap={{ scale: 0.98 }}
                   aria-pressed={pickPressedDiary}
                   onClick={submitPickDiaryOnly}
                 >
-                  הוספה ליומן
+                  {pickFlash?.slot === "diary" ? pickFlash.text : "הוספה ליומן"}
                 </motion.button>
                 <motion.button
                   type="button"
                   className={`${pickCubeBaseClass} ${
-                    pickPressedDictionary
-                      ? pickCubePressedWhite
-                      : pickCubeIdleWhite
+                    pickPressedDictionary ? pickCubePressedGreen : pickCubeIdleGreen
                   } active:scale-[0.99]`}
                   whileTap={{ scale: 0.98 }}
                   aria-pressed={pickPressedDictionary}
                   onClick={submitPickDictionaryOnly}
                 >
-                  הוספה למילון
+                  {pickFlash?.slot === "dictionary"
+                    ? pickFlash.text
+                    : "הוספה למילון"}
                 </motion.button>
                 <motion.button
                   type="button"
                   className={`${pickCubeBaseClass} ${
-                    pickPressedBothShortcut
-                      ? pickCubePressedGold
-                      : pickCubeIdleGold
+                    pickPressedShopping ? pickCubePressedGreen : pickCubeIdleGreen
                   } active:scale-[0.99]`}
                   whileTap={{ scale: 0.98 }}
-                  aria-pressed={pickPressedBothShortcut}
-                  onClick={submitPickDiaryAndDictionary}
+                  aria-pressed={pickPressedShopping}
+                  onClick={submitPickShoppingOnly}
                 >
-                  הוספה ליומן ולמילון
+                  {pickFlash?.slot === "shopping"
+                    ? pickFlash.text
+                    : "הוספה לסל קניות"}
                 </motion.button>
               </div>
-              {pickModalFeedback && (
-                <p
-                  className="mt-3 rounded-xl border border-[#a5d6a7] bg-[#f1f8f4] px-3 py-2.5 text-center text-[11px] font-semibold leading-snug text-[#1b5e20] sm:text-xs"
-                  role="status"
-                >
-                  {pickModalFeedback}
-                </p>
-              )}
             </motion.div>
           </motion.div>
         )}
@@ -2168,9 +2318,9 @@ export function AddFoodClient({
               <div className="mb-4 flex items-start justify-between gap-3">
                 <h2
                   id={manualTitleId}
-                  className="panel-title-cherry text-lg leading-tight"
+                  className="text-lg font-bold leading-tight text-[#b9687a]"
                 >
-                  הוספה ידנית
+                  הוספת פריט אישי
                 </h2>
                 <button
                   type="button"
@@ -2185,8 +2335,11 @@ export function AddFoodClient({
               </div>
               <form className="space-y-3" onSubmit={(e) => void handleManualSubmit(e)}>
                 <label className="block">
-                  <span className="mb-1 block text-xs font-semibold text-[var(--stem)]">
-                    שם המזון
+                  <span className="mb-1 block text-xs font-bold text-[#b9687a]">
+                    שם המזון{" "}
+                    <span className="text-[#b91c1c]" aria-hidden>
+                      *
+                    </span>
                   </span>
                   <input
                     type="text"
@@ -2197,8 +2350,11 @@ export function AddFoodClient({
                   />
                 </label>
                 <label className="block">
-                  <span className="mb-1 block text-xs font-semibold text-[var(--stem)]">
-                    קלוריות ל־100 ג׳
+                  <span className="mb-1 block text-xs font-bold text-[#b9687a]">
+                    קלוריות ל־100 ג׳{" "}
+                    <span className="text-[#b91c1c]" aria-hidden>
+                      *
+                    </span>
                   </span>
                   <input
                     type="text"
@@ -2214,8 +2370,11 @@ export function AddFoodClient({
                 </label>
                 <div className="grid grid-cols-3 gap-2">
                   <label className="block">
-                    <span className="mb-1 block text-[10px] font-semibold text-[var(--stem)]">
-                      חלבון /100ג
+                    <span className="mb-1 block text-xs font-bold text-[#b9687a]">
+                      חלבון /100ג{" "}
+                      <span className="text-[#b91c1c]" aria-hidden>
+                        *
+                      </span>
                     </span>
                     <input
                       type="text"
@@ -2226,12 +2385,15 @@ export function AddFoodClient({
                           e.target.value.replace(",", ".").replace(/[^\d.]/g, "")
                         )
                       }
-                      className="input-luxury-dark w-full text-sm"
+                      className="input-luxury-dark w-full"
                     />
                   </label>
                   <label className="block">
-                    <span className="mb-1 block text-[10px] font-semibold text-[var(--stem)]">
-                      פחמימות /100ג
+                    <span className="mb-1 block text-xs font-bold text-[#b9687a]">
+                      פחמימה /100ג{" "}
+                      <span className="text-[#b91c1c]" aria-hidden>
+                        *
+                      </span>
                     </span>
                     <input
                       type="text"
@@ -2242,12 +2404,15 @@ export function AddFoodClient({
                           e.target.value.replace(",", ".").replace(/[^\d.]/g, "")
                         )
                       }
-                      className="input-luxury-dark w-full text-sm"
+                      className="input-luxury-dark w-full"
                     />
                   </label>
                   <label className="block">
-                    <span className="mb-1 block text-[10px] font-semibold text-[var(--stem)]">
-                      שומן /100ג
+                    <span className="mb-1 block text-xs font-bold text-[#b9687a]">
+                      שומן /100ג{" "}
+                      <span className="text-[#b91c1c]" aria-hidden>
+                        *
+                      </span>
                     </span>
                     <input
                       type="text"
@@ -2258,12 +2423,12 @@ export function AddFoodClient({
                           e.target.value.replace(",", ".").replace(/[^\d.]/g, "")
                         )
                       }
-                      className="input-luxury-dark w-full text-sm"
+                      className="input-luxury-dark w-full"
                     />
                   </label>
                 </div>
                 <label className="block">
-                  <span className="mb-1 block text-xs font-semibold text-[var(--stem)]">
+                  <span className="mb-1 block text-xs font-bold text-[#b9687a]">
                     משקל יחידה (גרם, אופציונלי)
                   </span>
                   <input
@@ -2289,7 +2454,7 @@ export function AddFoodClient({
                 </label>
                 {manUnitWeightG != null ? (
                   <label className="block">
-                    <span className="mb-1 block text-xs font-semibold text-[var(--stem)]">
+                    <span className="mb-1 block text-xs font-bold text-[#b9687a]">
                       כמות יחידות
                     </span>
                     <input
@@ -2312,7 +2477,7 @@ export function AddFoodClient({
                   </label>
                 ) : (
                   <label className="block">
-                    <span className="mb-1 block text-xs font-semibold text-[var(--stem)]">
+                    <span className="mb-1 block text-xs font-bold text-[#b9687a]">
                       משקל המנה (גרם)
                     </span>
                     <input
@@ -2332,7 +2497,7 @@ export function AddFoodClient({
                 <motion.button
                   type="submit"
                   disabled={manLoading}
-                  className="btn-stem w-full rounded-xl py-3 text-base font-bold disabled:opacity-50"
+                  className="w-full rounded-xl border border-[var(--border-cherry-soft)] bg-white py-3 text-base font-bold text-[var(--stem)] shadow-[0_4px_16px_rgba(22,163,74,0.14)] transition hover:shadow-[0_6px_20px_rgba(22,163,74,0.2)] disabled:opacity-50"
                   whileTap={{ scale: 0.98 }}
                 >
                   {manLoading ? "שומר…" : "הוספה ליומן"}

@@ -1,11 +1,18 @@
 "use client";
 
 import type { ReactNode } from "react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
+import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { CherryMark } from "@/components/CherryMark";
-import { ArrowRight } from "lucide-react";
-import { getActiveJournalDateKey, getJournalStreakDays } from "@/lib/storage";
+import { ArrowRight, X } from "lucide-react";
+import { getDaysRemainingToGoal } from "@/lib/goalMetrics";
+import {
+  getActiveJournalDateKey,
+  getJournalStreakDays,
+  loadProfile,
+} from "@/lib/storage";
 import { getTodayKey } from "@/lib/dateKey";
 import { HomeDrawer } from "@/components/HomeDrawer";
 
@@ -41,6 +48,12 @@ function titleForPathname(pathname: string): string {
   return "מסך";
 }
 
+/** רקע דובדבן בהיר לפופאובר — לא מעושן מדי */
+const JOURNAL_STREAK_POP_BG =
+  "color-mix(in srgb, var(--cherry) 14%, white 86%)";
+
+const JOURNAL_STREAK_HELP_TITLE = "התמדה בתיעוד";
+
 function HeaderBarContent({
   showBack,
   title,
@@ -58,6 +71,33 @@ function HeaderBarContent({
   onBack: () => void;
 }) {
   const router = useRouter();
+  const gender = loadProfile().gender;
+  const [journalStreakHelpOpen, setJournalStreakHelpOpen] = useState(false);
+  const journalStreakTriggerRef = useRef<HTMLButtonElement | null>(null);
+
+  const daysLeftToGoal = getDaysRemainingToGoal();
+  const daysLeftDisplay =
+    daysLeftToGoal != null ? String(daysLeftToGoal) : "—";
+
+  useEffect(() => {
+    if (journalStreakDays == null && journalStreakHelpOpen) {
+      setJournalStreakHelpOpen(false);
+    }
+  }, [journalStreakDays, journalStreakHelpOpen]);
+
+  useEffect(() => {
+    if (!journalStreakHelpOpen) return;
+    function onKeyDown(e: KeyboardEvent) {
+      if (e.key === "Escape") setJournalStreakHelpOpen(false);
+    }
+    document.addEventListener("keydown", onKeyDown);
+    return () => document.removeEventListener("keydown", onKeyDown);
+  }, [journalStreakHelpOpen]);
+
+  const addFoodJournalHref = `/add-food?from=journal&date=${encodeURIComponent(
+    getActiveJournalDateKey() ?? getTodayKey()
+  )}`;
+
   return (
     <div className="relative h-[60px] w-full">
       <div className="absolute right-3 top-0 flex h-[60px] items-center">
@@ -88,26 +128,108 @@ function HeaderBarContent({
       </div>
 
       <div
-        className="absolute left-3 top-0 flex h-[60px] items-center gap-1"
+        className="absolute left-3 top-0 flex h-[60px] items-center"
         dir="ltr"
       >
         {journalStreakDays != null ? (
-          <span
-            className="min-w-[1.25rem] text-center text-sm font-extrabold tabular-nums text-[var(--stem)]"
-            title="ימים ברצף עם רישום ביומן"
+          <>
+            <div className="relative shrink-0">
+              <button
+                ref={journalStreakTriggerRef}
+                type="button"
+                className="inline-flex h-10 shrink-0 items-center gap-1.5 rounded-xl border border-[var(--border-cherry-soft)]/90 bg-white/75 px-2.5 shadow-[0_1px_8px_rgba(0,0,0,0.07)] backdrop-blur-[2px] transition hover:bg-white/95 active:scale-[0.98]"
+                onClick={() =>
+                  setJournalStreakHelpOpen((open) => !open)
+                }
+                aria-label="מה המשמעות של המספר והדובדבן — רצף יומן"
+                aria-haspopup="dialog"
+                aria-expanded={journalStreakHelpOpen}
+              >
+                <span className="select-none text-center text-[15px] font-extrabold tabular-nums leading-none text-[var(--stem)]">
+                  {journalStreakDays}
+                </span>
+                <CherryMark className="h-[1.35rem] w-[1.85rem] shrink-0 translate-y-px drop-shadow-sm" />
+              </button>
+            </div>
+            {journalStreakHelpOpen && typeof document !== "undefined"
+              ? createPortal(
+                  <div
+                    className="fixed inset-0 z-[5200] flex items-center justify-center bg-black/20 p-5 backdrop-blur-[2px]"
+                    role="presentation"
+                    onClick={(e) => {
+                      if (e.target === e.currentTarget) {
+                        setJournalStreakHelpOpen(false);
+                      }
+                    }}
+                  >
+                    <div
+                      role="dialog"
+                      aria-modal="true"
+                      aria-labelledby="journal-streak-help-title"
+                      dir="rtl"
+                      className="pointer-events-auto w-full max-w-[min(19rem,calc(100vw-2rem))] rounded-2xl border border-[var(--border-cherry-soft)]/70 px-4 pb-4 pt-4 shadow-[0_12px_40px_rgba(0,0,0,0.1)] sm:max-w-[20.5rem] sm:px-5 sm:pb-5 sm:pt-5"
+                      style={{ backgroundColor: JOURNAL_STREAK_POP_BG }}
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      <div className="flex items-start justify-between gap-2">
+                        <h2
+                          id="journal-streak-help-title"
+                          className="text-[1.05rem] font-bold leading-snug tracking-tight text-[var(--cherry)] sm:text-lg"
+                        >
+                          {JOURNAL_STREAK_HELP_TITLE}
+                        </h2>
+                        <button
+                          type="button"
+                          className="-m-1 shrink-0 rounded-lg p-1.5 text-[var(--stem)]/55 transition hover:bg-black/[0.05] hover:text-[var(--stem)]/85"
+                          aria-label="סגירה"
+                          onClick={() => setJournalStreakHelpOpen(false)}
+                        >
+                          <X className="size-[1.15rem]" strokeWidth={2.2} />
+                        </button>
+                      </div>
+                      <p className="mt-3 text-[0.9rem] font-extrabold leading-relaxed text-[var(--stem)] sm:text-[0.95rem]">
+                        {gender === "male" ? (
+                          <>
+                            שמור על הרצף — נותרו לך עוד{" "}
+                            <span className="font-black tabular-nums text-[var(--cherry)]">
+                              {daysLeftDisplay}
+                            </span>{" "}
+                            ימים להשגת היעד.
+                          </>
+                        ) : (
+                          <>
+                            שמרי על הרצף — נותרו לך עוד{" "}
+                            <span className="font-black tabular-nums text-[var(--cherry)]">
+                              {daysLeftDisplay}
+                            </span>{" "}
+                            ימים להשגת היעד.
+                          </>
+                        )}
+                      </p>
+                      <Link
+                        href={addFoodJournalHref}
+                        className="mt-4 flex w-full items-center justify-center rounded-full bg-[var(--cherry)] py-3 text-center text-[0.95rem] font-bold text-white shadow-[0_4px_16px_rgba(0,0,0,0.14)] transition hover:brightness-[1.06] active:scale-[0.99]"
+                        onClick={() => setJournalStreakHelpOpen(false)}
+                      >
+                        להוספת מאכל ליומן
+                      </Link>
+                    </div>
+                  </div>,
+                  document.body
+                )
+              : null}
+          </>
+        ) : (
+          <button
+            type="button"
+            className="inline-flex h-10 w-10 items-center justify-center rounded-xl bg-white/0 transition hover:bg-white/25 active:scale-[0.99]"
+            onClick={() => router.push("/")}
+            aria-label="בית"
+            title="בית"
           >
-            {journalStreakDays}
-          </span>
-        ) : null}
-        <button
-          type="button"
-          className="inline-flex h-10 w-10 items-center justify-center rounded-xl bg-white/0 transition hover:bg-white/25 active:scale-[0.99]"
-          onClick={() => router.push("/")}
-          aria-label="בית"
-          title="בית"
-        >
-          <CherryMark className="h-6 w-8 shrink-0 drop-shadow-sm" />
-        </button>
+            <CherryMark className="h-6 w-8 shrink-0 drop-shadow-sm" />
+          </button>
+        )}
       </div>
     </div>
   );
@@ -179,6 +301,7 @@ export function AppBrandMark() {
 
   const flowHeader =
     pathname === "/journal" ||
+    pathname === "/add-food" ||
     pathname === "/dictionary" ||
     pathname === "/shopping";
   const isDictionary = pathname === "/dictionary";

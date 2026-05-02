@@ -13,6 +13,28 @@ export function stripForQueryMatch(s: string): string {
     .replace(/\s+/g, "");
 }
 
+function isHebrewLetterChar(ch: string | undefined): boolean {
+  if (!ch) return false;
+  return /[\u0590-\u05FF]/.test(ch);
+}
+
+/**
+ * המילה הראשונה בשם מתחילה במילת החיפוש כבסיס למוצר (חלב, חלב3%, חלב-סויה),
+ * ולא מילה כמו «חלבון» שבה ממשיכות אותיות עבריות אחרי הקידומת.
+ */
+export function firstWordStrongPrefixMatch(name: string, query: string): boolean {
+  const qFirst =
+    normalizeForQueryMatch(query).split(/\s+/).filter(Boolean)[0] ?? "";
+  if (qFirst.length < 1) return false;
+  const n = normalizeForQueryMatch(name);
+  const headToken = n.split(/[\s,]+/).filter(Boolean)[0] ?? "";
+  if (!headToken.startsWith(qFirst)) return false;
+  if (headToken === qFirst) return true;
+  const after = headToken[qFirst.length];
+  if (after === undefined) return true;
+  return !isHebrewLetterChar(after);
+}
+
 function isDigitsOnlyToken(s: string): boolean {
   return /^\d+$/.test(s);
 }
