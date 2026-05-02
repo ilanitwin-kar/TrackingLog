@@ -8,6 +8,9 @@ import {
   useMemo,
   useRef,
   useState,
+  type MouseEvent,
+  type PointerEvent,
+  type ReactNode,
 } from "react";
 import { flushSync } from "react-dom";
 import {
@@ -27,11 +30,7 @@ import {
   toggleExplorerFoodInDictionary,
 } from "@/lib/storage";
 import { addToShopping, loadShoppingFoodIds } from "@/lib/explorerStorage";
-import {
-  IconTrash,
-  IconPlusCircle,
-  IconVerified,
-} from "@/components/Icons";
+import { IconPlusCircle, IconVerified } from "@/components/Icons";
 import {
   dictionaryIntroBody,
   dictionarySavedFilterPlaceholder,
@@ -39,15 +38,10 @@ import {
 } from "@/lib/hebrewGenderUi";
 import { useDocumentScrollOnlyIfOverflowing } from "@/lib/useDocumentScrollOnlyIfOverflowing";
 import Link from "next/link";
-import {
-  Check,
-  ChevronDown,
-  Pencil,
-  PlusCircle,
-  ShoppingCart,
-} from "lucide-react";
+import { ChevronDown, MoreVertical } from "lucide-react";
 import { rankedFuzzySearchByText, type MatchRange } from "@/lib/rankedSearch";
 import { matchesAllQueryWords } from "@/lib/foodSearchRules";
+import { truncateDisplayFoodLabel } from "@/lib/displayFoodLabel";
 
 const fontFood =
   "font-[Calibri,'Segoe_UI','Helvetica_Neue',system-ui,sans-serif]";
@@ -63,40 +57,10 @@ type ExplorerFoodRow = {
   brand?: string;
 };
 
-/** כפתורי הפעולה בתחתית כרטיס מוצר נפתח במילון — עיצוב אחיד בלבד */
-function DictionaryExpandedTripleAction({
-  label,
-  pressed,
-  onClick,
-  icon,
-}: {
-  label: string;
-  pressed?: boolean;
-  onClick: () => void;
-  icon: React.ReactNode;
-}) {
-  return (
-    <button
-      type="button"
-      className={`inline-flex items-center justify-center gap-2 rounded-[20px] border border-[#B5173A] bg-transparent px-3 py-2 text-sm font-extrabold text-[#B5173A] transition hover:bg-[#B5173A]/[0.07] active:opacity-90 ${
-        pressed ? "bg-[#B5173A]/[0.08]" : ""
-      }`}
-      onClick={(e) => {
-        e.preventDefault();
-        e.stopPropagation();
-        onClick();
-      }}
-      aria-pressed={pressed}
-      title={label}
-      aria-label={label}
-    >
-      <span className="shrink-0 text-[#B5173A]" aria-hidden>
-        {icon}
-      </span>
-      <span>{label}</span>
-    </button>
-  );
-}
+const DICT_LONG_PRESS_MS = 520;
+const DICT_LONG_PRESS_CANCEL_DIST2 = 100;
+
+type DictLetterGroup = { key: string; label: string; items: DictionaryItem[] };
 
 const UNITS: FoodUnit[] = [
   "גרם",
@@ -511,7 +475,7 @@ function sortSavedByQuery(items: DictionaryItem[], query: string): DictionaryIte
 
 function renderHighlighted(text: string, ranges: MatchRange[]) {
   if (!ranges || ranges.length < 1) return text;
-  const out: React.ReactNode[] = [];
+  const out: ReactNode[] = [];
   let at = 0;
   for (const [s, e] of ranges) {
     const start = Math.max(0, Math.min(text.length, s));
@@ -584,6 +548,25 @@ export default function DictionaryPage() {
   );
   const [dictItemNameDraft, setDictItemNameDraft] = useState("");
   const dictItemNameInputRef = useRef<HTMLInputElement>(null);
+
+  const dictLongPressRef = useRef<{
+    timer: number | null;
+    pointerId: number | null;
+    startX: number;
+    startY: number;
+    itemId: string | null;
+  }>({
+    timer: null,
+    pointerId: null,
+    startX: 0,
+    startY: 0,
+    itemId: null,
+  });
+  const [dictionaryActionItem, setDictionaryActionItem] =
+    useState<DictionaryItem | null>(null);
+  const [dictRowMenuOpenId, setDictRowMenuOpenId] = useState<string | null>(
+    null
+  );
 
   const refresh = useCallback(() => {
     setSaved(loadDictionary());
@@ -718,6 +701,17 @@ export default function DictionaryPage() {
     if (!activeLetter) return sorted;
     return sorted.filter((x) => firstHebLetter(x.food) === activeLetter);
   }, [savedHits, filteredSaved, dictTab, debouncedQ, activeLetter]);
+
+  const visibleSavedGrouped = useMemo((): DictLetterGroup[] => {
+    if (visibleSaved.length === 0) return [];
+    if (debouncedQ.length >= 2) {
+      return [{ key: "__search__", label: "", items: visibleSaved }];
+    }
+    if (activeLetter) {
+      return [{ key: activeLetter, label: activeLetter, items: visibleSaved }];
+    }
+    return [{ key: "__flat__", label: "", items: visibleSaved }];
+  }, [visibleSaved, debouncedQ, activeLetter]);
 
   const exportItems = useMemo(() => {
     if (exportSelectMode && exportSelectedIds.size > 0) {
@@ -1046,10 +1040,129 @@ export default function DictionaryPage() {
     return () => window.removeEventListener("scroll", onScroll);
   }, []);
 
+  useEffect(() => {
+    return () => {
+      clearDictLongPressTimer();
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!dictRowMenuOpenId) return;
+    function onDown(ev: Event) {
+      const t = ev.target;
+      if (!(t instanceof Element)) return;
+      if (t.closest("[data-dict-row-menu]")) return;
+      setDictRowMenuOpenId(null);
+    }
+    window.addEventListener("pointerdown", onDown, true);
+    return () => window.removeEventListener("pointerdown", onDown, true);
+  }, [dictRowMenuOpenId]);
+
   function flashAdded(id: string) {
     setJustAddedId(id);
     if (justAddedTimerRef.current) window.clearTimeout(justAddedTimerRef.current);
     justAddedTimerRef.current = window.setTimeout(() => setJustAddedId(null), 900);
+  }
+
+  function renderDictListFoodTitle(d: DictionaryItem): ReactNode {
+    const full = d.food.trim();
+    const short = truncateDisplayFoodLabel(full);
+    const useHighlight =
+      savedHits != null && debouncedQ.length >= 2 && short === full;
+    if (useHighlight) {
+      const ranges =
+        savedHits!.find((x) => x.item.id === d.id)?.ranges ?? [];
+      return renderHighlighted(full, ranges);
+    }
+    return short;
+  }
+
+  function clearDictLongPressTimer() {
+    const t = dictLongPressRef.current.timer;
+    if (t != null) window.clearTimeout(t);
+    dictLongPressRef.current.timer = null;
+    dictLongPressRef.current.pointerId = null;
+    dictLongPressRef.current.itemId = null;
+  }
+
+  function handleDictRowPointerDown(
+    e: PointerEvent<HTMLLIElement>,
+    d: DictionaryItem
+  ) {
+    if (exportSelectMode) return;
+    if (e.pointerType === "mouse" && e.button !== 0) return;
+    const el = e.target;
+    if (!(el instanceof Element)) return;
+    if (el.closest("[data-skip-dict-longpress]")) return;
+
+    clearDictLongPressTimer();
+    dictLongPressRef.current.pointerId = e.pointerId;
+    dictLongPressRef.current.startX = e.clientX;
+    dictLongPressRef.current.startY = e.clientY;
+    dictLongPressRef.current.itemId = d.id;
+    try {
+      e.currentTarget.setPointerCapture(e.pointerId);
+    } catch {
+      /* ignore */
+    }
+    dictLongPressRef.current.timer = window.setTimeout(() => {
+      dictLongPressRef.current.timer = null;
+      dictLongPressRef.current.pointerId = null;
+      dictLongPressRef.current.itemId = null;
+      setDictRowMenuOpenId(null);
+      setDictionaryActionItem(d);
+      try {
+        navigator.vibrate?.(12);
+      } catch {
+        /* ignore */
+      }
+    }, DICT_LONG_PRESS_MS);
+  }
+
+  function handleDictRowPointerMove(e: PointerEvent<HTMLLIElement>) {
+    if (dictLongPressRef.current.pointerId !== e.pointerId) return;
+    const dx = e.clientX - dictLongPressRef.current.startX;
+    const dy = e.clientY - dictLongPressRef.current.startY;
+    if (dx * dx + dy * dy > DICT_LONG_PRESS_CANCEL_DIST2) {
+      clearDictLongPressTimer();
+      try {
+        e.currentTarget.releasePointerCapture(e.pointerId);
+      } catch {
+        /* ignore */
+      }
+    }
+  }
+
+  function handleDictRowPointerEnd(e: PointerEvent<HTMLLIElement>) {
+    if (dictLongPressRef.current.pointerId !== e.pointerId) return;
+    clearDictLongPressTimer();
+    try {
+      e.currentTarget.releasePointerCapture(e.pointerId);
+    } catch {
+      /* ignore */
+    }
+  }
+
+  function handleDictRowContextMenu(
+    e: MouseEvent<HTMLLIElement>,
+    d: DictionaryItem
+  ) {
+    if (exportSelectMode) return;
+    const el = e.target;
+    if (!(el instanceof Element)) return;
+    if (el.closest("[data-skip-dict-longpress]")) return;
+    e.preventDefault();
+    clearDictLongPressTimer();
+    setDictRowMenuOpenId(null);
+    setDictionaryActionItem(d);
+  }
+
+  function confirmDictionaryDeleteItem() {
+    const victim = dictionaryActionItem;
+    if (!victim) return;
+    setSaved(removeDictionaryItem(victim.id));
+    setDictionaryActionItem(null);
+    setOpenSavedId((x) => (x === victim.id ? null : x));
   }
 
   function onExplorerDictionary(row: ExplorerFoodRow) {
@@ -1716,8 +1829,12 @@ export default function DictionaryPage() {
                   )}
           </p>
         ) : (
-          <ul className="notebook-list -mx-3 space-y-2">
-            {visibleSaved.map((d) => {
+          <div className="-mx-3 space-y-4">
+            {visibleSavedGrouped.map((group) => (
+              <div key={group.key} className="space-y-2">
+                <ul className="notebook-list space-y-2">
+                  {group.items.map((d, idx) => {
+                    const displayIndex = idx + 1;
               const preset =
                 d.mealPresetId != null
                   ? presetMap.get(d.mealPresetId)
@@ -1726,11 +1843,21 @@ export default function DictionaryPage() {
               const isOpen = openSavedId === d.id;
               const isSelected = exportSelectedIds.has(d.id);
               return (
-                <motion.li key={d.id} layout className="notebook-row">
+                <motion.li
+                  key={d.id}
+                  layout
+                  className="notebook-row"
+                  onPointerDown={(e) => handleDictRowPointerDown(e, d)}
+                  onPointerMove={handleDictRowPointerMove}
+                  onPointerUp={handleDictRowPointerEnd}
+                  onPointerCancel={handleDictRowPointerEnd}
+                  onContextMenu={(e) => handleDictRowContextMenu(e, d)}
+                >
                   <div className="flex items-start justify-between gap-3">
                     {exportSelectMode ? (
                       <button
                         type="button"
+                        data-skip-dict-longpress
                         className="mt-1 shrink-0 rounded-md border-2 border-[var(--border-cherry-soft)] bg-white p-1 shadow-sm"
                         onPointerDown={(e) => {
                           e.preventDefault();
@@ -1757,11 +1884,17 @@ export default function DictionaryPage() {
                       </button>
                     ) : null}
                     <div className="flex min-w-0 flex-1 items-center gap-2 text-right">
-                      <span className="text-xs" aria-hidden>
-                        🍒
+                      <span
+                        className="w-7 shrink-0 text-center text-sm font-extrabold tabular-nums leading-snug text-[var(--stem)]"
+                        aria-hidden
+                      >
+                        {displayIndex}
                       </span>
                       {dictItemNameEditId === d.id && isOpen ? (
-                        <div className="flex min-w-0 flex-1 flex-col gap-2 sm:flex-row sm:items-center">
+                        <div
+                          className="flex min-w-0 flex-1 flex-col gap-2 sm:flex-row sm:items-center"
+                          data-skip-dict-longpress
+                        >
                           <input
                             ref={dictItemNameInputRef}
                             type="text"
@@ -1809,26 +1942,17 @@ export default function DictionaryPage() {
                       ) : !isOpen ? (
                         <button
                           type="button"
+                          data-skip-dict-longpress
                           className="min-w-0 flex-1 text-right"
                           onClick={() =>
                             setOpenSavedId((x) => (x === d.id ? null : d.id))
                           }
                           aria-expanded={false}
-                          title={gf(
-                            gender,
-                            "פתיחת פרטי הפריט",
-                            "פתיחת פרטי הפריט"
-                          )}
+                          title={d.food}
                         >
                           <span className="flex min-w-0 items-center justify-end gap-1.5">
                             <span className="min-w-0 flex-1 break-words text-base font-normal leading-snug text-[var(--cherry)]">
-                              {savedHits
-                                ? renderHighlighted(
-                                    d.food,
-                                    savedHits.find((x) => x.item.id === d.id)
-                                      ?.ranges ?? []
-                                  )
-                                : d.food}
+                              {renderDictListFoodTitle(d)}
                             </span>
                             <span
                               className="shrink-0 text-xs font-normal text-[var(--stem)]/55"
@@ -1842,6 +1966,7 @@ export default function DictionaryPage() {
                         <div className="flex min-w-0 flex-1 items-center gap-1.5">
                           <button
                             type="button"
+                            data-skip-dict-longpress
                             className="min-w-0 flex-1 rounded-md px-1 py-0.5 text-right transition hover:bg-[var(--cherry-muted)]/45"
                             onClick={(e) => {
                               e.preventDefault();
@@ -1849,11 +1974,7 @@ export default function DictionaryPage() {
                               setDictItemNameEditId(d.id);
                               setDictItemNameDraft(d.food);
                             }}
-                            title={gf(
-                              gender,
-                              "לחצי לעריכת השם (כרטיס פתוח)",
-                              "לחץ לעריכת השם (כרטיס פתוח)"
-                            )}
+                            title={d.food}
                             aria-label={gf(
                               gender,
                               "עריכת שם הפריט",
@@ -1861,17 +1982,12 @@ export default function DictionaryPage() {
                             )}
                           >
                             <span className="block min-w-0 break-words text-base font-normal leading-snug text-[var(--cherry)]">
-                              {savedHits
-                                ? renderHighlighted(
-                                    d.food,
-                                    savedHits.find((x) => x.item.id === d.id)
-                                      ?.ranges ?? []
-                                  )
-                                : d.food}
+                              {renderDictListFoodTitle(d)}
                             </span>
                           </button>
                           <button
                             type="button"
+                            data-skip-dict-longpress
                             className="shrink-0 rounded-md p-1 text-xs font-normal text-[var(--stem)]/55 transition hover:bg-[var(--cherry-muted)]/40"
                             onClick={(e) => {
                               e.preventDefault();
@@ -1899,11 +2015,12 @@ export default function DictionaryPage() {
                       )}
                     </div>
 
-                    <div className="flex shrink-0 items-center gap-1.5">
+                    <div className="relative flex shrink-0 items-center gap-1">
                       {!exportSelectMode &&
                       (!d.mealPresetId || preset != null) ? (
                         <button
                           type="button"
+                          data-skip-dict-longpress
                           className="rounded-md border border-[var(--border-cherry-soft)] bg-white p-1.5 text-[var(--cherry)] shadow-sm transition hover:bg-[var(--cherry-muted)]"
                           onClick={(e) => {
                             e.preventDefault();
@@ -1925,19 +2042,96 @@ export default function DictionaryPage() {
                           </span>
                         </button>
                       ) : null}
-                      <button
-                        type="button"
-                        className="rounded-md border border-[var(--border-cherry-soft)] bg-white p-1.5 text-[var(--cherry)] shadow-sm transition hover:bg-[var(--cherry-muted)]"
-                        onClick={(e) => {
-                          e.preventDefault();
-                          e.stopPropagation();
-                          setSaved(removeDictionaryItem(d.id));
-                        }}
-                        aria-label="מחיקה — הסרה מהמילון"
-                        title="מחיקה"
-                      >
-                        <IconTrash className="h-4 w-4" />
-                      </button>
+                      {!exportSelectMode &&
+                      (!d.mealPresetId || preset != null) ? (
+                        <div className="relative" data-dict-row-menu>
+                          <button
+                            type="button"
+                            data-skip-dict-longpress
+                            className="rounded-md border border-[var(--border-cherry-soft)] bg-white p-1.5 text-[var(--cherry)] shadow-sm transition hover:bg-[var(--cherry-muted)]"
+                            aria-expanded={dictRowMenuOpenId === d.id}
+                            aria-haspopup="menu"
+                            aria-label={gf(
+                              gender,
+                              "פעולות נוספות על הפריט",
+                              "פעולות נוספות על הפריט"
+                            )}
+                            title={gf(gender, "עוד", "עוד")}
+                            onClick={(e) => {
+                              e.preventDefault();
+                              e.stopPropagation();
+                              setDictRowMenuOpenId((x) =>
+                                x === d.id ? null : d.id
+                              );
+                            }}
+                          >
+                            <MoreVertical className="h-4 w-4" aria-hidden />
+                          </button>
+                          {dictRowMenuOpenId === d.id ? (
+                            <div
+                              role="menu"
+                              className="absolute end-0 top-[calc(100%+4px)] z-40 min-w-[13rem] rounded-xl border-2 border-[var(--border-cherry-soft)] bg-white py-1 shadow-lg"
+                              dir="rtl"
+                            >
+                              <button
+                                type="button"
+                                role="menuitem"
+                                className="flex w-full px-3 py-2.5 text-start text-sm font-bold text-[var(--stem)] transition hover:bg-[var(--cherry-muted)]/45"
+                                onClick={(e) => {
+                                  e.preventDefault();
+                                  e.stopPropagation();
+                                  setDictRowMenuOpenId(null);
+                                  openQuantityEdit(d);
+                                }}
+                              >
+                                {gf(
+                                  gender,
+                                  "עריכת כמות במילון",
+                                  "עריכת כמות במילון"
+                                )}
+                              </button>
+                              <button
+                                type="button"
+                                role="menuitem"
+                                className="flex w-full px-3 py-2.5 text-start text-sm font-bold text-[var(--stem)] transition hover:bg-[var(--cherry-muted)]/45"
+                                onClick={(e) => {
+                                  e.preventDefault();
+                                  e.stopPropagation();
+                                  setDictRowMenuOpenId(null);
+                                  openJournalAddModal(d);
+                                }}
+                              >
+                                {gf(gender, "הוספה ליומן", "הוספה ליומן")}
+                                {justAddedId === `journal:${d.id}` ? (
+                                  <span className="ms-1 text-xs font-extrabold text-[var(--stem)]">
+                                    ✓
+                                  </span>
+                                ) : null}
+                              </button>
+                              {isMeal ? null : !d.mealPresetId ? (
+                                <button
+                                  type="button"
+                                  role="menuitem"
+                                  className="flex w-full px-3 py-2.5 text-start text-sm font-bold text-[var(--stem)] transition hover:bg-[var(--cherry-muted)]/45"
+                                  onClick={(e) => {
+                                    e.preventDefault();
+                                    e.stopPropagation();
+                                    setDictRowMenuOpenId(null);
+                                    void onCartDictionaryItem(d);
+                                  }}
+                                >
+                                  לקניות
+                                  {justAddedId === `shop:${d.id}` ? (
+                                    <span className="ms-1 text-xs font-extrabold text-[var(--stem)]">
+                                      ✓
+                                    </span>
+                                  ) : null}
+                                </button>
+                              ) : null}
+                            </div>
+                          ) : null}
+                        </div>
+                      ) : null}
                     </div>
                   </div>
 
@@ -1945,6 +2139,7 @@ export default function DictionaryPage() {
                     {isOpen && (
                       <motion.div
                         className="mt-3"
+                        data-skip-dict-longpress
                         initial={{ opacity: 0, y: -4 }}
                         animate={{ opacity: 1, y: 0 }}
                         exit={{ opacity: 0, y: -4 }}
@@ -1961,7 +2156,7 @@ export default function DictionaryPage() {
                                       </span>
                                       {" · "}
                                       <span className="bidi-isolate-rtl inline-block font-semibold text-[var(--cherry)]">
-                                        {c.food}
+                                        {truncateDisplayFoodLabel(c.food)}
                                       </span>
                                       {" — "}
                                       <span className="bidi-isolate-rtl inline-block font-bold text-neutral-900">
@@ -2111,104 +2306,6 @@ export default function DictionaryPage() {
                                 </p>
                               ) : null;
                             })()}
-
-                          <div className="mt-2 flex w-full max-w-full flex-wrap items-center justify-center gap-2 border-t border-[var(--border-cherry-soft)]/60 bg-gradient-to-b from-[var(--cherry-muted)]/35 to-transparent px-1 py-2.5 sm:gap-3">
-                            {isMeal && preset ? (
-                              <>
-                                <DictionaryExpandedTripleAction
-                                  label={gf(
-                                    gender,
-                                    "עריכת כמות במילון",
-                                    "עריכת כמות במילון"
-                                  )}
-                                  onClick={() => openQuantityEdit(d)}
-                                  icon={
-                                    <Pencil
-                                      size={16}
-                                      strokeWidth={2}
-                                      className="text-[#B5173A]"
-                                      aria-hidden
-                                    />
-                                  }
-                                />
-                                <DictionaryExpandedTripleAction
-                                  label={gf(gender, "הוספה ליומן", "הוספה ליומן")}
-                                  pressed={justAddedId === `journal:${d.id}`}
-                                  onClick={() => openJournalAddModal(d)}
-                                  icon={
-                                    justAddedId === `journal:${d.id}` ? (
-                                      <Check
-                                        size={16}
-                                        strokeWidth={2}
-                                        className="text-[#B5173A]"
-                                        aria-hidden
-                                      />
-                                    ) : (
-                                      <PlusCircle
-                                        size={16}
-                                        strokeWidth={2}
-                                        className="text-[#B5173A]"
-                                        aria-hidden
-                                      />
-                                    )
-                                  }
-                                />
-                              </>
-                            ) : !d.mealPresetId ? (
-                              <>
-                                <DictionaryExpandedTripleAction
-                                  label={gf(
-                                    gender,
-                                    "עריכת כמות במילון",
-                                    "עריכת כמות במילון"
-                                  )}
-                                  onClick={() => openQuantityEdit(d)}
-                                  icon={
-                                    <Pencil
-                                      size={16}
-                                      strokeWidth={2}
-                                      className="text-[#B5173A]"
-                                      aria-hidden
-                                    />
-                                  }
-                                />
-                                <DictionaryExpandedTripleAction
-                                  label={gf(gender, "הוספה ליומן", "הוספה ליומן")}
-                                  onClick={() => openJournalAddModal(d)}
-                                  icon={
-                                    <PlusCircle
-                                      size={16}
-                                      strokeWidth={2}
-                                      className="text-[#B5173A]"
-                                      aria-hidden
-                                    />
-                                  }
-                                />
-                                <DictionaryExpandedTripleAction
-                                  label="לקניות"
-                                  pressed={justAddedId === `shop:${d.id}`}
-                                  onClick={() => onCartDictionaryItem(d)}
-                                  icon={
-                                    justAddedId === `shop:${d.id}` ? (
-                                      <Check
-                                        size={16}
-                                        strokeWidth={2}
-                                        className="text-[#B5173A]"
-                                        aria-hidden
-                                      />
-                                    ) : (
-                                      <ShoppingCart
-                                        size={16}
-                                        strokeWidth={2}
-                                        className="text-[#B5173A]"
-                                        aria-hidden
-                                      />
-                                    )
-                                  }
-                                />
-                              </>
-                            ) : null}
-                          </div>
                         </div>
                       </motion.div>
                     )}
@@ -2220,10 +2317,106 @@ export default function DictionaryPage() {
                   )}
                 </motion.li>
               );
-            })}
-          </ul>
+                  })}
+                </ul>
+                <div className="mx-1 rounded-xl border-2 border-[var(--border-cherry-soft)]/70 bg-gradient-to-br from-[var(--cherry-muted)]/28 to-white px-4 py-3 text-center shadow-[0_2px_12px_rgba(0,0,0,0.05)]">
+                  <p className="text-[15px] font-extrabold leading-snug text-[var(--cherry)]">
+                    {debouncedQ.length >= 2
+                      ? dictTab === "meals"
+                        ? `סה״כ ארוחות: ${group.items.length}`
+                        : dictTab === "foods"
+                          ? `סה״כ מוצרים: ${group.items.length}`
+                          : (() => {
+                              const mc = group.items.filter(
+                                (x) => x.mealPresetId != null
+                              ).length;
+                              return `סה״כ מוצרים: ${group.items.length - mc} · סה״כ ארוחות: ${mc}`;
+                            })()
+                      : activeLetter
+                        ? dictTab === "meals"
+                          ? `סה״כ ארוחות באות ${activeLetter}: ${group.items.length}`
+                          : dictTab === "foods"
+                            ? `סה״כ מוצרים באות ${activeLetter}: ${group.items.length}`
+                            : (() => {
+                                const mc = group.items.filter(
+                                  (x) => x.mealPresetId != null
+                                ).length;
+                                const fc = group.items.length - mc;
+                                return `סה״כ באות ${activeLetter}: ${group.items.length} (מוצרים ${fc} · ארוחות ${mc})`;
+                              })()
+                        : dictTab === "meals"
+                          ? `סה״כ ארוחות: ${group.items.length}`
+                          : dictTab === "foods"
+                            ? `סה״כ מוצרים: ${group.items.length}`
+                            : (() => {
+                                const mc = group.items.filter(
+                                  (x) => x.mealPresetId != null
+                                ).length;
+                                return `סה״כ מוצרים: ${group.items.length - mc} · סה״כ ארוחות: ${mc}`;
+                              })()}
+                  </p>
+                </div>
+              </div>
+            ))}
+          </div>
         )}
       </motion.section>
+
+      <AnimatePresence>
+        {dictionaryActionItem ? (
+          <motion.div
+            className="fixed inset-0 z-[500] flex items-center justify-center bg-black/35 p-4"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            onClick={() => setDictionaryActionItem(null)}
+          >
+            <motion.div
+              role="dialog"
+              aria-modal
+              className="w-full max-w-sm rounded-2xl border-2 border-[var(--border-cherry-soft)] bg-white p-4 shadow-xl"
+              initial={{ scale: 0.96, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.97, opacity: 0 }}
+              onClick={(e) => e.stopPropagation()}
+              dir="rtl"
+            >
+              <p className="text-center text-base font-semibold text-[var(--cherry)]">
+                {truncateDisplayFoodLabel(dictionaryActionItem.food)}
+              </p>
+              {truncateDisplayFoodLabel(dictionaryActionItem.food) !==
+              dictionaryActionItem.food.trim() ? (
+                <p className="mt-1 text-center text-xs leading-snug text-[var(--stem)]/75">
+                  {dictionaryActionItem.food}
+                </p>
+              ) : null}
+              <p className="mt-3 text-center text-xs text-[var(--text)]/75">
+                {gf(
+                  gender,
+                  "לחיצה ארוכה — מחיקה מהמילון (כמו ביומן).",
+                  "לחיצה ארוכה — מחיקה מהמילון (כמו ביומן)."
+                )}
+              </p>
+              <div className="mt-4 space-y-2">
+                <button
+                  type="button"
+                  className="flex w-full items-center justify-center gap-2 rounded-xl border border-red-200 bg-red-50/50 px-3 py-3 text-sm font-bold text-red-800 transition hover:bg-red-50"
+                  onClick={() => confirmDictionaryDeleteItem()}
+                >
+                  {gf(gender, "מחיקה מהמילון", "מחיקה מהמילון")}
+                </button>
+                <button
+                  type="button"
+                  className="w-full rounded-xl py-2.5 text-sm font-semibold text-[var(--stem)] transition hover:bg-neutral-100"
+                  onClick={() => setDictionaryActionItem(null)}
+                >
+                  {gf(gender, "סגירה", "סגירה")}
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        ) : null}
+      </AnimatePresence>
 
       <AnimatePresence>
         {exportOpen && (
