@@ -193,7 +193,9 @@ export function AdminDashboard() {
                 key={`${uid}-${item.id ?? item.food}-${i}`}
                 className="flex flex-wrap items-baseline justify-between gap-2 border-b border-[var(--border-cherry-soft)]/60 pb-2 last:border-0"
               >
-                <span className="font-medium text-[var(--text)]">{item.food}</span>
+                <span className="bidi-isolate-rtl font-medium text-[var(--text)]">
+                  {item.food}
+                </span>
                 <span className="text-xs text-[var(--text)]/65">
                   {email}
                   {item.source ? ` · ${item.source}` : ""}
@@ -271,7 +273,9 @@ export function AdminDashboard() {
                               <tbody>
                                 {r.dictionaryItems.map((it, idx) => (
                                   <tr key={it.id ?? `${it.food}-${idx}`} className="border-t border-[var(--border-cherry-soft)]/50">
-                                    <td className="p-2 font-medium text-[var(--text)]">{it.food}</td>
+                                    <td className="p-2 font-medium text-[var(--text)]">
+                                      <span className="bidi-isolate-rtl">{it.food}</span>
+                                    </td>
                                     <td className="p-2 text-[var(--text)]/75">{it.source ?? "—"}</td>
                                     <td className="p-2 tabular-nums text-[var(--text)]/75">
                                       {it.quantity != null ? `${it.quantity} ${it.unit ?? ""}`.trim() : "—"}

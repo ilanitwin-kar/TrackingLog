@@ -536,9 +536,22 @@ export default function DailySummaryPage() {
                   key={`p-${e.id}`}
                   className="rounded-xl border border-[var(--border-cherry-soft)] bg-white px-3 py-2 text-sm"
                 >
-                  <p className="font-semibold text-[var(--stem)]">{e.food}</p>
+                  <p className="font-semibold text-[var(--stem)]">
+                    <span className="bidi-isolate-rtl">{e.food}</span>
+                  </p>
                   <p className="text-xs text-[var(--stem)]/75">
-                    חלבון {Math.round(e.proteinG ?? 0)}ג · {e.calories} קק״ל
+                    <span className="bidi-isolate-rtl inline-block">
+                      חלבון{" "}
+                      {(Math.round((e.proteinG ?? 0) * 10) / 10).toFixed(1).replace(
+                        /\.0$/,
+                        ""
+                      )}
+                      ג
+                    </span>
+                    {" · "}
+                    <span className="bidi-isolate-rtl inline-block">
+                      {e.calories} קק״ל
+                    </span>
                   </p>
                 </li>
               ))}

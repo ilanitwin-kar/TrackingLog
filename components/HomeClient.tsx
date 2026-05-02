@@ -24,14 +24,15 @@ import {
   type ExerciseActivityDay,
 } from "@/lib/exerciseActivity";
 import {
+  applyJournalFoodDisplayRename,
   type FoodUnit,
   type LogEntry,
   type MealPresetComponent,
   addMealPreset,
   getEntriesForDate,
   type UserProfile,
-  getJournalStreakDays,
   isFoodStarred,
+  loadDayLogs,
   loadDayJournalClosedMap,
   loadWeightSkipDayKey,
   loadWeights,
@@ -51,24 +52,24 @@ import {
   homeJournalIntroBody,
   homeJournalIntroTitle,
 } from "@/lib/hebrewGenderUi";
-import { optionalMacroGram, sumMacroGrams } from "@/lib/macroGrams";
+import {
+  formatMacroGramAmount,
+  formatMacroGramWithUnit,
+  optionalMacroGram,
+  sumMacroGrams,
+} from "@/lib/macroGrams";
 import { dailyCalorieTarget } from "@/lib/tdee";
 import { weeklyCalorieSavingsClosedDays } from "@/lib/weeklyCalorieSavings";
 import { useDocumentScrollOnlyIfOverflowing } from "@/lib/useDocumentScrollOnlyIfOverflowing";
-import { loadDayLogs } from "@/lib/storage";
 import { CelebrationConfetti } from "./Fireworks";
 import { useAppVariant } from "./useAppVariant";
 import { QuickWeightModal } from "./QuickWeightModal";
 import { QuickStepsModal } from "./QuickStepsModal";
 import {
   IconBookmark,
-  IconDuplicate,
-  IconPencil,
-  IconStar,
   IconTrash,
-  IconVerified,
+  IconUtensilsMeal,
 } from "./Icons";
-import { IconCaption } from "./IconCaption";
 import { LiveClock } from "./LiveClock";
 
 const UNITS: FoodUnit[] = [
@@ -122,8 +123,7 @@ function formatEntryTime(iso: string): string {
 }
 
 function formatMacroCell(n: number | undefined): string {
-  if (n == null || !Number.isFinite(n)) return "—";
-  return `${Math.round(n)} ג׳`;
+  return formatMacroGramWithUnit(n);
 }
 
 function formatQtyLabel(q: number, u: FoodUnit): string {
@@ -144,10 +144,6 @@ function clampQuantity(q: number, u: FoodUnit): number {
   }
   const n = normalizeValue(q);
   return Math.min(50, Math.max(0.25, n));
-}
-
-function uid(): string {
-  return `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
 }
 
 const halfMessages = [
@@ -176,18 +172,36 @@ function formatDateKeyHe(dateKey: string): string {
   });
 }
 
-/** כיוון מעבר יום ביומן: +1 קדימה בזמן, -1 אחורה (מותאם לאנימציית slide) */
-const journalSwipeVariants = {
-  enter: (dir: number) =>
-    dir === 0
-      ? { x: 0, opacity: 1 }
-      : { x: dir > 0 ? "100%" : "-100%", opacity: 1 },
-  center: { x: 0, opacity: 1 },
-  exit: (dir: number) =>
-    dir === 0
-      ? { x: 0, opacity: 1 }
-      : { x: dir > 0 ? "-100%" : "100%", opacity: 1 },
-};
+/** הפרש ימים בלוח בין dateKey לבין היום (חיובי = עתיד, שלילי = עבר) */
+function diffCalendarDaysFromToday(dateKey: string): number {
+  const a = new Date(`${dateKey}T12:00:00`);
+  const b = new Date(`${getTodayKey()}T12:00:00`);
+  if (Number.isNaN(a.getTime()) || Number.isNaN(b.getTime())) return 0;
+  return Math.round((a.getTime() - b.getTime()) / 86400000);
+}
+
+/**
+ * תווית מרכז פס ניווט היומן — רק שלושה מצבים מיוחדים, כל שאר הימים = תאריך מלא.
+ * - אותו יום בלוח כמו היום → "היום"
+ * - יום אחד לפני → "אתמול" (בלי תאריך)
+ * - יום אחד אחרי → "מחר" (בלי תאריך)
+ * - כל יום אחר (עבר רחוק / עתיד רחוק) → יום בשבוע + יום + חודש בעברית (לא הקיצור)
+ */
+function formatDateKeyHeJournalNav(dateKey: string): string {
+  const d = diffCalendarDaysFromToday(dateKey);
+  if (d === 0) return "היום";
+  if (d === -1) return "אתמול";
+  if (d === 1) return "מחר";
+
+  const dt = new Date(`${dateKey}T12:00:00`);
+  if (Number.isNaN(dt.getTime())) return dateKey;
+  const raw = dt.toLocaleDateString("he-IL", {
+    weekday: "long",
+    day: "numeric",
+    month: "long",
+  });
+  return raw.replace(/,\s*/g, " ").replace(/\s+/g, " ").trim();
+}
 
 function CalorieHeroRing({
   target,
@@ -409,9 +423,7 @@ function HomeAssistantInsightBubble({
 const quickNavBtnClass =
   "flex min-h-[2.75rem] flex-1 min-w-0 items-center justify-center gap-2 rounded-2xl border-2 border-[var(--border-cherry-soft)] bg-white/75 px-2 py-2.5 text-xs font-semibold text-[var(--cherry)] shadow-[0_4px_14px_rgba(0,0,0,0.06)] backdrop-blur-sm transition hover:bg-[var(--cherry-muted)] active:scale-[0.99] sm:text-sm";
 
-/** כפתורי שורת הפעולות — שורה אופקית; לא לצמצם רוחב כדי שלא יידחפו כותרות */
-const foodToolbarBtnClass =
-  "inline-flex min-h-[2.75rem] min-w-[2.75rem] flex-col items-center justify-center gap-0.5 rounded-xl border border-[var(--border-cherry-soft)] bg-white/95 px-2 py-1.5 text-[var(--stem)] shadow-sm transition hover:bg-[var(--cherry-muted)] disabled:cursor-not-allowed disabled:opacity-40";
+const journalToolbarIconClass = "h-[15px] w-[15px] shrink-0";
 
 type WeatherClientState = {
   tempC: number;
@@ -452,7 +464,6 @@ function parseWeatherCachePayload(
 }
 
 export function HomeClient({ mode = "dashboard" }: { mode?: "dashboard" | "journal" }) {
-  useDocumentScrollOnlyIfOverflowing();
   const gender = loadProfile().gender;
   const appVariant = useAppVariant();
   const router = useRouter();
@@ -466,10 +477,13 @@ export function HomeClient({ mode = "dashboard" }: { mode?: "dashboard" | "journ
   const [mealModalPos, setMealModalPos] = useState<{ top: number; left: number; width: number } | null>(null);
   const [mealCtaEntryId, setMealCtaEntryId] = useState<string | null>(null);
   const [journalInfoOpen, setJournalInfoOpen] = useState(false);
-  const [journalExpandedId, setJournalExpandedId] = useState<string | null>(null);
+  const [journalFoodNameEditId, setJournalFoodNameEditId] = useState<
+    string | null
+  >(null);
+  const [journalFoodNameDraft, setJournalFoodNameDraft] = useState("");
+  const journalFoodNameInputRef = useRef<HTMLInputElement>(null);
 
   const datePickerRef = useRef<HTMLInputElement | null>(null);
-  const [journalTransitionDir, setJournalTransitionDir] = useState(0);
 
   const [celebration, setCelebration] = useState({
     show: false,
@@ -535,8 +549,6 @@ export function HomeClient({ mode = "dashboard" }: { mode?: "dashboard" | "journ
   const canGoNextDay = true;
 
   function navigateToDate(dk: string) {
-    const cmp = dk.localeCompare(viewDateKey);
-    setJournalTransitionDir(cmp === 0 ? 0 : cmp > 0 ? 1 : -1);
     setViewDateKey(dk);
     setEntries(getEntriesForDate(dk));
     const base = isJournalMode ? "/journal" : "/";
@@ -553,14 +565,15 @@ export function HomeClient({ mode = "dashboard" }: { mode?: "dashboard" | "journ
   ) {
     const { offset, velocity } = info;
     if (Math.abs(offset.y) > Math.abs(offset.x) * 1.25) return;
-    const threshold = 56;
-    const vThresh = 420;
-    // לפי הבקשה: ימינה = היום הבא, שמאלה = היום הקודם
-    if (offset.x > threshold || velocity.x > vThresh) {
+    const threshold = 48;
+    const vThresh = 380;
+    // מסך בעברית: החלקה שמאלה = עתיד (יום קדימה), החלקה ימינה = עבר (יום אחורה)
+    // ב-framer: offset.x שלילי = גרירה שמאלה, חיובי = גרירה ימינה
+    if (offset.x < -threshold || velocity.x < -vThresh) {
       if (canGoNextDay) navigateToDate(addDaysToDateKey(viewDateKey, 1));
       return;
     }
-    if (offset.x < -threshold || velocity.x < -vThresh) {
+    if (offset.x > threshold || velocity.x > vThresh) {
       navigateToDate(addDaysToDateKey(viewDateKey, -1));
     }
   }
@@ -632,15 +645,15 @@ export function HomeClient({ mode = "dashboard" }: { mode?: "dashboard" | "journ
 
   const remainingKcal = useMemo(() => Math.round(target - total), [target, total]);
   const remainingProteinG = useMemo(
-    () => Math.round(macroGoals.proteinG - totalProteinG),
+    () => Math.round((macroGoals.proteinG - totalProteinG) * 10) / 10,
     [macroGoals.proteinG, totalProteinG]
   );
   const remainingCarbsG = useMemo(
-    () => Math.round(macroGoals.carbsG - totalCarbsG),
+    () => Math.round((macroGoals.carbsG - totalCarbsG) * 10) / 10,
     [macroGoals.carbsG, totalCarbsG]
   );
   const remainingFatG = useMemo(
-    () => Math.round(macroGoals.fatG - totalFatG),
+    () => Math.round((macroGoals.fatG - totalFatG) * 10) / 10,
     [macroGoals.fatG, totalFatG]
   );
 
@@ -670,10 +683,30 @@ export function HomeClient({ mode = "dashboard" }: { mode?: "dashboard" | "journ
   );
 
   const isJournalMode = mode === "journal";
-  const journalStreakDays = useMemo(
-    () => (isJournalMode ? getJournalStreakDays() : 0),
-    [isJournalMode]
+
+  useDocumentScrollOnlyIfOverflowing(
+    isJournalMode
+      ? {
+          remeasureKey: `${viewDateKey}:${entries.length}:${dictTick}:${
+            journalClosedMap[viewDateKey] === true ? "1" : "0"
+          }`,
+        }
+      : { enabled: false }
   );
+
+  useEffect(() => {
+    if (!isJournalMode) return;
+    getEntriesForDate(addDaysToDateKey(viewDateKey, -1));
+    getEntriesForDate(addDaysToDateKey(viewDateKey, 1));
+  }, [isJournalMode, viewDateKey]);
+
+  useEffect(() => {
+    if (!isJournalMode) return;
+    const openJournalHelp = () => setJournalInfoOpen(true);
+    window.addEventListener("cj-journal-help", openJournalHelp);
+    return () => window.removeEventListener("cj-journal-help", openJournalHelp);
+  }, [isJournalMode]);
+
   const weeklySavings = useMemo(
     () =>
       profile
@@ -801,6 +834,7 @@ export function HomeClient({ mode = "dashboard" }: { mode?: "dashboard" | "journ
   );
 
   const weightDue = useMemo(() => {
+    void weightSkipRev;
     if (!profile || !isViewingToday) return false;
     try {
       // Baseline row may be created lazily; do not require it.
@@ -962,17 +996,55 @@ export function HomeClient({ mode = "dashboard" }: { mode?: "dashboard" | "journ
   }, [viewDateKey]);
 
   useEffect(() => {
+    if (!journalFoodNameEditId) return;
+    const tid = window.setTimeout(
+      () => journalFoodNameInputRef.current?.focus(),
+      50
+    );
+    return () => window.clearTimeout(tid);
+  }, [journalFoodNameEditId]);
+
+  useEffect(() => {
+    if (isDayClosed && journalFoodNameEditId) {
+      setJournalFoodNameEditId(null);
+      setJournalFoodNameDraft("");
+    }
+  }, [isDayClosed, journalFoodNameEditId]);
+
+  function cancelJournalFoodNameEdit() {
+    setJournalFoodNameEditId(null);
+    setJournalFoodNameDraft("");
+  }
+
+  function saveJournalFoodNameEdit() {
+    if (!journalFoodNameEditId || isDayClosed) return;
+    const name = journalFoodNameDraft.trim();
+    if (!name) return;
+    if (
+      !applyJournalFoodDisplayRename(
+        viewDateKey,
+        journalFoodNameEditId,
+        name
+      )
+    ) {
+      return;
+    }
+    cancelJournalFoodNameEdit();
+    setEntries(getEntriesForDate(viewDateKey));
+    setDictTick((t) => t + 1);
+  }
+
+  useEffect(() => {
     setEntries(getEntriesForDate(viewDateKey));
   }, [viewDateKey]);
 
   useEffect(() => {
-    const d = searchParams.get("date");
-    if (d && /^\d{4}-\d{2}-\d{2}$/.test(d) && d !== viewDateKey) {
-      setJournalTransitionDir(0);
-      setViewDateKey(d);
-      setEntries(getEntriesForDate(d));
-    }
-  }, [searchParams, viewDateKey]);
+    const raw = searchParams.get("date");
+    const dk =
+      raw && /^\d{4}-\d{2}-\d{2}$/.test(raw) ? raw : getTodayKey();
+    setViewDateKey((prev) => (prev === dk ? prev : dk));
+    setEntries(getEntriesForDate(dk));
+  }, [searchParams]);
 
   useEffect(() => {
     setActiveJournalDateKey(viewDateKey);
@@ -984,7 +1056,6 @@ export function HomeClient({ mode = "dashboard" }: { mode?: "dashboard" | "journ
       if (now !== prevCalKeyRef.current) {
         const before = prevCalKeyRef.current;
         prevCalKeyRef.current = now;
-        setJournalTransitionDir(0);
         setViewDateKey((v) => (v === before ? now : v));
       }
     }, 25000);
@@ -1030,18 +1101,6 @@ export function HomeClient({ mode = "dashboard" }: { mode?: "dashboard" | "journ
     if (isDayClosed) return;
     persistEntries(entries.filter((x) => x.id !== id));
     emitEntryDeletedFeedback();
-  }
-
-  function duplicateEntry(item: LogEntry) {
-    if (isDayClosed) return;
-    const copy: LogEntry = {
-      ...item,
-      id: uid(),
-      createdAt: new Date().toISOString(),
-      mealStarred: false,
-      verified: item.verified,
-    };
-    persistEntries([copy, ...entries]);
   }
 
   function toggleMealStar(id: string) {
@@ -1190,7 +1249,7 @@ export function HomeClient({ mode = "dashboard" }: { mode?: "dashboard" | "journ
 
   return (
     <div
-      className={`mx-auto max-w-lg ${compact ? "px-3 pb-28 pt-0 cj-compact" : "px-4 pb-32 pt-6 md:pt-10"}`}
+      className={`mx-auto max-w-lg ${compact ? "cj-compact px-3 pb-0 pt-0" : "px-4 pb-32 pt-6 md:pt-10"}`}
       dir="rtl"
     >
       {celebration.show && (
@@ -1296,7 +1355,9 @@ export function HomeClient({ mode = "dashboard" }: { mode?: "dashboard" | "journ
               >
                 עריכת כמות
               </h2>
-              <p className="text-sm text-[var(--text)]/90">{editEntry.food}</p>
+              <p className="text-sm text-[var(--text)]/90">
+                <span className="bidi-isolate-rtl">{editEntry.food}</span>
+              </p>
               <div className="flex flex-wrap gap-3">
                 <label className="min-w-[6rem] flex-1">
                   <span className="mb-1 block text-xs font-semibold text-[var(--text)]">
@@ -1526,7 +1587,8 @@ export function HomeClient({ mode = "dashboard" }: { mode?: "dashboard" | "journ
                   {label}
                 </p>
                 <p className="mt-0.5 text-center text-[13px] font-bold tabular-nums leading-tight text-[var(--stem)] sm:mt-1 sm:text-base">
-                  {Math.round(consumed)}ג/{Math.round(goal)}ג
+                  {formatMacroGramAmount(consumed)}ג/
+                  {formatMacroGramAmount(goal)}ג
                 </p>
                 <div className="mt-2 h-1 overflow-hidden rounded-full bg-[#f0f0f0] sm:mt-4 sm:h-2.5">
                   <div
@@ -1702,68 +1764,117 @@ export function HomeClient({ mode = "dashboard" }: { mode?: "dashboard" | "journ
       )}
 
       {isJournalMode ? (
-        <motion.header
-          className="sticky top-0 z-50 mb-4 rounded-b-xl border-b border-[var(--border-cherry-soft)]/80 bg-[color-mix(in_srgb,white_87%,var(--cherry)_13%)] px-2.5 py-2 shadow-[0_1px_0_rgba(155,27,48,0.05)] sm:px-3 sm:py-2.5"
-          initial={{ opacity: 0, y: -8 }}
-          animate={{ opacity: 1, y: 0 }}
-        >
-          <div className="flex min-h-[2.75rem] items-center justify-between gap-1.5 sm:gap-2" dir="rtl">
-            <div className="flex min-w-0 items-center gap-1.5 sm:gap-2">
-              <h1 className="truncate text-lg font-bold tracking-tight text-[var(--stem)] sm:text-xl">
-                יומן
-              </h1>
-              <button
-                type="button"
-                className="inline-flex size-8 shrink-0 items-center justify-center rounded-lg border border-[var(--border-cherry-soft)] bg-white/95 text-[0.85rem] leading-none text-[var(--stem)] shadow-[0_1px_2px_rgba(0,0,0,0.04)] transition hover:bg-white active:scale-[0.98]"
-                aria-label="פתיחת הסבר על היומן"
-                aria-expanded={journalInfoOpen}
-                onClick={() => setJournalInfoOpen((x) => !x)}
-              >
-                ℹ️
-              </button>
-            </div>
-            <div className="flex shrink-0 items-center gap-1.5">
-              <div className="flex max-w-[min(100%,11.5rem)] items-center gap-1 rounded-full border border-[var(--border-cherry-soft)] bg-white/95 px-2 py-1 text-sm font-semibold text-[var(--cherry)] shadow-[0_1px_2px_rgba(0,0,0,0.04)] sm:max-w-none sm:px-2.5 sm:text-[0.9375rem]">
-                <span aria-hidden className="text-[0.95rem] leading-none sm:text-base">
-                  {appVariant === "blueberry" ? "🫐" : "🍒"}
-                </span>
-                <span className="tabular-nums leading-tight">{journalStreakDays} ימים ברצף</span>
-              </div>
-              <details className="relative">
-                <summary className="list-none cursor-pointer rounded-lg border border-[var(--border-cherry-soft)] bg-white/95 px-2 py-1 text-base font-bold leading-none text-[var(--stem)] shadow-[0_1px_2px_rgba(0,0,0,0.04)] transition hover:bg-white sm:px-2.5 sm:py-1.5">
-                  ⋯
-                </summary>
-                <div className="absolute left-0 mt-2 w-44 overflow-hidden rounded-xl border border-[var(--border-cherry-soft)] bg-white shadow-lg">
+        <>
+          <div className="sticky top-0 z-[55] isolate -mx-3 mb-3 sm:-mx-4 sm:mb-4">
+            <input
+              ref={datePickerRef}
+              type="date"
+              value={viewDateKey}
+              className="sr-only"
+              aria-hidden
+              tabIndex={-1}
+              onChange={(e) => {
+                const dk = e.target.value;
+                if (dk && /^\d{4}-\d{2}-\d{2}$/.test(dk)) {
+                  navigateToDate(dk);
+                }
+              }}
+            />
+            <div className="overflow-hidden rounded-xl border border-[var(--border-cherry-soft)]/40 bg-white shadow-[0_1px_8px_rgba(0,0,0,0.06)]">
+              {/* שורה 1 — תאריך וניווט ימים בלבד */}
+              <div className="px-2 py-1.5 sm:px-2.5 sm:py-2">
+                <div
+                  className="grid w-full grid-cols-[2.5rem_minmax(0,1fr)_2.5rem] items-center gap-0.5 sm:grid-cols-[2.75rem_minmax(0,1fr)_2.75rem]"
+                  dir="ltr"
+                >
                   <button
                     type="button"
-                    className="block w-full px-3 py-2 text-right text-sm font-semibold text-[var(--stem)] hover:bg-[var(--cherry-muted)]"
-                    onClick={() => router.push("/my-recipes")}
+                    className="flex h-9 w-full items-center justify-center rounded-lg text-lg leading-none text-[var(--stem)]/70 transition hover:bg-[var(--cherry-muted)]/35 active:bg-[var(--cherry-muted)]/45 disabled:pointer-events-none disabled:opacity-35 sm:h-10 sm:text-xl"
+                    onClick={() =>
+                      canGoNextDay && navigateToDate(addDaysToDateKey(viewDateKey, 1))
+                    }
+                    disabled={!canGoNextDay}
+                    aria-label="יום הבא — לכיוון העתיד (שמאל)"
                   >
-                    המתכונים שלי
+                    ‹
                   </button>
+                  <div className="flex min-h-9 min-w-0 items-center justify-center gap-1.5 px-0.5 sm:min-h-10 sm:gap-2">
+                    <button
+                      type="button"
+                      dir="rtl"
+                      className="min-h-9 min-w-0 flex-1 px-1 py-1 text-center text-[13px] font-semibold leading-snug text-[var(--stem)] sm:min-h-10 sm:text-sm"
+                      onClick={() => navigateToDate(getTodayKey())}
+                      aria-label={
+                        isViewingToday
+                          ? "היום"
+                          : `חזרה להיום — מציגים ${formatDateKeyHeJournalNav(viewDateKey)}`
+                      }
+                    >
+                      <span className="line-clamp-2 max-w-full text-balance">
+                        {formatDateKeyHeJournalNav(viewDateKey)}
+                      </span>
+                    </button>
+                    <Link
+                      href={`/add-food?from=journal&date=${encodeURIComponent(viewDateKey)}`}
+                      className="flex size-10 shrink-0 items-center justify-center rounded-full border-2 border-[var(--cherry)] bg-[var(--cherry)] text-[1.35rem] font-extrabold leading-none text-white shadow-[0_3px_10px_rgba(155,27,48,0.38)] ring-2 ring-white/70 transition hover:brightness-110 hover:shadow-[0_4px_14px_rgba(155,27,48,0.45)] active:scale-[0.94] sm:size-11 sm:text-[1.5rem]"
+                      aria-label={gf(gender, "הוספת מזון", "הוספת מזון")}
+                      title={gf(gender, "הוספת מזון", "הוספת מזון")}
+                    >
+                      <span aria-hidden>+</span>
+                    </Link>
+                  </div>
                   <button
                     type="button"
-                    className="block w-full px-3 py-2 text-right text-sm font-semibold text-[var(--stem)] hover:bg-[var(--cherry-muted)]"
-                    onClick={() => router.push("/menus")}
+                    className="flex h-9 w-full items-center justify-center rounded-lg text-lg leading-none text-[var(--stem)]/70 transition hover:bg-[var(--cherry-muted)]/35 active:bg-[var(--cherry-muted)]/45 sm:h-10 sm:text-xl"
+                    onClick={() => navigateToDate(addDaysToDateKey(viewDateKey, -1))}
+                    aria-label="יום קודם — לכיוון העבר (ימין)"
                   >
-                    התפריטים שלי
+                    ›
                   </button>
                 </div>
-              </details>
+              </div>
+
+              {/* שורה 2 — קלוריות דובדבן; מאקרו בצבעי הסיכום כמו בפריטים */}
+              <div className="border-t border-[var(--border-cherry-soft)]/30 px-2 py-2.5 sm:px-3 sm:py-3">
+                <div
+                  className="flex flex-wrap items-center justify-center gap-2 sm:justify-between sm:gap-2.5"
+                  dir="rtl"
+                >
+                  <span
+                    dir="rtl"
+                    className="inline-flex min-h-[2.35rem] items-center gap-1 whitespace-nowrap rounded-full border border-[var(--cherry)]/35 bg-[var(--cherry-muted)]/18 px-3 py-1 text-sm font-extrabold tabular-nums text-[var(--cherry)] shadow-[0_1px_2px_rgba(0,0,0,0.04)] sm:min-h-10 sm:px-3.5 sm:text-[0.95rem]"
+                  >
+                    <span>{remainingKcal}</span>
+                    <span>קק״ל</span>
+                  </span>
+                  <span
+                    dir="rtl"
+                    className="inline-flex min-h-[2.35rem] items-center gap-1 whitespace-nowrap rounded-full border border-[#F5C518]/50 bg-[#FFFBEB] px-3 py-1 text-sm font-semibold tabular-nums text-[#CA8A04] shadow-[0_1px_2px_rgba(0,0,0,0.04)] sm:min-h-10 sm:px-3.5 sm:text-[0.95rem]"
+                  >
+                    <span>{remainingProteinG}</span>
+                    <span>ג׳</span>
+                    <span>חלבון</span>
+                  </span>
+                  <span
+                    dir="rtl"
+                    className="inline-flex min-h-[2.35rem] items-center gap-1 whitespace-nowrap rounded-full border border-[#3B82F6]/40 bg-[#EFF6FF] px-3 py-1 text-sm font-semibold tabular-nums text-[#2563EB] shadow-[0_1px_2px_rgba(0,0,0,0.04)] sm:min-h-10 sm:px-3.5 sm:text-[0.95rem]"
+                  >
+                    <span>{remainingCarbsG}</span>
+                    <span>ג׳</span>
+                    <span>פחמימה</span>
+                  </span>
+                  <span
+                    dir="rtl"
+                    className="inline-flex min-h-[2.35rem] items-center gap-1 whitespace-nowrap rounded-full border border-[#22C55E]/40 bg-[#F0FDF4] px-3 py-1 text-sm font-semibold tabular-nums text-[#16A34A] shadow-[0_1px_2px_rgba(0,0,0,0.04)] sm:min-h-10 sm:px-3.5 sm:text-[0.95rem]"
+                  >
+                    <span>{remainingFatG}</span>
+                    <span>ג׳</span>
+                    <span>שומן</span>
+                  </span>
+                </div>
+              </div>
             </div>
           </div>
-        </motion.header>
-      ) : (
-        <div className="mb-8">
-          <button
-            type="button"
-            className="btn-stem w-full rounded-2xl px-4 py-4 text-base font-extrabold shadow-[0_8px_28px_rgba(74,124,35,0.35)] ring-2 ring-white/40 md:text-lg"
-            onClick={() => router.push(`/journal?date=${encodeURIComponent(viewDateKey)}`)}
-          >
-            {gf(gender, "תעדי את היום שלך", "תעד את היום שלך")}
-          </button>
-        </div>
-      )}
 
       <AnimatePresence>
         {journalInfoOpen && isJournalMode && (
@@ -1810,18 +1921,9 @@ export function HomeClient({ mode = "dashboard" }: { mode?: "dashboard" | "journ
 
       {/* CTA moved next to the last starred entry (see below) */}
 
-      {isJournalMode ? (
-      <div className="overflow-x-hidden">
-        <AnimatePresence initial={false} custom={journalTransitionDir} mode="wait">
           <motion.section
             key={viewDateKey}
-            custom={journalTransitionDir}
-            variants={journalSwipeVariants}
-            initial="enter"
-            animate="center"
-            exit="exit"
-            transition={{ type: "tween", duration: 0.3, ease: [0.22, 1, 0.36, 1] }}
-            className="glass-panel touch-pan-y p-4 will-change-transform"
+            className="touch-manipulation bg-transparent px-0 pb-28 pt-1"
             drag="x"
             dragDirectionLock
             dragConstraints={{ left: 0, right: 0 }}
@@ -1829,115 +1931,21 @@ export function HomeClient({ mode = "dashboard" }: { mode?: "dashboard" | "journ
             dragMomentum={false}
             onDragEnd={onJournalDayDragEnd}
           >
-        <div className="mb-5 flex flex-col gap-3">
-          <div className="flex flex-wrap items-center justify-center gap-2">
-            <Link
-              href={`/add-food?from=journal&date=${encodeURIComponent(viewDateKey)}`}
-              className={`${quickNavBtnClass} min-h-[3rem] px-4 py-3 text-sm font-extrabold sm:min-h-[3.25rem] sm:text-base`}
-            >
-              <span className="text-xl" aria-hidden>
-                ➕
-              </span>
-              <span>הוספת מזון</span>
-            </Link>
-            <input
-              ref={datePickerRef}
-              type="date"
-              value={viewDateKey}
-              className="sr-only"
-              aria-hidden
-              tabIndex={-1}
-              onChange={(e) => {
-                const dk = e.target.value;
-                if (dk && /^\d{4}-\d{2}-\d{2}$/.test(dk)) {
-                  navigateToDate(dk);
-                }
-              }}
-            />
-            <div className="flex items-center gap-2 rounded-xl border-2 border-[var(--border-cherry-soft)] bg-white px-2 py-1.5 shadow-sm">
-              <button
-                type="button"
-                className="rounded-lg px-2 py-1 text-base font-extrabold text-[var(--stem)] hover:bg-[var(--cherry-muted)] disabled:opacity-40"
-                onClick={() => navigateToDate(addDaysToDateKey(viewDateKey, -1))}
-                aria-label="יום קודם"
-              >
-                ›
-              </button>
-              <button
-                type="button"
-                onClick={() => navigateToDate(getTodayKey())}
-                className="min-w-[7.5rem] px-2 text-center text-sm font-extrabold text-[var(--stem)]"
-                aria-label="חזרה להיום"
-              >
-                {isViewingToday ? "היום" : formatDateKeyHe(viewDateKey)}
-              </button>
-              <button
-                type="button"
-                className="rounded-lg px-2 py-1 text-base font-extrabold text-[var(--stem)] hover:bg-[var(--cherry-muted)] disabled:opacity-40"
-                onClick={() => canGoNextDay && navigateToDate(addDaysToDateKey(viewDateKey, 1))}
-                disabled={!canGoNextDay}
-                aria-label="יום הבא"
-              >
-                ‹
-              </button>
-            </div>
-          </div>
-          {/* hint removed per UX request */}
-        </div>
-
-        <div className="mb-5 rounded-2xl border-2 border-[var(--border-cherry-soft)] bg-white/90 px-3 py-3 shadow-sm">
-          <p className="text-center text-lg font-extrabold tracking-wide text-[var(--cherry)]/85 sm:text-xl">
-            נשאר להיום
-          </p>
-          <div className="mt-3 flex w-full items-stretch gap-1.5">
-            {(
-              [
-                ["קלוריות", remainingKcal, ""] as const,
-                ["חלבון", remainingProteinG, "ג"] as const,
-                ["פחמימה", remainingCarbsG, "ג"] as const,
-                ["שומן", remainingFatG, "ג"] as const,
-              ] as const
-            ).map(([label, val, unit]) => (
-              <div
-                key={label}
-                className={`min-w-0 rounded-xl border border-[var(--border-cherry-soft)] bg-white px-2 py-2.5 text-center ${
-                  label === "קלוריות" ? "flex-[1.35]" : "flex-1"
-                }`}
-              >
-                <p className="text-sm font-bold text-[var(--stem)]/80 sm:text-base">
-                  {label}
-                </p>
-                <p
-                  className={`mt-1 text-base font-extrabold tabular-nums ${
-                    val < 0 ? "text-[var(--cherry)]" : "text-[var(--stem)]"
-                  }`}
-                >
-                  {val}
-                  {unit ? (
-                    <span className="ms-1 text-sm font-bold opacity-80 sm:text-base">
-                      {unit}
-                    </span>
-                  ) : null}
-                </p>
-              </div>
-            ))}
-          </div>
-        </div>
         {isDayClosed && (
           <div
-            className="mb-4 space-y-3 rounded-xl border-2 border-[var(--border-cherry-soft)] bg-cherry-faint px-3 py-3 text-center"
+            className="-mx-3 mb-4 flex items-start gap-2.5 rounded-2xl border border-[var(--border-cherry-soft)]/70 bg-gradient-to-br from-[var(--cherry-muted)]/25 to-white px-3.5 py-3 shadow-[0_2px_12px_rgba(0,0,0,0.04)]"
             role="status"
           >
-            <p className="text-sm font-semibold text-[var(--cherry)]">
-              היום סגור ביומן — רק צפייה. אפשר לפתוח שוב אם שכחת להזין משהו.
+            <span className="mt-0.5 shrink-0 text-base opacity-80" aria-hidden>
+              🔒
+            </span>
+            <p className="min-w-0 flex-1 text-start text-[13px] font-medium leading-snug text-[var(--stem)]/88">
+              {gf(
+                gender,
+                "היום סגור — צפייה בלבד. אפשר לפתוח שוב למטה אם צריך להוסיף או לערוך.",
+                "היום סגור — צפייה בלבד. אפשר לפתוח שוב למטה אם צריך להוסיף או לערוך."
+              )}
             </p>
-            <button
-              type="button"
-              className="btn-stem w-full rounded-xl py-2.5 text-sm font-bold shadow-sm"
-              onClick={toggleJournalClosedForViewDay}
-            >
-              פתיחת היום לעריכה
-            </button>
           </div>
         )}
         <h2 className="sr-only">
@@ -1948,12 +1956,12 @@ export function HomeClient({ mode = "dashboard" }: { mode?: "dashboard" | "journ
           <p className="text-[var(--text)]/85">
             {gf(
               gender,
-              "עדיין אין רשומות — לחצי על ״הוספת מזון״ למעלה או על הכפתור המרכזי ״הוספה״ בתפריט התחתון.",
-              "עדיין אין רשומות — לחץ על ״הוספת מזון״ למעלה או על הכפתור המרכזי ״הוספה״ בתפריט התחתון."
+              "עדיין אין רשומות — לחצי על הפלוס ליד התאריך או על הכפתור המרכזי ״הוספה״ בתפריט התחתון.",
+              "עדיין אין רשומות — לחץ על הפלוס ליד התאריך או על הכפתור המרכזי ״הוספה״ בתפריט התחתון."
             )}{" "}
           </p>
         ) : (
-          <ul className="space-y-3" data-dict-rev={dictTick}>
+          <ul className="-mx-3 space-y-3" data-dict-rev={dictTick}>
             {[...entries]
               .sort((a, b) => {
                 const ta = entryTimeHHmm(a.createdAt) || "99:99";
@@ -1984,7 +1992,6 @@ export function HomeClient({ mode = "dashboard" }: { mode?: "dashboard" | "journ
                   return null;
                 }
               })();
-              const isExpanded = journalExpandedId === item.id;
               return (
                 <motion.li
                   key={item.id}
@@ -1994,59 +2001,203 @@ export function HomeClient({ mode = "dashboard" }: { mode?: "dashboard" | "journ
                   transition={{
                     layout: { type: "spring", damping: 28, stiffness: 400 },
                   }}
-                  className={`flex flex-col rounded-xl border-2 border-[var(--border-cherry-soft)] bg-white px-3 py-3 ${isDayClosed ? "opacity-85" : ""}`}
+                  className={`flex flex-col rounded-xl border-2 border-[var(--border-cherry-soft)] bg-gradient-to-b from-[var(--cherry-muted)]/24 via-white to-white px-3 py-3 shadow-[0_4px_14px_rgba(0,0,0,0.06)] ${isDayClosed ? "opacity-85" : ""}`}
                 >
                   {/*
-                    LOCKED journal meal card layout (do not revert to side toolbar):
-                    flex-col — כותרת ומאקרו ברוחב מלא; פס פעולות אופקי למטה בלבד.
+                    יומן — כרטיס עם רקע/צל עדין; פעולות (ארוחה · מילון · מחיקה) בשורת הכותרת ללא מסגרות.
                   */}
                   <div className="flex min-w-0 w-full flex-col gap-2">
-                    <button
-                      type="button"
-                      className="w-full max-w-full text-start"
-                      onClick={() => setJournalExpandedId((x) => (x === item.id ? null : item.id))}
-                      aria-expanded={isExpanded}
-                    >
-                      <span className="flex w-full max-w-full items-start justify-between gap-2">
-                        <span className="min-w-0 flex-1">
-                          <span className="flex min-w-0 items-start gap-2">
-                            <span className="mt-0.5 text-xs" aria-hidden>
-                              🍒
-                            </span>
-                            <span
-                              className={`min-w-0 flex-1 break-words font-extrabold leading-snug text-[var(--stem)] ${
-                                isJournalMode
-                                  ? "text-lg sm:text-xl"
-                                  : "text-base"
-                              }`}
-                            >
-                              {item.food}
-                            </span>
-                          </span>
-                        </span>
-                        <span className="shrink-0 pt-0.5 text-xs font-bold text-[var(--stem)]/55">
-                          {isExpanded ? "▲" : "▼"}
-                        </span>
-                      </span>
-                    </button>
-
-                    <p className="w-full text-sm text-[var(--text)]/80">
-                      <span className="inline-flex items-center gap-1.5">
+                    {journalFoodNameEditId === item.id && !isDayClosed ? (
+                      <div
+                        className="flex min-w-0 w-full flex-col gap-2 sm:flex-row sm:items-center"
+                        dir="rtl"
+                      >
                         <input
                           type="time"
-                          className="rounded-lg border border-[var(--border-cherry-soft)] bg-white px-2 py-1 text-[12px] font-semibold tabular-nums text-[var(--stem)] shadow-sm"
+                          className="mt-0.5 shrink-0 self-start rounded-lg border border-[var(--border-cherry-soft)] bg-white px-2 py-1 text-[12px] font-semibold tabular-nums text-[var(--stem)] shadow-sm sm:mt-1"
                           value={entryTimeHHmm(item.createdAt)}
                           onChange={(e) => setEntryTime(item.id, e.target.value)}
                           disabled={isDayClosed}
                           aria-label="שעה"
                         />
-                        <span className="text-[var(--text)]/55">·</span>
+                        <input
+                          ref={journalFoodNameInputRef}
+                          type="text"
+                          value={journalFoodNameDraft}
+                          onChange={(e) => setJournalFoodNameDraft(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === "Escape") cancelJournalFoodNameEdit();
+                            if (e.key === "Enter") saveJournalFoodNameEdit();
+                          }}
+                          className="min-w-0 flex-1 rounded-lg border-2 border-[var(--border-cherry-soft)] bg-white px-2.5 py-1.5 text-base font-normal text-[var(--stem)] shadow-sm outline-none focus:ring-2 focus:ring-[var(--stem)]/25"
+                          aria-label={gf(
+                            gender,
+                            "שם להצגה ביומן",
+                            "שם להצגה ביומן"
+                          )}
+                        />
+                        <div className="flex shrink-0 items-center justify-end gap-1.5">
+                          <button
+                            type="button"
+                            className="rounded-lg border-2 border-[var(--border-cherry-soft)] bg-white px-3 py-1.5 text-xs font-extrabold text-[var(--stem)] shadow-sm transition hover:bg-[var(--cherry-muted)]"
+                            onClick={(e) => {
+                              e.preventDefault();
+                              e.stopPropagation();
+                              saveJournalFoodNameEdit();
+                            }}
+                          >
+                            {gf(gender, "שמור", "שמור")}
+                          </button>
+                          <button
+                            type="button"
+                            className="rounded-lg border-2 border-[var(--border-cherry-soft)] bg-white px-3 py-1.5 text-xs font-extrabold text-[var(--text)]/80 shadow-sm transition hover:bg-[var(--cherry-muted)]"
+                            onClick={(e) => {
+                              e.preventDefault();
+                              e.stopPropagation();
+                              cancelJournalFoodNameEdit();
+                            }}
+                          >
+                            {gf(gender, "ביטול", "ביטול")}
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="flex w-full max-w-full items-start justify-between gap-2">
+                        <div className="flex min-w-0 flex-1 items-start gap-2">
+                          <input
+                            type="time"
+                            className="mt-0.5 shrink-0 self-start rounded-lg border border-[var(--border-cherry-soft)] bg-white px-2 py-1 text-[12px] font-semibold tabular-nums text-[var(--stem)] shadow-sm"
+                            value={entryTimeHHmm(item.createdAt)}
+                            onChange={(e) =>
+                              setEntryTime(item.id, e.target.value)
+                            }
+                            disabled={isDayClosed}
+                            aria-label="שעה"
+                          />
+                          <button
+                            type="button"
+                            disabled={isDayClosed}
+                            className="min-w-0 flex-1 rounded-md px-1 py-0.5 text-start transition hover:bg-[var(--cherry-muted)]/45 disabled:opacity-50"
+                            onClick={(e) => {
+                              e.preventDefault();
+                              e.stopPropagation();
+                              if (isDayClosed) return;
+                              setJournalFoodNameEditId(item.id);
+                              setJournalFoodNameDraft(item.food);
+                            }}
+                            title={gf(
+                              gender,
+                              "לחצי לעריכת השם",
+                              "לחץ לעריכת השם"
+                            )}
+                            aria-label={gf(
+                              gender,
+                              "עריכת שם להצגה",
+                              "עריכת שם להצגה"
+                            )}
+                          >
+                            <span className="bidi-isolate-rtl block min-w-0 break-words text-base font-normal leading-snug text-[var(--cherry)]">
+                              {item.food}
+                            </span>
+                          </button>
+                        </div>
+                        {!isDayClosed ? (
+                          <div
+                            className="flex shrink-0 items-center gap-0.5 pt-0.5"
+                            role="group"
+                            aria-label="פעולות על המנה"
+                          >
+                            <button
+                              type="button"
+                              className="rounded-md p-1.5 text-[var(--stem)] transition hover:bg-[var(--cherry-muted)]/45"
+                              title="סימון כארוחה קבועה במילון הארוחות"
+                              aria-label="ארוחה קבועה — סימון לשמירה כארוחה במילון"
+                              aria-pressed={mealOn}
+                              onClick={(e) => {
+                                e.preventDefault();
+                                e.stopPropagation();
+                                toggleMealStar(item.id);
+                              }}
+                            >
+                              <IconUtensilsMeal
+                                marked={mealOn}
+                                className={journalToolbarIconClass}
+                              />
+                            </button>
+                            <button
+                              type="button"
+                              className="rounded-md p-1.5 text-[var(--stem)] transition hover:bg-[var(--cherry-muted)]/45"
+                              title="שמירה במילון האישי שלי"
+                              aria-label="מילון — שמירת הפריט במילון"
+                              aria-pressed={inDictionary}
+                              onClick={(e) => {
+                                e.preventDefault();
+                                e.stopPropagation();
+                                toggleDictionaryFromEntry(item);
+                                setDictTick((t) => t + 1);
+                              }}
+                            >
+                              <IconBookmark
+                                filled={inDictionary}
+                                className={journalToolbarIconClass}
+                              />
+                            </button>
+                            <button
+                              type="button"
+                              className="rounded-md p-1.5 text-red-700 transition hover:bg-red-50/90"
+                              onClick={(e) => {
+                                e.preventDefault();
+                                e.stopPropagation();
+                                removeEntry(item.id);
+                              }}
+                              aria-label="מחיקה — הסרת הרשומה מהיום"
+                              title="מחיקה מהיומן"
+                            >
+                              <IconTrash className={journalToolbarIconClass} />
+                            </button>
+                          </div>
+                        ) : null}
+                      </div>
+                    )}
+
+                    <p className="w-full text-sm text-[var(--text)]/80">
+                      {isDayClosed ? (
+                        <span className="bidi-isolate-rtl inline-block font-bold">
+                          {formatQtyLabel(item.quantity, item.unit)} {item.unit}
+                        </span>
+                      ) : (
+                        <button
+                          type="button"
+                          className="bidi-isolate-rtl inline-block rounded px-0.5 font-bold text-[var(--stem)] underline decoration-dotted decoration-[var(--stem)]/40 underline-offset-2 transition hover:bg-[var(--cherry-muted)]/45 hover:decoration-[var(--stem)]/70"
+                          onClick={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            openEdit(item);
+                          }}
+                          aria-label={gf(
+                            gender,
+                            "עריכת כמות ויחידה",
+                            "עריכת כמות ויחידה"
+                          )}
+                        >
+                          {formatQtyLabel(item.quantity, item.unit)} {item.unit}
+                        </button>
+                      )}
+                      {" · "}
+                      <span className="bidi-isolate-rtl inline-block font-bold text-neutral-900">
+                        {item.calories} קק״ל
                       </span>
-                      {formatQtyLabel(item.quantity, item.unit)} {item.unit} ·{" "}
-                      {item.calories} קק״ל
+                      {" · "}
+                      <span className="bidi-isolate-rtl inline text-xs font-normal text-neutral-900">
+                        חלבון {formatMacroCell(item.proteinG)}
+                        {" · "}
+                        פחמימה {formatMacroCell(item.carbsG)}
+                        {" · "}
+                        שומן {formatMacroCell(item.fatG)}
+                      </span>
                     </p>
                     <AnimatePresence>
-                      {isExpanded && (
+                      {isAiMeal && (
                         <motion.div
                           className="mt-1 w-full"
                           initial={{ opacity: 0, y: -4 }}
@@ -2054,31 +2205,12 @@ export function HomeClient({ mode = "dashboard" }: { mode?: "dashboard" | "journ
                           exit={{ opacity: 0, y: -4 }}
                         >
                           <div className="flex flex-wrap items-center gap-1.5">
-                            {isAiMeal && (
-                              <span className="inline-flex items-center gap-1 rounded-md border border-[var(--border-cherry-soft)] bg-white px-2 py-0.5 text-[10px] font-extrabold text-[var(--cherry)]">
-                                🤖 ארוחת AI
-                              </span>
-                            )}
-                            {item.verified && (
-                              <span
-                                className="inline-flex shrink-0 items-center gap-1"
-                                title="מאומת ממאגר אינטליגנציה קלורית"
-                              >
-                                <IconVerified className="h-4 w-4 text-[var(--stem)]" />
-                                <span className="text-[10px] font-bold text-[var(--text)]/80">
-                                  מאומת
-                                </span>
-                              </span>
-                            )}
+                            <span className="inline-flex items-center gap-1 rounded-md border border-[var(--border-cherry-soft)] bg-white px-2 py-0.5 text-[10px] font-extrabold text-[var(--cherry)]">
+                              🤖 ארוחת AI
+                            </span>
                           </div>
 
-                          <p className="mt-1 w-full text-xs text-[var(--text)]/65">
-                            חלבון {formatMacroCell(item.proteinG)} · פחמימות{" "}
-                            {formatMacroCell(item.carbsG)} · שומן{" "}
-                            {formatMacroCell(item.fatG)}
-                          </p>
-
-                          {isAiMeal && aiRows ? (
+                          {aiRows ? (
                             <button
                               type="button"
                               className="mt-2 w-full rounded-xl border border-[var(--border-cherry-soft)] bg-white/80 p-3 text-start text-sm"
@@ -2106,7 +2238,7 @@ export function HomeClient({ mode = "dashboard" }: { mode?: "dashboard" | "journ
                                       </p>
                                       <p className="text-xs text-[var(--stem)]/75">
                                         קלוריות {Math.round(r.calories)} · חלבון {r.protein} ·
-                                        פחמימות {r.carbs} · שומן {r.fat}
+                                        פחמימה {r.carbs} · שומן {r.fat}
                                       </p>
                                     </li>
                                   ))}
@@ -2117,81 +2249,6 @@ export function HomeClient({ mode = "dashboard" }: { mode?: "dashboard" | "journ
                         </motion.div>
                       )}
                     </AnimatePresence>
-                  </div>
-
-                  <div
-                    role="toolbar"
-                    aria-label="פעולות על המנה"
-                    className="mt-3 flex w-full max-w-full flex-wrap items-center justify-center gap-2 border-t border-[var(--border-cherry-soft)]/60 bg-gradient-to-b from-[var(--cherry-muted)]/35 to-transparent px-1 py-2.5 sm:gap-3"
-                  >
-                    <button
-                      type="button"
-                      className={foodToolbarBtnClass}
-                      title="סימון כארוחה קבועה במילון הארוחות"
-                      aria-label="ארוחה קבועה — סימון לשמירה כארוחה במילון"
-                      aria-pressed={mealOn}
-                      disabled={isDayClosed}
-                      onClick={() => toggleMealStar(item.id)}
-                    >
-                      <IconCaption label="ארוחה">
-                        <IconStar filled={mealOn} className="h-[1.15rem] w-[1.15rem]" />
-                      </IconCaption>
-                    </button>
-                    <button
-                      type="button"
-                      className={foodToolbarBtnClass}
-                      title="שמירה במילון האישי שלי"
-                      aria-label="מילון — שמירת הפריט במילון"
-                      aria-pressed={inDictionary}
-                      disabled={isDayClosed}
-                      onClick={() => {
-                        toggleDictionaryFromEntry(item);
-                        setDictTick((t) => t + 1);
-                      }}
-                    >
-                      <IconCaption label="מילון">
-                        <IconBookmark
-                          filled={inDictionary}
-                          className="h-[1.15rem] w-[1.15rem]"
-                        />
-                      </IconCaption>
-                    </button>
-                    <button
-                      type="button"
-                      className={foodToolbarBtnClass}
-                      title="עריכת כמות והגדרות מנה"
-                      aria-label="כמות — עריכת כמות"
-                      disabled={isDayClosed}
-                      onClick={() => openEdit(item)}
-                    >
-                      <IconCaption label="כמות">
-                        <IconPencil className="h-[1.15rem] w-[1.15rem]" />
-                      </IconCaption>
-                    </button>
-                    <button
-                      type="button"
-                      className={foodToolbarBtnClass}
-                      title="שכפול לרשומה נוספת"
-                      aria-label="שכפול — הוספת אותה מנה שוב"
-                      disabled={isDayClosed}
-                      onClick={() => duplicateEntry(item)}
-                    >
-                      <IconCaption label="שכפול">
-                        <IconDuplicate className="h-[1.15rem] w-[1.15rem]" />
-                      </IconCaption>
-                    </button>
-                    <button
-                      type="button"
-                      className={`${foodToolbarBtnClass} border-red-300/70 text-red-800 hover:bg-red-50`}
-                      title="מחיקה מהיומן"
-                      aria-label="מחיקה — הסרת הרשומה מהיום"
-                      disabled={isDayClosed}
-                      onClick={() => removeEntry(item.id)}
-                    >
-                      <IconCaption label="מחק">
-                        <IconTrash className="h-[1.15rem] w-[1.15rem]" />
-                      </IconCaption>
-                    </button>
                   </div>
 
                   {isJournalMode &&
@@ -2223,40 +2280,34 @@ export function HomeClient({ mode = "dashboard" }: { mode?: "dashboard" | "journ
           </ul>
         )}
 
-        <div className="mt-5">
+        <div className="mt-6 space-y-2">
           <button
             type="button"
-            className={
+            className={`w-full rounded-2xl border px-4 py-3.5 text-[15px] font-semibold shadow-[0_2px_10px_rgba(0,0,0,0.05)] transition hover:bg-[var(--cherry-muted)]/40 active:scale-[0.99] ${
               isDayClosed
-                ? "w-full rounded-2xl border-2 border-[var(--border-cherry-soft)] bg-white px-4 py-4 text-base font-bold text-[var(--cherry)] shadow-md"
-                : "btn-stem w-full rounded-2xl px-4 py-4 text-base font-extrabold shadow-[0_8px_28px_rgba(74,124,35,0.35)] ring-2 ring-white/40 md:text-lg"
-            }
+                ? "border-[var(--border-cherry-soft)] bg-white text-[var(--cherry)]"
+                : "border-[var(--border-cherry-soft)]/85 bg-white text-[var(--stem)]"
+            }`}
             onClick={toggleJournalClosedForViewDay}
           >
-            {isDayClosed ? "פתיחת היום לעריכה" : "סגירת היום ביומן"}
+            {isDayClosed
+              ? gf(gender, "פתיחת היום לעריכה", "פתיחת היום לעריכה")
+              : gf(gender, "סגירת היום", "סגירת היום")}
           </button>
         </div>
-        {isDayClosed && (
-          <div
-            className="mt-4 space-y-3 rounded-xl border-2 border-[var(--border-cherry-soft)] bg-cherry-faint px-3 py-3 text-center"
-            role="status"
-          >
-            <p className="text-sm font-semibold text-[var(--cherry)]">
-              היום סגור ביומן — רק צפייה. אפשר לפתוח שוב אם שכחת להזין משהו.
-            </p>
-            <button
-              type="button"
-              className="btn-stem w-full rounded-xl py-2.5 text-sm font-bold shadow-sm"
-              onClick={toggleJournalClosedForViewDay}
-            >
-              פתיחת היום לעריכה
-            </button>
-          </div>
-        )}
           </motion.section>
-        </AnimatePresence>
-      </div>
-      ) : null}
+        </>
+      ) : (
+        <div className="mb-8">
+          <button
+            type="button"
+            className="btn-stem w-full rounded-2xl px-4 py-4 text-base font-extrabold shadow-[0_8px_28px_rgba(74,124,35,0.35)] ring-2 ring-white/40 md:text-lg"
+            onClick={() => router.push(`/journal?date=${encodeURIComponent(viewDateKey)}`)}
+          >
+            {gf(gender, "תעדי את היום שלך", "תעד את היום שלך")}
+          </button>
+        </div>
+      )}
 
     </div>
   );

@@ -1,10 +1,11 @@
 "use client";
 
 import type { ReactNode } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { CherryMark } from "@/components/CherryMark";
 import { ArrowRight } from "lucide-react";
-import { getActiveJournalDateKey } from "@/lib/storage";
+import { getActiveJournalDateKey, getJournalStreakDays } from "@/lib/storage";
 import { getTodayKey } from "@/lib/dateKey";
 import { HomeDrawer } from "@/components/HomeDrawer";
 
@@ -45,12 +46,15 @@ function HeaderBarContent({
   title,
   titleClassName,
   titleAccessory,
+  journalStreakDays,
   onBack,
 }: {
   showBack: boolean;
   title: string;
   titleClassName: string;
   titleAccessory?: ReactNode;
+  /** מוצג ליד כפתור הבית — רק במסך יומן */
+  journalStreakDays?: number | null;
   onBack: () => void;
 }) {
   const router = useRouter();
@@ -84,9 +88,17 @@ function HeaderBarContent({
       </div>
 
       <div
-        className="absolute left-3 top-0 flex h-[60px] items-center"
+        className="absolute left-3 top-0 flex h-[60px] items-center gap-1"
         dir="ltr"
       >
+        {journalStreakDays != null ? (
+          <span
+            className="min-w-[1.25rem] text-center text-sm font-extrabold tabular-nums text-[var(--stem)]"
+            title="ימים ברצף עם רישום ביומן"
+          >
+            {journalStreakDays}
+          </span>
+        ) : null}
         <button
           type="button"
           className="inline-flex h-10 w-10 items-center justify-center rounded-xl bg-white/0 transition hover:bg-white/25 active:scale-[0.99]"
@@ -105,6 +117,25 @@ function HeaderBarContent({
 export function AppBrandMark() {
   const pathname = usePathname();
   const router = useRouter();
+
+  const [journalStreakTick, setJournalStreakTick] = useState(0);
+  useEffect(() => {
+    const bump = () => setJournalStreakTick((t) => t + 1);
+    window.addEventListener("cj-profile-updated", bump);
+    window.addEventListener("cj-journal-closed-changed", bump);
+    return () => {
+      window.removeEventListener("cj-profile-updated", bump);
+      window.removeEventListener("cj-journal-closed-changed", bump);
+    };
+  }, []);
+
+  const isJournal = pathname === "/journal";
+  const journalHeaderStreak = useMemo(() => {
+    void journalStreakTick;
+    if (!isJournal) return null;
+    return getJournalStreakDays();
+  }, [isJournal, journalStreakTick]);
+
   if (pathname === "/welcome" || pathname === "/pick-theme") return null;
 
   const isHome = pathname === "/";
@@ -167,6 +198,7 @@ export function AppBrandMark() {
           showBack={showBack}
           title={title}
           titleClassName={titleSizeClass}
+          journalStreakDays={isJournal ? journalHeaderStreak : null}
           titleAccessory={
             isDictionary ? (
               <button
@@ -193,6 +225,22 @@ export function AppBrandMark() {
                 onClick={() => {
                   try {
                     window.dispatchEvent(new CustomEvent("cj-shopping-help"));
+                  } catch {
+                    /* ignore */
+                  }
+                }}
+              >
+                ?
+              </button>
+            ) : isJournal ? (
+              <button
+                type="button"
+                className="inline-flex h-8 w-8 items-center justify-center rounded-full border-2 border-[var(--border-cherry-soft)] bg-white text-sm font-extrabold text-[var(--cherry)] shadow-sm transition hover:bg-[var(--cherry-muted)]"
+                aria-label="הסבר על היומן"
+                title="הסבר"
+                onClick={() => {
+                  try {
+                    window.dispatchEvent(new CustomEvent("cj-journal-help"));
                   } catch {
                     /* ignore */
                   }
