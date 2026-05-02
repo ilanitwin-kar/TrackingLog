@@ -16,17 +16,13 @@ import { flushSync } from "react-dom";
 import {
   type DictionaryItem,
   type FoodUnit,
-  type LogEntry,
   type MealPreset,
   isExplorerFoodInDictionary,
-  getEntriesForDate,
   loadDictionary,
   loadMealPresets,
   loadProfile,
   patchDictionaryItemById,
   removeDictionaryItem,
-  resolveJournalTargetDateKey,
-  saveDayLogEntries,
   toggleExplorerFoodInDictionary,
 } from "@/lib/storage";
 import { addToShopping, loadShoppingFoodIds } from "@/lib/explorerStorage";
@@ -38,9 +34,12 @@ import {
 } from "@/lib/hebrewGenderUi";
 import { useDocumentScrollOnlyIfOverflowing } from "@/lib/useDocumentScrollOnlyIfOverflowing";
 import Link from "next/link";
-import { ChevronDown, MoreVertical } from "lucide-react";
+import { ChevronDown, Circle, Droplet, MoreVertical, Zap } from "lucide-react";
 import { rankedFuzzySearchByText, type MatchRange } from "@/lib/rankedSearch";
-import { matchesAllQueryWords } from "@/lib/foodSearchRules";
+import {
+  firstWordStrongPrefixMatch,
+  matchesAllQueryWords,
+} from "@/lib/foodSearchRules";
 import { truncateDisplayFoodLabel } from "@/lib/displayFoodLabel";
 
 const fontFood =
@@ -163,6 +162,123 @@ function sumPresetTotals(preset: MealPreset): {
   );
 }
 
+type DictDominantMacro = "protein" | "carbs" | "fat" | "neutral";
+
+function dictMacroGramsForDominance(
+  d: DictionaryItem,
+  preset: MealPreset | undefined
+): { p: number; c: number; f: number } {
+  if (preset?.components?.length) {
+    let p = 0;
+    let c = 0;
+    let f = 0;
+    for (const x of preset.components) {
+      p += Number.isFinite(x.proteinG) ? Math.max(0, x.proteinG ?? 0) : 0;
+      c += Number.isFinite(x.carbsG) ? Math.max(0, x.carbsG ?? 0) : 0;
+      f += Number.isFinite(x.fatG) ? Math.max(0, x.fatG ?? 0) : 0;
+    }
+    return { p, c, f };
+  }
+  const lp =
+    d.lastProteinG != null && Number.isFinite(d.lastProteinG)
+      ? Math.max(0, d.lastProteinG)
+      : 0;
+  const lc =
+    d.lastCarbsG != null && Number.isFinite(d.lastCarbsG)
+      ? Math.max(0, d.lastCarbsG)
+      : 0;
+  const lf =
+    d.lastFatG != null && Number.isFinite(d.lastFatG)
+      ? Math.max(0, d.lastFatG)
+      : 0;
+  if (lp + lc + lf > 1e-6) {
+    return { p: lp, c: lc, f: lf };
+  }
+  return {
+    p:
+      d.proteinPer100g != null && Number.isFinite(d.proteinPer100g)
+        ? Math.max(0, d.proteinPer100g)
+        : 0,
+    c:
+      d.carbsPer100g != null && Number.isFinite(d.carbsPer100g)
+        ? Math.max(0, d.carbsPer100g)
+        : 0,
+    f:
+      d.fatPer100g != null && Number.isFinite(d.fatPer100g)
+        ? Math.max(0, d.fatPer100g)
+        : 0,
+  };
+}
+
+function dominantDictMacro(
+  d: DictionaryItem,
+  preset: MealPreset | undefined
+): DictDominantMacro {
+  const { p, c, f } = dictMacroGramsForDominance(d, preset);
+  const t = p + c + f;
+  if (t < 1e-6) return "neutral";
+  const m = Math.max(p, c, f);
+  const tol = 1e-6;
+  const atMax = [p, c, f].filter((x) => Math.abs(x - m) <= tol).length;
+  if (atMax !== 1) return "neutral";
+  if (p === m) return "protein";
+  if (c === m) return "carbs";
+  return "fat";
+}
+
+/** חלבון — נתיבי Twemoji 💪 (U+1F4AA), CC-BY 4.0; צבע/זוהר מ־DictDominantMacroGlyph */
+function DictMacroProteinLensIcon({ className }: { className?: string }) {
+  return (
+    <svg
+      viewBox="0 0 36 36"
+      className={className}
+      fill="currentColor"
+      xmlns="http://www.w3.org/2000/svg"
+      aria-hidden
+    >
+      <path d="M15.977 9.36h3.789c.114-.191.147-.439.058-.673l-3.846-4.705V9.36z" />
+      <path d="M12.804 22.277c-.057-.349-.124-.679-.206-.973-.62-2.223-1.14-3.164-.918-5.494.29-1.584.273-4.763 4.483-4.268 1.112.131 2.843.927 3.834.91.567-.01.98-1.157 1.017-1.539.051-.526-.865-1.42-1.248-1.554-.383-.134-2.012-.631-2.681-.824-1.039-.301-.985-1.705-1.051-2.205-.031-.235.084-.467.294-.591.21-.124.375-.008.579.125l.885.648c.497.426-.874 1.24-.503 1.376 0 0 1.755.659 2.507.796.412.075 1.834-1.529 1.917-2.47.065-.74-3.398-4.083-5.867-5.381-.868-.456-1.377-.721-1.949-.694-.683.032-.898.302-1.748 1.03C8.302 4.46 4.568 11.577 4.02 13.152c-2.246 6.461-2.597 9.865-2.677 11.788-.049.59-.076 1.177-.076 1.758.065 0-1 5 0 6s5.326 1 5.326 1c10 3.989 28.57 2.948 28.57-7.233 0-12.172-18.813-10.557-22.359-4.188z" />
+      <path d="M20.63 32.078c-3.16-.332-5.628-1.881-5.767-1.97-.465-.297-.601-.913-.305-1.379s.913-.603 1.38-.308c.04.025 4.003 2.492 7.846 1.467 2.125-.566 3.867-2.115 5.177-4.601.258-.49.866-.676 1.351-.419.488.257.676.862.419 1.351-1.585 3.006-3.754 4.893-6.447 5.606-1.257.332-2.502.374-3.654.253z" />
+    </svg>
+  );
+}
+
+function DictDominantMacroGlyph({ kind }: { kind: DictDominantMacro }) {
+  const base = "h-[18px] w-[18px] shrink-0";
+  if (kind === "carbs") {
+    return (
+      <Zap
+        className={`${base} text-[#2563EB] drop-shadow-[0_0_6px_rgba(37,99,235,0.55)]`}
+        strokeWidth={2.35}
+        aria-hidden
+      />
+    );
+  }
+  if (kind === "fat") {
+    return (
+      <Droplet
+        className={`${base} text-[#16A34A] drop-shadow-[0_0_6px_rgba(22,163,74,0.5)]`}
+        strokeWidth={2.35}
+        aria-hidden
+      />
+    );
+  }
+  if (kind === "protein") {
+    return (
+      <DictMacroProteinLensIcon
+        className={`${base} text-[#CA8A04] drop-shadow-[0_0_6px_rgba(202,138,4,0.55)]`}
+      />
+    );
+  }
+  return (
+    <Circle
+      className={`${base} text-neutral-400/90`}
+      strokeWidth={2}
+      aria-hidden
+    />
+  );
+}
+
 function clampGramQty(q: number): number {
   if (!Number.isFinite(q)) return 100;
   return Math.min(5000, Math.max(1, Math.round(q)));
@@ -239,181 +355,6 @@ function servingScaleRatioFromDictionaryDefault(
   return null;
 }
 
-/** מנה ליומן לפי פריט מילון + כמות/יחידה (בלי לעדכן את המילון) */
-function buildLogEntryFromDictionaryServing(
-  d: DictionaryItem,
-  qty: number,
-  unit: FoodUnit,
-  gramsPerUnitResolved: number | null,
-  mealPreset?: MealPreset | null
-): LogEntry {
-  if (!Number.isFinite(qty) || qty <= 0) {
-    return {
-      id: `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
-      food: d.food,
-      calories: 0,
-      quantity: 0,
-      unit,
-      createdAt: new Date().toISOString(),
-      verified: false,
-    };
-  }
-
-  /** ארוחה שמורה: סיכום מהרכיבים (לא לפי 100 ג׳) — כמו applyMealPresetToToday */
-  let resolvedMealPreset: MealPreset | null = null;
-  if (d.mealPresetId) {
-    if (mealPreset?.id === d.mealPresetId) {
-      resolvedMealPreset = mealPreset;
-    } else {
-      resolvedMealPreset =
-        loadMealPresets().find((p) => p.id === d.mealPresetId) ?? null;
-    }
-  }
-  if (resolvedMealPreset) {
-    const totals = sumPresetTotals(resolvedMealPreset);
-    let scaleR = servingScaleRatioFromDictionaryDefault(
-      d,
-      qty,
-      unit,
-      gramsPerUnitResolved
-    );
-    if (scaleR == null && d.quantity > 0) {
-      scaleR = qty / d.quantity;
-    }
-    if (scaleR == null || !Number.isFinite(scaleR)) scaleR = 1;
-
-    const calories = Math.max(1, Math.round(totals.kcal * scaleR));
-    const proteinG =
-      totals.protein > 0
-        ? Math.round(totals.protein * scaleR * 10) / 10
-        : undefined;
-    const carbsG =
-      totals.carbs > 0
-        ? Math.round(totals.carbs * scaleR * 10) / 10
-        : undefined;
-    const fatG =
-      totals.fat > 0
-        ? Math.round(totals.fat * scaleR * 10) / 10
-        : undefined;
-
-    return {
-      id: `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
-      food: d.food,
-      calories,
-      quantity: qty,
-      unit,
-      createdAt: new Date().toISOString(),
-      verified: false,
-      ...(proteinG != null ? { proteinG } : {}),
-      ...(carbsG != null ? { carbsG } : {}),
-      ...(fatG != null ? { fatG } : {}),
-      aiBreakdownJson: JSON.stringify({
-        type: "meal-preset",
-        presetId: resolvedMealPreset.id,
-        name: resolvedMealPreset.name,
-        components: resolvedMealPreset.components,
-      }),
-    };
-  }
-
-  const k100 =
-    d.caloriesPer100g != null && Number.isFinite(d.caloriesPer100g)
-      ? Math.max(0, d.caloriesPer100g)
-      : null;
-  const p100 =
-    d.proteinPer100g != null && Number.isFinite(d.proteinPer100g)
-      ? Math.max(0, d.proteinPer100g)
-      : null;
-  const c100 =
-    d.carbsPer100g != null && Number.isFinite(d.carbsPer100g)
-      ? Math.max(0, d.carbsPer100g)
-      : null;
-  const f100 =
-    d.fatPer100g != null && Number.isFinite(d.fatPer100g)
-      ? Math.max(0, d.fatPer100g)
-      : null;
-
-  const totalG = servingTotalGrams(qty, unit, gramsPerUnitResolved);
-  const scaleR = servingScaleRatioFromDictionaryDefault(
-    d,
-    qty,
-    unit,
-    gramsPerUnitResolved
-  );
-
-  let calories: number;
-  let proteinG: number | undefined;
-  let carbsG: number | undefined;
-  let fatG: number | undefined;
-
-  /** שורת ארוחה במילון אינה „ל־100 ג׳” — בלי preset זה נשארים ב־last* */
-  const skipPer100BecauseMealRow = Boolean(d.mealPresetId);
-
-  if (
-    !skipPer100BecauseMealRow &&
-    k100 != null &&
-    totalG != null &&
-    totalG > 0
-  ) {
-    const factor = totalG / 100;
-    calories = Math.max(0, Math.round(k100 * factor));
-    if (p100 != null) proteinG = Math.round(p100 * factor * 10) / 10;
-    if (c100 != null) carbsG = Math.round(c100 * factor * 10) / 10;
-    if (f100 != null) fatG = Math.round(f100 * factor * 10) / 10;
-  } else if (
-    scaleR != null &&
-    d.lastCalories != null &&
-    Number.isFinite(d.lastCalories) &&
-    d.lastCalories > 0
-  ) {
-    calories = Math.max(0, Math.round(d.lastCalories * scaleR));
-    if (d.lastProteinG != null && Number.isFinite(d.lastProteinG)) {
-      proteinG = Math.round(d.lastProteinG * scaleR * 10) / 10;
-    }
-    if (d.lastCarbsG != null && Number.isFinite(d.lastCarbsG)) {
-      carbsG = Math.round(d.lastCarbsG * scaleR * 10) / 10;
-    }
-    if (d.lastFatG != null && Number.isFinite(d.lastFatG)) {
-      fatG = Math.round(d.lastFatG * scaleR * 10) / 10;
-    }
-  } else if (
-    d.lastCalories != null &&
-    Number.isFinite(d.lastCalories) &&
-    d.lastCalories > 0
-  ) {
-    calories = Math.max(0, Math.round(d.lastCalories));
-    if (d.lastProteinG != null && Number.isFinite(d.lastProteinG)) {
-      proteinG = Math.round(d.lastProteinG * 10) / 10;
-    }
-    if (d.lastCarbsG != null && Number.isFinite(d.lastCarbsG)) {
-      carbsG = Math.round(d.lastCarbsG * 10) / 10;
-    }
-    if (d.lastFatG != null && Number.isFinite(d.lastFatG)) {
-      fatG = Math.round(d.lastFatG * 10) / 10;
-    }
-  } else if (k100 != null && !skipPer100BecauseMealRow) {
-    calories = Math.max(0, Math.round(k100));
-    if (p100 != null) proteinG = Math.round(p100 * 10) / 10;
-    if (c100 != null) carbsG = Math.round(c100 * 10) / 10;
-    if (f100 != null) fatG = Math.round(f100 * 10) / 10;
-  } else {
-    calories = 0;
-  }
-
-  return {
-    id: `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
-    food: d.food,
-    calories,
-    quantity: qty,
-    unit,
-    createdAt: new Date().toISOString(),
-    verified: false,
-    ...(proteinG != null ? { proteinG } : {}),
-    ...(carbsG != null ? { carbsG } : {}),
-    ...(fatG != null ? { fatG } : {}),
-  };
-}
-
 function servingTotalGrams(
   qty: number,
   unit: FoodUnit,
@@ -463,14 +404,19 @@ function dictionaryPortionRedundantWithPer100(d: DictionaryItem): boolean {
 function sortSavedByQuery(items: DictionaryItem[], query: string): DictionaryItem[] {
   const q = query.trim().toLowerCase();
   if (q.length < 2) return items;
-  const p: DictionaryItem[] = [];
+  const pStrong: DictionaryItem[] = [];
+  const pWeak: DictionaryItem[] = [];
   const c: DictionaryItem[] = [];
   for (const d of items) {
     const f = d.food.toLowerCase();
-    if (f.startsWith(q)) p.push(d);
-    else if (f.includes(q)) c.push(d);
+    if (f.startsWith(q)) {
+      if (firstWordStrongPrefixMatch(d.food, query)) pStrong.push(d);
+      else pWeak.push(d);
+    } else if (f.includes(q)) {
+      c.push(d);
+    }
   }
-  return [...p, ...c];
+  return [...pStrong, ...pWeak, ...c];
 }
 
 function renderHighlighted(text: string, ranges: MatchRange[]) {
@@ -515,16 +461,11 @@ export default function DictionaryPage() {
   const [editUnit, setEditUnit] = useState<FoodUnit>("גרם");
   const [editGramsPerUnitText, setEditGramsPerUnitText] = useState("");
   const quantityEditTitleId = useId();
-  const journalAddTitleId = useId();
   const searchInputRef = useRef<HTMLInputElement>(null);
   const searchResultsAnchorRef = useRef<HTMLDivElement>(null);
   const wasSearchingRef = useRef(false);
-  const [journalAddTarget, setJournalAddTarget] = useState<DictionaryItem | null>(
-    null
-  );
-  const [journalQtyText, setJournalQtyText] = useState("1");
-  const [journalUnit, setJournalUnit] = useState<FoodUnit>("גרם");
-  const [journalGPerUText, setJournalGPerUText] = useState("");
+  const [dictProductEditNameDraft, setDictProductEditNameDraft] =
+    useState("");
   const [activeLetter, setActiveLetter] = useState<string | null>(null);
   const [openSavedId, setOpenSavedId] = useState<string | null>(null);
   const [dictTab, setDictTab] = useState<"all" | "foods" | "meals">("all");
@@ -543,12 +484,6 @@ export default function DictionaryPage() {
   /** גלה מזונות / בחירה לייצוא / ייצוא — מקופלים מאחורי «עוד» */
   const [dictionaryMoreActionsOpen, setDictionaryMoreActionsOpen] =
     useState(false);
-  const [dictItemNameEditId, setDictItemNameEditId] = useState<string | null>(
-    null
-  );
-  const [dictItemNameDraft, setDictItemNameDraft] = useState("");
-  const dictItemNameInputRef = useRef<HTMLInputElement>(null);
-
   const dictLongPressRef = useRef<{
     timer: number | null;
     pointerId: number | null;
@@ -590,41 +525,6 @@ export default function DictionaryPage() {
     window.addEventListener("cj-dictionary-help", openHelp);
     return () => window.removeEventListener("cj-dictionary-help", openHelp);
   }, []);
-
-  useEffect(() => {
-    if (!dictItemNameEditId) return;
-    const t = window.setTimeout(
-      () => dictItemNameInputRef.current?.focus(),
-      50
-    );
-    return () => window.clearTimeout(t);
-  }, [dictItemNameEditId]);
-
-  /** סגירת כרטיס / מעבר לפריט אחר — יוצאים מעריכת שם (לא מתנגש עם פתיחה) */
-  useEffect(() => {
-    if (!dictItemNameEditId) return;
-    if (openSavedId !== dictItemNameEditId) {
-      setDictItemNameEditId(null);
-      setDictItemNameDraft("");
-    }
-  }, [openSavedId, dictItemNameEditId]);
-
-  function cancelDictItemNameEdit() {
-    setDictItemNameEditId(null);
-    setDictItemNameDraft("");
-  }
-
-  function saveDictItemNameEdit() {
-    if (!dictItemNameEditId) return;
-    const name = dictItemNameDraft.trim();
-    if (!name) return;
-    if (!patchDictionaryItemById(dictItemNameEditId, { food: name })) {
-      cancelDictItemNameEdit();
-      return;
-    }
-    refresh();
-    cancelDictItemNameEdit();
-  }
 
   /** אחרי גלילה במסך — כניסה לחיפוש לא מציגה את כותרת תוצאות החיפוש; מיישרים לתחילת הבלוק */
   useEffect(() => {
@@ -691,13 +591,15 @@ export default function DictionaryPage() {
       if (dictTab === "foods") return d.mealPresetId == null;
       return true;
     });
+    if (debouncedQ.trim().length >= 2) {
+      return tabbed;
+    }
     const sorted = [...tabbed].sort((a, b) =>
       normalizeTitleForIndex(a.food).localeCompare(
         normalizeTitleForIndex(b.food),
         "he"
       )
     );
-    if (debouncedQ.length >= 2) return sorted;
     if (!activeLetter) return sorted;
     return sorted.filter((x) => firstHebLetter(x.food) === activeLetter);
   }, [savedHits, filteredSaved, dictTab, debouncedQ, activeLetter]);
@@ -720,40 +622,6 @@ export default function DictionaryPage() {
     }
     return visibleSaved;
   }, [exportSelectMode, exportSelectedIds, saved, visibleSaved]);
-
-  const journalAddPreview = useMemo(() => {
-    if (!journalAddTarget) return null;
-    const d = journalAddTarget;
-    const qty = parseQtyAllowZero(
-      journalQtyText.trim() === "" ? "1" : journalQtyText,
-      journalUnit
-    );
-    let gResolved: number | null = null;
-    if (journalUnit === "יחידה") {
-      const fromField = parseGramsPerUnitField(journalGPerUText);
-      gResolved =
-        fromField != null && fromField > 0
-          ? fromField
-          : d.gramsPerUnit != null && d.gramsPerUnit > 0
-            ? d.gramsPerUnit
-            : null;
-    }
-    return buildLogEntryFromDictionaryServing(
-      d,
-      qty,
-      journalUnit,
-      gResolved,
-      d.mealPresetId ? presetMap.get(d.mealPresetId) ?? null : null
-    );
-  }, [journalAddTarget, journalQtyText, journalUnit, journalGPerUText, presetMap]);
-
-  const journalModalParsedQty = useMemo(() => {
-    if (!journalAddTarget) return 1;
-    return parseQtyAllowZero(
-      journalQtyText.trim() === "" ? "1" : journalQtyText,
-      journalUnit
-    );
-  }, [journalAddTarget, journalQtyText, journalUnit]);
 
   const quantityEditParsedQty = useMemo(() => {
     if (!quantityEditTarget) return 1;
@@ -1203,75 +1071,9 @@ export default function DictionaryPage() {
     }
   }
 
-  function onSavedJournal(d: DictionaryItem) {
-    const gPerU =
-      d.gramsPerUnit != null && Number.isFinite(d.gramsPerUnit) && d.gramsPerUnit > 0
-        ? d.gramsPerUnit
-        : null;
-    const entry = buildLogEntryFromDictionaryServing(
-      d,
-      d.quantity,
-      d.unit,
-      gPerU,
-      d.mealPresetId ? presetMap.get(d.mealPresetId) ?? null : null
-    );
-    const dateKey = resolveJournalTargetDateKey({ allowFuture: true });
-    const existing = getEntriesForDate(dateKey);
-    saveDayLogEntries(dateKey, [entry, ...existing]);
-    setJustAddedId(`journal:${d.id}`);
-    if (justAddedTimerRef.current) window.clearTimeout(justAddedTimerRef.current);
-    justAddedTimerRef.current = window.setTimeout(() => setJustAddedId(null), 900);
-  }
-
-  function openJournalAddModal(d: DictionaryItem) {
-    setJournalAddTarget(d);
-    setJournalQtyText(String(d.quantity));
-    setJournalUnit(d.unit);
-    setJournalGPerUText(
-      d.gramsPerUnit != null && d.gramsPerUnit > 0 ? String(d.gramsPerUnit) : ""
-    );
-  }
-
-  function closeJournalAddModal() {
-    setJournalAddTarget(null);
-  }
-
-  function confirmJournalAdd() {
-    if (!journalAddTarget) return;
-    const d = journalAddTarget;
-    const qty = parseQtyAllowZero(
-      journalQtyText.trim() === "" ? "1" : journalQtyText,
-      journalUnit
-    );
-    if (qty <= 0) return;
-    let gResolved: number | null = null;
-    if (journalUnit === "יחידה") {
-      const fromField = parseGramsPerUnitField(journalGPerUText);
-      gResolved =
-        fromField != null && fromField > 0
-          ? fromField
-          : d.gramsPerUnit != null && d.gramsPerUnit > 0
-            ? d.gramsPerUnit
-            : null;
-    }
-    const entry = buildLogEntryFromDictionaryServing(
-      d,
-      qty,
-      journalUnit,
-      gResolved,
-      d.mealPresetId ? presetMap.get(d.mealPresetId) ?? null : null
-    );
-    const dateKey = resolveJournalTargetDateKey({ allowFuture: true });
-    const existing = getEntriesForDate(dateKey);
-    saveDayLogEntries(dateKey, [entry, ...existing]);
-    setJustAddedId(`journal:${d.id}`);
-    if (justAddedTimerRef.current) window.clearTimeout(justAddedTimerRef.current);
-    justAddedTimerRef.current = window.setTimeout(() => setJustAddedId(null), 900);
-    closeJournalAddModal();
-  }
-
-  function openQuantityEdit(d: DictionaryItem) {
+  function openDictProductEdit(d: DictionaryItem) {
     setQuantityEditTarget(d);
+    setDictProductEditNameDraft(d.food);
     setEditQtyText(String(d.quantity));
     setEditUnit(d.unit);
     setEditGramsPerUnitText(
@@ -1281,11 +1083,28 @@ export default function DictionaryPage() {
 
   function closeQuantityEdit() {
     setQuantityEditTarget(null);
+    setDictProductEditNameDraft("");
   }
 
-  function saveQuantityEdit() {
+  function saveDictProductEdit() {
     if (!quantityEditTarget) return;
     const prev = quantityEditTarget;
+    const nameTrim = dictProductEditNameDraft.trim();
+    if (!nameTrim) return;
+
+    const preset =
+      prev.mealPresetId != null ? presetMap.get(prev.mealPresetId) : undefined;
+    const isMeal = Boolean(prev.mealPresetId && preset);
+
+    if (isMeal) {
+      if (prev.food.trim() !== nameTrim) {
+        if (!patchDictionaryItemById(prev.id, { food: nameTrim })) return;
+        refresh();
+      }
+      closeQuantityEdit();
+      return;
+    }
+
     const qty = parseQtyAllowZero(
       editQtyText.trim() === "" ? "1" : editQtyText,
       editUnit
@@ -1298,6 +1117,9 @@ export default function DictionaryPage() {
       quantity: qty,
       unit: editUnit,
     };
+    if (prev.food.trim() !== nameTrim) {
+      patch.food = nameTrim;
+    }
 
     const c100 = prev.caloriesPer100g;
     const p100 = prev.proteinPer100g;
@@ -1833,12 +1655,28 @@ export default function DictionaryPage() {
             {visibleSavedGrouped.map((group) => (
               <div key={group.key} className="space-y-2">
                 <ul className="notebook-list space-y-2">
-                  {group.items.map((d, idx) => {
-                    const displayIndex = idx + 1;
+                  {group.items.map((d) => {
               const preset =
                 d.mealPresetId != null
                   ? presetMap.get(d.mealPresetId)
                   : undefined;
+              const dominantMacro = dominantDictMacro(d, preset);
+              const macroAria =
+                dominantMacro === "protein"
+                  ? gf(gender, "רכיב דומיננטי: חלבון", "רכיב דומיננטי: חלבון")
+                  : dominantMacro === "carbs"
+                    ? gf(
+                        gender,
+                        "רכיב דומיננטי: פחמימה",
+                        "רכיב דומיננטי: פחמימה"
+                      )
+                    : dominantMacro === "fat"
+                      ? gf(gender, "רכיב דומיננטי: שומן", "רכיב דומיננטי: שומן")
+                      : gf(
+                          gender,
+                          "מאקרו — ללא דומיננטי ברור",
+                          "מאקרו — ללא דומיננטי ברור"
+                        );
               const isMeal = Boolean(d.mealPresetId && preset);
               const isOpen = openSavedId === d.id;
               const isSelected = exportSelectedIds.has(d.id);
@@ -1885,64 +1723,15 @@ export default function DictionaryPage() {
                     ) : null}
                     <div className="flex min-w-0 flex-1 items-center gap-2 text-right">
                       <span
-                        className="w-7 shrink-0 text-center text-sm font-extrabold tabular-nums leading-snug text-[var(--stem)]"
-                        aria-hidden
+                        className="flex w-8 shrink-0 items-center justify-center"
+                        title={macroAria}
+                        aria-label={macroAria}
                       >
-                        {displayIndex}
+                        <DictDominantMacroGlyph kind={dominantMacro} />
                       </span>
-                      {dictItemNameEditId === d.id && isOpen ? (
-                        <div
-                          className="flex min-w-0 flex-1 flex-col gap-2 sm:flex-row sm:items-center"
-                          data-skip-dict-longpress
-                        >
-                          <input
-                            ref={dictItemNameInputRef}
-                            type="text"
-                            value={dictItemNameDraft}
-                            onChange={(e) =>
-                              setDictItemNameDraft(e.target.value)
-                            }
-                            onKeyDown={(e) => {
-                              if (e.key === "Escape") cancelDictItemNameEdit();
-                              if (e.key === "Enter") saveDictItemNameEdit();
-                            }}
-                            className="min-w-0 flex-1 rounded-lg border-2 border-[var(--border-cherry-soft)] bg-white px-2.5 py-1.5 text-base font-normal text-[var(--cherry)] shadow-sm outline-none focus:ring-2 focus:ring-[var(--stem)]/25"
-                            dir="rtl"
-                            aria-label={gf(
-                              gender,
-                              "שם הפריט במילון",
-                              "שם הפריט במילון"
-                            )}
-                          />
-                          <div className="flex shrink-0 items-center justify-end gap-1.5">
-                            <button
-                              type="button"
-                              className="rounded-lg border-2 border-[var(--border-cherry-soft)] bg-white px-3 py-1.5 text-xs font-extrabold text-[var(--stem)] shadow-sm transition hover:bg-[var(--cherry-muted)]"
-                              onClick={(e) => {
-                                e.preventDefault();
-                                e.stopPropagation();
-                                saveDictItemNameEdit();
-                              }}
-                            >
-                              {gf(gender, "שמור", "שמור")}
-                            </button>
-                            <button
-                              type="button"
-                              className="rounded-lg border-2 border-[var(--border-cherry-soft)] bg-white px-3 py-1.5 text-xs font-extrabold text-[var(--text)]/80 shadow-sm transition hover:bg-[var(--cherry-muted)]"
-                              onClick={(e) => {
-                                e.preventDefault();
-                                e.stopPropagation();
-                                cancelDictItemNameEdit();
-                              }}
-                            >
-                              {gf(gender, "ביטול", "ביטול")}
-                            </button>
-                          </div>
-                        </div>
-                      ) : !isOpen ? (
+                      {!isOpen ? (
                         <button
                           type="button"
-                          data-skip-dict-longpress
                           className="min-w-0 flex-1 text-right"
                           onClick={() =>
                             setOpenSavedId((x) => (x === d.id ? null : d.id))
@@ -1964,27 +1753,9 @@ export default function DictionaryPage() {
                         </button>
                       ) : (
                         <div className="flex min-w-0 flex-1 items-center gap-1.5">
-                          <button
-                            type="button"
-                            data-skip-dict-longpress
-                            className="min-w-0 flex-1 rounded-md px-1 py-0.5 text-right transition hover:bg-[var(--cherry-muted)]/45"
-                            onClick={(e) => {
-                              e.preventDefault();
-                              e.stopPropagation();
-                              setDictItemNameEditId(d.id);
-                              setDictItemNameDraft(d.food);
-                            }}
-                            title={d.food}
-                            aria-label={gf(
-                              gender,
-                              "עריכת שם הפריט",
-                              "עריכת שם הפריט"
-                            )}
-                          >
-                            <span className="block min-w-0 break-words text-base font-normal leading-snug text-[var(--cherry)]">
-                              {renderDictListFoodTitle(d)}
-                            </span>
-                          </button>
+                          <span className="min-w-0 flex-1 break-words px-1 py-0.5 text-right text-base font-normal leading-snug text-[var(--cherry)]">
+                            {renderDictListFoodTitle(d)}
+                          </span>
                           <button
                             type="button"
                             data-skip-dict-longpress
@@ -2016,32 +1787,6 @@ export default function DictionaryPage() {
                     </div>
 
                     <div className="relative flex shrink-0 items-center gap-1">
-                      {!exportSelectMode &&
-                      (!d.mealPresetId || preset != null) ? (
-                        <button
-                          type="button"
-                          data-skip-dict-longpress
-                          className="rounded-md border border-[var(--border-cherry-soft)] bg-white p-1.5 text-[var(--cherry)] shadow-sm transition hover:bg-[var(--cherry-muted)]"
-                          onClick={(e) => {
-                            e.preventDefault();
-                            e.stopPropagation();
-                            onSavedJournal(d);
-                          }}
-                          aria-label="הוספה מהירה ליומן לפי ברירת המחדל במילון"
-                          title="הוספה מהירה ליומן"
-                        >
-                          <span
-                            className={`grid h-4 w-4 place-items-center text-[15px] font-normal leading-none ${
-                              justAddedId === `journal:${d.id}`
-                                ? "text-[var(--stem)]"
-                                : "text-[var(--cherry)]"
-                            }`}
-                            aria-hidden
-                          >
-                            ✓
-                          </span>
-                        </button>
-                      ) : null}
                       {!exportSelectMode &&
                       (!d.mealPresetId || preset != null) ? (
                         <div className="relative" data-dict-row-menu>
@@ -2081,14 +1826,10 @@ export default function DictionaryPage() {
                                   e.preventDefault();
                                   e.stopPropagation();
                                   setDictRowMenuOpenId(null);
-                                  openQuantityEdit(d);
+                                  openDictProductEdit(d);
                                 }}
                               >
-                                {gf(
-                                  gender,
-                                  "עריכת כמות במילון",
-                                  "עריכת כמות במילון"
-                                )}
+                                {gf(gender, "עריכת מוצר", "עריכת מוצר")}
                               </button>
                               <button
                                 type="button"
@@ -2098,36 +1839,20 @@ export default function DictionaryPage() {
                                   e.preventDefault();
                                   e.stopPropagation();
                                   setDictRowMenuOpenId(null);
-                                  openJournalAddModal(d);
+                                  void onCartDictionaryItem(d);
                                 }}
                               >
-                                {gf(gender, "הוספה ליומן", "הוספה ליומן")}
-                                {justAddedId === `journal:${d.id}` ? (
+                                {gf(
+                                  gender,
+                                  "העברה לסל הקניות",
+                                  "העברה לסל הקניות"
+                                )}
+                                {justAddedId === `shop:${d.id}` ? (
                                   <span className="ms-1 text-xs font-extrabold text-[var(--stem)]">
                                     ✓
                                   </span>
                                 ) : null}
                               </button>
-                              {isMeal ? null : !d.mealPresetId ? (
-                                <button
-                                  type="button"
-                                  role="menuitem"
-                                  className="flex w-full px-3 py-2.5 text-start text-sm font-bold text-[var(--stem)] transition hover:bg-[var(--cherry-muted)]/45"
-                                  onClick={(e) => {
-                                    e.preventDefault();
-                                    e.stopPropagation();
-                                    setDictRowMenuOpenId(null);
-                                    void onCartDictionaryItem(d);
-                                  }}
-                                >
-                                  לקניות
-                                  {justAddedId === `shop:${d.id}` ? (
-                                    <span className="ms-1 text-xs font-extrabold text-[var(--stem)]">
-                                      ✓
-                                    </span>
-                                  ) : null}
-                                </button>
-                              ) : null}
                             </div>
                           ) : null}
                         </div>
@@ -2501,205 +2226,6 @@ export default function DictionaryPage() {
       {/* No shopping toast in Dictionary screen */}
 
       <AnimatePresence>
-        {journalAddTarget && (
-          <motion.div
-            className="fixed inset-0 z-[500] flex items-center justify-center bg-black/30 p-4 backdrop-blur-[2px]"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            role="presentation"
-            onClick={(e) => {
-              if (e.target === e.currentTarget) closeJournalAddModal();
-            }}
-          >
-            <motion.div
-              role="dialog"
-              aria-modal
-              aria-labelledby={journalAddTitleId}
-              className="glass-panel w-full max-w-md space-y-4 p-5 shadow-2xl"
-              initial={{ scale: 0.94, opacity: 0 }}
-              animate={{ scale: 1, opacity: 1 }}
-              exit={{ scale: 0.96, opacity: 0 }}
-              transition={{ type: "spring", damping: 26, stiffness: 320 }}
-              onClick={(e) => e.stopPropagation()}
-              dir="rtl"
-            >
-              <div className="flex items-start justify-between gap-3">
-                <h2
-                  id={journalAddTitleId}
-                  className="panel-title-cherry text-lg"
-                >
-                  {gf(gender, "הוספה ליומן", "הוספה ליומן")}
-                </h2>
-                <button
-                  type="button"
-                  onClick={closeJournalAddModal}
-                  className="rounded-lg border-2 border-[var(--border-cherry-soft)] bg-white px-3 py-1.5 text-sm font-semibold text-[var(--text)] transition hover:bg-[var(--cherry-muted)]"
-                >
-                  סגירה
-                </button>
-              </div>
-              <p className="text-sm font-semibold text-[var(--stem)]">
-                <span className="bidi-isolate-rtl">{journalAddTarget.food}</span>
-              </p>
-              <p className="text-xs leading-relaxed text-[var(--stem)]/75">
-                {gf(
-                  gender,
-                  "הכמות כאן רק לרישום ביומן — המילון לא משתנה. לעדכון ברירת המחדל במילון השתמשי ב״עריכת כמות במילון״.",
-                  "הכמות כאן רק לרישום ביומן — המילון לא משתנה. לעדכון ברירת המחדל במילון השתמש ב״עריכת כמות במילון״."
-                )}
-              </p>
-              <div className="flex flex-wrap gap-3">
-                <label className="min-w-[6rem] flex-1">
-                  <span className="mb-1 block text-xs font-semibold text-[var(--cherry)]">
-                    {gf(gender, "כמות", "כמות")}
-                  </span>
-                  <input
-                    type="text"
-                    inputMode="decimal"
-                    value={journalQtyText}
-                    onFocus={(e) => e.currentTarget.select()}
-                    onChange={(e) => {
-                      if ((e.nativeEvent as InputEvent).isComposing) return;
-                      const raw = e.target.value;
-                      if (raw.trim() === "") {
-                        setJournalQtyText("");
-                        return;
-                      }
-                      const cleaned = raw
-                        .replace(",", ".")
-                        .replace(/[^\d.]/g, "")
-                        .replace(/^0+(?=\d)/, "");
-                      const parts = cleaned.split(".");
-                      setJournalQtyText(
-                        parts.length <= 1
-                          ? parts[0]!
-                          : `${parts[0]}.${parts.slice(1).join("")}`
-                      );
-                    }}
-                    onBlur={() =>
-                      setJournalQtyText((x) => {
-                        const n = parseFloat(x.replace(",", "."));
-                        if (!Number.isFinite(n)) return "1";
-                        if (n <= 0) return "0";
-                        return String(parseQtyForUnit(x, journalUnit));
-                      })
-                    }
-                    className="input-luxury-dark w-full"
-                  />
-                </label>
-                <label className="min-w-[8rem] flex-[2]">
-                  <span className="mb-1 block text-xs font-semibold text-[var(--cherry)]">
-                    יחידה
-                  </span>
-                  <select
-                    value={journalUnit}
-                    onChange={(e) => {
-                      const u = e.target.value as FoodUnit;
-                      setJournalUnit(u);
-                      setJournalQtyText((q) => {
-                        const raw = q.trim() === "" ? "1" : q;
-                        if (parseQtyAllowZero(raw, u) === 0) return "0";
-                        return String(parseQtyForUnit(raw, u));
-                      });
-                      if (u !== "יחידה") setJournalGPerUText("");
-                    }}
-                    className="select-luxury w-full"
-                  >
-                    {UNITS.map((u) => (
-                      <option key={u} value={u}>
-                        {u}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-              </div>
-              {journalUnit === "יחידה" && (
-                <label className="block">
-                  <span className="mb-1 block text-xs font-semibold text-[var(--cherry)]">
-                    {gf(
-                      gender,
-                      "משקל יחידה (גרם)",
-                      "משקל יחידה (גרם)"
-                    )}
-                  </span>
-                  <input
-                    type="text"
-                    inputMode="decimal"
-                    value={journalGPerUText}
-                    onChange={(e) => {
-                      if ((e.nativeEvent as InputEvent).isComposing) return;
-                      const raw = e.target.value;
-                      if (raw.trim() === "") {
-                        setJournalGPerUText("");
-                        return;
-                      }
-                      const cleaned = raw
-                        .replace(",", ".")
-                        .replace(/[^\d.]/g, "")
-                        .replace(/^0+(?=\d)/, "");
-                      const parts = cleaned.split(".");
-                      setJournalGPerUText(
-                        parts.length <= 1
-                          ? parts[0]!
-                          : `${parts[0]}.${parts.slice(1).join("")}`
-                      );
-                    }}
-                    onBlur={() => {
-                      const g = parseGramsPerUnitField(journalGPerUText);
-                      setJournalGPerUText(g != null ? String(g) : "");
-                    }}
-                    placeholder={gf(gender, "כמו במילון", "כמו במילון")}
-                    className="input-luxury-dark w-full"
-                  />
-                </label>
-              )}
-              {journalModalParsedQty <= 0 ? (
-                <p className="text-center text-sm font-semibold text-[#a94444]">
-                  {gf(
-                    gender,
-                    "כמות חייבת להיות גדולה מ־0 כדי להוסיף ליומן.",
-                    "כמות חייבת להיות גדולה מ־0 כדי להוסיף ליומן."
-                  )}
-                </p>
-              ) : journalAddPreview ? (
-                <p className="text-center text-base font-extrabold text-[var(--cherry)]">
-                  {gf(gender, "סיכום למנה:", "סיכום למנה:")}{" "}
-                  {journalAddPreview.calories.toLocaleString("he-IL")} קק״ל
-                  {journalAddPreview.proteinG != null &&
-                  journalAddPreview.carbsG != null &&
-                  journalAddPreview.fatG != null ? (
-                    <span className="mt-1 block text-sm font-semibold text-[var(--stem)]">
-                      · חלבון {journalAddPreview.proteinG} ג׳ · פחמימות{" "}
-                      {journalAddPreview.carbsG} ג׳ · שומן {journalAddPreview.fatG}{" "}
-                      ג׳
-                    </span>
-                  ) : null}
-                </p>
-              ) : null}
-              <div className="flex gap-2">
-                <button
-                  type="button"
-                  className="btn-stem flex-1 rounded-xl py-3 font-semibold disabled:cursor-not-allowed disabled:opacity-45"
-                  onClick={confirmJournalAdd}
-                  disabled={journalModalParsedQty <= 0}
-                >
-                  {gf(gender, "הוסיפי ליומן", "הוסף ליומן")}
-                </button>
-                <button
-                  type="button"
-                  className="flex-1 rounded-xl border-2 border-[var(--border-cherry-soft)] bg-white py-3 font-semibold text-[var(--text)]"
-                  onClick={closeJournalAddModal}
-                >
-                  ביטול
-                </button>
-              </div>
-            </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-
-      <AnimatePresence>
         {quantityEditTarget && (
           <motion.div
             className="fixed inset-0 z-[400] flex items-center justify-center bg-black/30 p-4 backdrop-blur-[2px]"
@@ -2727,7 +2253,7 @@ export default function DictionaryPage() {
                   id={quantityEditTitleId}
                   className="panel-title-cherry text-lg"
                 >
-                  {gf(gender, "עריכת כמות במילון", "עריכת כמות במילון")}
+                  {gf(gender, "עריכת מוצר", "עריכת מוצר")}
                 </h2>
                 <button
                   type="button"
@@ -2737,9 +2263,29 @@ export default function DictionaryPage() {
                   סגירה
                 </button>
               </div>
-              <p className="text-sm font-semibold text-[var(--stem)]">
-                <span className="bidi-isolate-rtl">{quantityEditTarget.food}</span>
-              </p>
+              <label className="block">
+                <span className="mb-1 block text-xs font-semibold text-[var(--cherry)]">
+                  {gf(gender, "שם המוצר", "שם המוצר")}
+                </span>
+                <input
+                  type="text"
+                  value={dictProductEditNameDraft}
+                  onChange={(e) => setDictProductEditNameDraft(e.target.value)}
+                  className="input-luxury-dark w-full"
+                  dir="rtl"
+                  aria-label={gf(gender, "שם המוצר", "שם המוצר")}
+                />
+              </label>
+              {quantityEditTarget.mealPresetId != null &&
+              presetMap.get(quantityEditTarget.mealPresetId) != null ? (
+                <p className="text-xs leading-relaxed text-[var(--stem)]/80">
+                  {gf(
+                    gender,
+                    "ארוחה שמורה — ניתן לערוך כאן רק את השם. לשינוי מנות ערכו מהארוחה במסך הארוחות.",
+                    "ארוחה שמורה — ניתן לערוך כאן רק את השם. לשינוי מנות ערוך מהארוחה במסך הארוחות."
+                  )}
+                </p>
+              ) : null}
               <div className="flex flex-wrap gap-3">
                 <label className="min-w-[6rem] flex-1">
                   <span className="mb-1 block text-xs font-semibold text-[var(--cherry)]">
@@ -2749,6 +2295,10 @@ export default function DictionaryPage() {
                     type="text"
                     inputMode="decimal"
                     value={editQtyText}
+                    disabled={
+                      quantityEditTarget.mealPresetId != null &&
+                      presetMap.get(quantityEditTarget.mealPresetId) != null
+                    }
                     onFocus={(e) => e.currentTarget.select()}
                     onChange={(e) => {
                       if ((e.nativeEvent as InputEvent).isComposing) return;
@@ -2776,7 +2326,7 @@ export default function DictionaryPage() {
                         return String(parseQtyForUnit(x, editUnit));
                       })
                     }
-                    className="input-luxury-dark w-full"
+                    className="input-luxury-dark w-full disabled:cursor-not-allowed disabled:opacity-55"
                   />
                 </label>
                 <label className="min-w-[8rem] flex-[2]">
@@ -2785,6 +2335,10 @@ export default function DictionaryPage() {
                   </span>
                   <select
                     value={editUnit}
+                    disabled={
+                      quantityEditTarget.mealPresetId != null &&
+                      presetMap.get(quantityEditTarget.mealPresetId) != null
+                    }
                     onChange={(e) => {
                       const u = e.target.value as FoodUnit;
                       setEditUnit(u);
@@ -2795,7 +2349,7 @@ export default function DictionaryPage() {
                       });
                       if (u !== "יחידה") setEditGramsPerUnitText("");
                     }}
-                    className="select-luxury w-full"
+                    className="select-luxury w-full disabled:cursor-not-allowed disabled:opacity-55"
                   >
                     {UNITS.map((u) => (
                       <option key={u} value={u}>
@@ -2805,7 +2359,11 @@ export default function DictionaryPage() {
                   </select>
                 </label>
               </div>
-              {editUnit === "יחידה" && (
+              {editUnit === "יחידה" &&
+              !(
+                quantityEditTarget.mealPresetId != null &&
+                presetMap.get(quantityEditTarget.mealPresetId) != null
+              ) ? (
                 <label className="block">
                   <span className="mb-1 block text-xs font-semibold text-[var(--cherry)]">
                     משקל יחידה (גרם, אופציונלי)
@@ -2840,7 +2398,7 @@ export default function DictionaryPage() {
                     className="input-luxury-dark w-full"
                   />
                 </label>
-              )}
+              ) : null}
               {quantityEditParsedQty <= 0 ? (
                 <p className="text-center text-sm font-semibold text-[#a94444]">
                   {gf(
@@ -2851,7 +2409,11 @@ export default function DictionaryPage() {
                 </p>
               ) : null}
               {quantityEditTarget.caloriesPer100g != null &&
-              quantityEditParsedQty > 0 ? (
+              quantityEditParsedQty > 0 &&
+              !(
+                quantityEditTarget.mealPresetId != null &&
+                presetMap.get(quantityEditTarget.mealPresetId) != null
+              ) ? (
                 <p className="text-xs text-[var(--text)]/75">
                   יש ערכי תזונה ל־100 ג׳ — הקק״ל והמאקרו למנה יעודכנו לפי הכמות
                   בגרם או ליחידה עם משקל יחידה.
@@ -2861,8 +2423,13 @@ export default function DictionaryPage() {
                 <button
                   type="button"
                   className="btn-stem flex-1 rounded-xl py-3 font-semibold disabled:cursor-not-allowed disabled:opacity-45"
-                  onClick={saveQuantityEdit}
-                  disabled={quantityEditParsedQty <= 0}
+                  onClick={saveDictProductEdit}
+                  disabled={
+                    !dictProductEditNameDraft.trim() ||
+                    (!(quantityEditTarget.mealPresetId != null &&
+                      presetMap.get(quantityEditTarget.mealPresetId) != null) &&
+                      quantityEditParsedQty <= 0)
+                  }
                 >
                   שמירה
                 </button>

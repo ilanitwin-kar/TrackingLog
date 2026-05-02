@@ -1,4 +1,5 @@
 import Fuse from "fuse.js";
+import { firstWordStrongPrefixMatch } from "@/lib/foodSearchRules";
 
 export type MatchRange = readonly [number, number];
 
@@ -75,18 +76,26 @@ export function rankedFuzzySearchByText<T>(
     item: it,
   }));
 
-  const prefix: RankedHit<T>[] = [];
+  const strongPrefix: RankedHit<T>[] = [];
+  const weakPrefix: RankedHit<T>[] = [];
   for (const m of mapped) {
     const t = norm(m.text);
-    if (t.startsWith(q)) {
-      prefix.push({
-        item: m.item,
-        ranges: literalQueryHighlightRanges(m.text, query),
-        isPrefix: true,
-      });
+    if (!t.startsWith(q)) continue;
+    const hit: RankedHit<T> = {
+      item: m.item,
+      ranges: literalQueryHighlightRanges(m.text, query),
+      isPrefix: true,
+    };
+    if (firstWordStrongPrefixMatch(m.text, query)) {
+      strongPrefix.push(hit);
+    } else {
+      weakPrefix.push(hit);
     }
   }
-  prefix.sort((a, b) => (opts.getText(a.item).length || 0) - (opts.getText(b.item).length || 0));
+  const byLen = (a: RankedHit<T>, b: RankedHit<T>) =>
+    (opts.getText(a.item).length || 0) - (opts.getText(b.item).length || 0);
+  strongPrefix.sort(byLen);
+  weakPrefix.sort(byLen);
 
   const fuse = new Fuse(mapped, {
     keys: ["text"],
@@ -109,8 +118,11 @@ export function rankedFuzzySearchByText<T>(
     out.push(hit);
   }
 
-  // prefix first
-  for (const h of prefix) {
+  for (const h of strongPrefix) {
+    pushHit(h, getKey(h.item));
+    if (out.length >= limit) return out;
+  }
+  for (const h of weakPrefix) {
     pushHit(h, getKey(h.item));
     if (out.length >= limit) return out;
   }

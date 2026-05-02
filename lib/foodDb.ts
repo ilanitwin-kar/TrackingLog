@@ -138,20 +138,26 @@ export function layeredSearchScore(
     }
   }
 
+  const partList = parts.length ? parts : [n];
   let best = -1;
-  for (const part of parts.length ? parts : [n]) {
+  /** התאמה במקטע הראשון (לפני פסיק) חשובה ממקטע משני — למשל «חלב טרה» לפני «צ'אי, חלב 3%». */
+  const segmentIdxPenalty = 12_000;
+
+  for (let partIdx = 0; partIdx < partList.length; partIdx++) {
+    const part = partList[partIdx]!;
+    const segPen = partIdx * segmentIdxPenalty;
     const tokens = part.split(/[\s]+/).filter(Boolean);
     const firstWord = tokens[0] ?? "";
 
     const exactStartWordOrLine = firstWord === q || part === q;
 
     if (exactStartWordOrLine) {
-      best = Math.max(best, 1_000_000 - part.length);
+      best = Math.max(best, 1_000_000 - part.length - segPen);
       continue;
     }
 
     if (part.startsWith(q)) {
-      best = Math.max(best, 500_000 + q.length * 100 - part.length);
+      best = Math.max(best, 500_000 + q.length * 100 - part.length - segPen);
       continue;
     }
 
@@ -182,7 +188,7 @@ export function layeredSearchScore(
         sumIdx += idx;
       }
       if (ok) {
-        best = Math.max(best, 360_000 - sumIdx);
+        best = Math.max(best, 360_000 - sumIdx - segPen);
         continue;
       }
     }
@@ -190,7 +196,7 @@ export function layeredSearchScore(
     // Prefer boundary matches when possible (avoid "שוק" → "שוקו" outranking "שוק עוף").
     if (hasWordBoundaryMatch(part, q)) {
       const idx = part.indexOf(q);
-      best = Math.max(best, 220_000 - idx);
+      best = Math.max(best, 220_000 - idx - segPen);
       continue;
     }
 

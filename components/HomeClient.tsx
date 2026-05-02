@@ -137,6 +137,15 @@ function formatQtyLabel(q: number, u: FoodUnit): string {
   return String(q);
 }
 
+/** משקל יחידה לתצוגה ביומן (ליד «יחידה») */
+function formatJournalGramsPerUnitSuffix(gPerUnit: number): string {
+  if (!Number.isFinite(gPerUnit) || gPerUnit <= 0) return "";
+  const rounded =
+    gPerUnit >= 10 ? Math.round(gPerUnit) : Math.round(gPerUnit * 10) / 10;
+  const s = Number.isInteger(rounded) ? String(rounded) : rounded.toFixed(1);
+  return `${s} ג׳`;
+}
+
 function clampQuantity(q: number, u: FoodUnit): number {
   if (!Number.isFinite(q)) return u === "גרם" ? 100 : 1;
   if (u === "גרם") {
@@ -180,27 +189,107 @@ function diffCalendarDaysFromToday(dateKey: string): number {
   return Math.round((a.getTime() - b.getTime()) / 86400000);
 }
 
+function yearFromDateKey(dateKey: string): number | null {
+  const m = /^(\d{4})-\d{2}-\d{2}$/.exec(dateKey);
+  if (!m) return null;
+  const y = parseInt(m[1]!, 10);
+  return Number.isFinite(y) ? y : null;
+}
+
+function daysInCalendarMonth(y: number, m0: number): number {
+  return new Date(y, m0 + 1, 0).getDate();
+}
+
+function parseDateKeyParts(dateKey: string): {
+  y: number;
+  m0: number;
+  d: number;
+} | null {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(dateKey);
+  if (!m) return null;
+  const y = parseInt(m[1]!, 10);
+  const m0 = parseInt(m[2]!, 10) - 1;
+  const d = parseInt(m[3]!, 10);
+  if (
+    !Number.isFinite(y) ||
+    m0 < 0 ||
+    m0 > 11 ||
+    d < 1 ||
+    d > daysInCalendarMonth(y, m0)
+  ) {
+    return null;
+  }
+  return { y, m0, d };
+}
+
+function dateKeyFromParts(y: number, m0: number, day: number): string {
+  const mm = String(m0 + 1).padStart(2, "0");
+  const dd = String(day).padStart(2, "0");
+  return `${y}-${mm}-${dd}`;
+}
+
+function journalCalendarCells(y: number, m0: number): (number | null)[] {
+  const dim = daysInCalendarMonth(y, m0);
+  const firstDow = new Date(y, m0, 1).getDay();
+  const cells: (number | null)[] = [];
+  for (let i = 0; i < firstDow; i++) cells.push(null);
+  for (let d = 1; d <= dim; d++) cells.push(d);
+  while (cells.length % 7 !== 0) cells.push(null);
+  return cells;
+}
+
 /**
- * תווית מרכז פס ניווט היומן — רק שלושה מצבים מיוחדים, כל שאר הימים = תאריך מלא.
+ * תווית מרכז פס ניווט היומן — מצבים מיוחדים; בתאריך מלא מציגים שנה רק אם שנת התצוגה שונה משנת היום בלוח.
  * - אותו יום בלוח כמו היום → "היום"
- * - יום אחד לפני → "אתמול" (בלי תאריך)
- * - יום אחד אחרי → "מחר" (בלי תאריך)
- * - כל יום אחר (עבר רחוק / עתיד רחוק) → יום בשבוע + יום + חודש בעברית (לא הקיצור)
+ * - יום אחד לפני → "אתמול" (+ שנה אם חוצים שנת לוח)
+ * - יום אחד אחרי → "מחר" (+ שנה אם חוצים שנת לוח)
+ * - כל יום אחר → יום בשבוע + יום + חודש (+ שנה רק מחוץ לשנת הלוח הנוכחית)
  */
 function formatDateKeyHeJournalNav(dateKey: string): string {
   const d = diffCalendarDaysFromToday(dateKey);
+  const todayKey = getTodayKey();
+  const yView = yearFromDateKey(dateKey);
+  const yToday = yearFromDateKey(todayKey);
+
   if (d === 0) return "היום";
-  if (d === -1) return "אתמול";
-  if (d === 1) return "מחר";
+  if (d === -1) {
+    if (yView != null && yToday != null && yView !== yToday) {
+      return `אתמול · ${yView}`;
+    }
+    return "אתמול";
+  }
+  if (d === 1) {
+    if (yView != null && yToday != null && yView !== yToday) {
+      return `מחר · ${yView}`;
+    }
+    return "מחר";
+  }
 
   const dt = new Date(`${dateKey}T12:00:00`);
   if (Number.isNaN(dt.getTime())) return dateKey;
+  const includeYear =
+    yView != null && yToday != null && yView !== yToday;
   const raw = dt.toLocaleDateString("he-IL", {
     weekday: "long",
     day: "numeric",
     month: "long",
+    ...(includeYear ? { year: "numeric" as const } : {}),
   });
   return raw.replace(/,\s*/g, " ").replace(/\s+/g, " ").trim();
+}
+
+function formatDateKeyHeCalendarHeader(dateKey: string): string {
+  const dt = new Date(`${dateKey}T12:00:00`);
+  if (Number.isNaN(dt.getTime())) return dateKey;
+  return dt
+    .toLocaleDateString("he-IL", {
+      day: "numeric",
+      month: "long",
+      year: "numeric",
+    })
+    .replace(/,\s*/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
 }
 
 function CalorieHeroRing({
@@ -479,11 +568,6 @@ export function HomeClient({ mode = "dashboard" }: { mode?: "dashboard" | "journ
   const [mealNameDuplicateError, setMealNameDuplicateError] = useState(false);
   const [mealCtaEntryId, setMealCtaEntryId] = useState<string | null>(null);
   const [journalInfoOpen, setJournalInfoOpen] = useState(false);
-  const [journalFoodNameEditId, setJournalFoodNameEditId] = useState<
-    string | null
-  >(null);
-  const [journalFoodNameDraft, setJournalFoodNameDraft] = useState("");
-  const journalFoodNameInputRef = useRef<HTMLInputElement>(null);
   const journalLongPressRef = useRef<{
     timer: number | null;
     pointerId: number | null;
@@ -497,8 +581,6 @@ export function HomeClient({ mode = "dashboard" }: { mode?: "dashboard" | "journ
     startY: 0,
     entryId: null,
   });
-
-  const datePickerRef = useRef<HTMLInputElement | null>(null);
 
   const [journalCardActionEntry, setJournalCardActionEntry] =
     useState<LogEntry | null>(null);
@@ -520,8 +602,20 @@ export function HomeClient({ mode = "dashboard" }: { mode?: "dashboard" | "journ
   const [viewDateKey, setViewDateKey] = useState(() => getTodayKey());
   const prevCalKeyRef = useRef(getTodayKey());
 
+  const [journalCalendarOpen, setJournalCalendarOpen] = useState(false);
+  const [calendarMonthY, setCalendarMonthY] = useState(() => {
+    const p = parseDateKeyParts(getTodayKey());
+    return p
+      ? { y: p.y, m0: p.m0 }
+      : { y: new Date().getFullYear(), m0: new Date().getMonth() };
+  });
+  const [calendarSelectedKey, setCalendarSelectedKey] =
+    useState(viewDateKey);
+  const [journalCalHeaderEdit, setJournalCalHeaderEdit] = useState(false);
+
   const [editOpen, setEditOpen] = useState(false);
   const [editEntry, setEditEntry] = useState<LogEntry | null>(null);
+  const [editFoodNameDraft, setEditFoodNameDraft] = useState("");
   const [editQtyText, setEditQtyText] = useState("1");
   const editQty = useMemo(() => {
     const n = parseFloat(editQtyText.replace(",", "."));
@@ -608,6 +702,25 @@ export function HomeClient({ mode = "dashboard" }: { mode?: "dashboard" | "journ
       router.replace(`${base}?date=${encodeURIComponent(dk)}`, { scroll: false });
     }
   }
+
+  function openJournalCalendar() {
+    const p = parseDateKeyParts(viewDateKey);
+    if (p) {
+      setCalendarMonthY({ y: p.y, m0: p.m0 });
+      setCalendarSelectedKey(viewDateKey);
+    }
+    setJournalCalHeaderEdit(false);
+    setJournalCalendarOpen(true);
+  }
+
+  useEffect(() => {
+    if (!journalCalendarOpen) setJournalCalHeaderEdit(false);
+  }, [journalCalendarOpen]);
+
+  const journalCalCells = useMemo(
+    () => journalCalendarCells(calendarMonthY.y, calendarMonthY.m0),
+    [calendarMonthY.y, calendarMonthY.m0]
+  );
 
   function onJournalDayDragEnd(
     _e: MouseEvent | TouchEvent | PointerEvent,
@@ -1046,45 +1159,6 @@ export function HomeClient({ mode = "dashboard" }: { mode?: "dashboard" | "journ
   }, [viewDateKey]);
 
   useEffect(() => {
-    if (!journalFoodNameEditId) return;
-    const tid = window.setTimeout(
-      () => journalFoodNameInputRef.current?.focus(),
-      50
-    );
-    return () => window.clearTimeout(tid);
-  }, [journalFoodNameEditId]);
-
-  useEffect(() => {
-    if (isDayClosed && journalFoodNameEditId) {
-      setJournalFoodNameEditId(null);
-      setJournalFoodNameDraft("");
-    }
-  }, [isDayClosed, journalFoodNameEditId]);
-
-  function cancelJournalFoodNameEdit() {
-    setJournalFoodNameEditId(null);
-    setJournalFoodNameDraft("");
-  }
-
-  function saveJournalFoodNameEdit() {
-    if (!journalFoodNameEditId || isDayClosed) return;
-    const name = journalFoodNameDraft.trim();
-    if (!name) return;
-    if (
-      !applyJournalFoodDisplayRename(
-        viewDateKey,
-        journalFoodNameEditId,
-        name
-      )
-    ) {
-      return;
-    }
-    cancelJournalFoodNameEdit();
-    setEntries(getEntriesForDate(viewDateKey));
-    setDictTick((t) => t + 1);
-  }
-
-  useEffect(() => {
     setEntries(getEntriesForDate(viewDateKey));
   }, [viewDateKey]);
 
@@ -1339,6 +1413,7 @@ export function HomeClient({ mode = "dashboard" }: { mode?: "dashboard" | "journ
   function openEdit(item: LogEntry) {
     if (isDayClosed) return;
     setEditEntry(item);
+    setEditFoodNameDraft(item.food);
     setEditQtyText(String(item.quantity));
     setEditUnit(item.unit);
     setEditOpen(true);
@@ -1346,15 +1421,53 @@ export function HomeClient({ mode = "dashboard" }: { mode?: "dashboard" | "journ
 
   async function saveEdit() {
     if (!editEntry || isDayClosed) return;
+    const nameTrim = editFoodNameDraft.trim();
+    if (!nameTrim) return;
+
+    const mealPresetRow = getJournalMealPresetBreakdown(editEntry);
+    if (mealPresetRow) {
+      if (editEntry.food.trim() !== nameTrim) {
+        if (
+          !applyJournalFoodDisplayRename(
+            viewDateKey,
+            editEntry.id,
+            nameTrim
+          )
+        ) {
+          return;
+        }
+        setEntries(getEntriesForDate(viewDateKey));
+        setDictTick((t) => t + 1);
+      }
+      setEditOpen(false);
+      setEditEntry(null);
+      return;
+    }
+
     const q = clampQuantity(editQty, editUnit);
     setEditQtyText(String(q));
+
+    if (editEntry.food.trim() !== nameTrim) {
+      if (
+        !applyJournalFoodDisplayRename(
+          viewDateKey,
+          editEntry.id,
+          nameTrim
+        )
+      ) {
+        return;
+      }
+      setEntries(getEntriesForDate(viewDateKey));
+      setDictTick((t) => t + 1);
+    }
+
     setEditLoading(true);
     try {
       const res = await fetch("/api/calories", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          food: editEntry.food,
+          food: nameTrim,
           quantity: q,
           unit: editUnit,
         }),
@@ -1375,23 +1488,29 @@ export function HomeClient({ mode = "dashboard" }: { mode?: "dashboard" | "journ
       const proteinG = optionalMacroGram(data.proteinG ?? data.protein);
       const carbsG = optionalMacroGram(data.carbsG ?? data.carbohydrates);
       const fatG = optionalMacroGram(data.fatG ?? data.fat);
+      const baseList = getEntriesForDate(viewDateKey);
       persistEntries(
-        entries.map((e) =>
-          e.id === editEntry.id
-            ? {
-                ...e,
-                quantity: q,
-                unit: editUnit,
-                calories: kcal,
-                verified: data.verified === true,
-                proteinG,
-                carbsG,
-                fatG,
-              }
-            : e
-        )
+        baseList.map((e) => {
+          if (e.id !== editEntry.id) return e;
+          const next: LogEntry = {
+            ...e,
+            quantity: q,
+            unit: editUnit,
+            calories: kcal,
+            verified: data.verified === true,
+            proteinG,
+            carbsG,
+            fatG,
+          };
+          if (editUnit !== "יחידה") {
+            const { gramsPerUnit: _drop, ...rest } = next;
+            void _drop;
+            return rest;
+          }
+          return next;
+        })
       );
-      saveFoodMemoryKey(editEntry.food, q, editUnit);
+      saveFoodMemoryKey(nameTrim, q, editUnit);
       setEditOpen(false);
       setEditEntry(null);
     } finally {
@@ -1548,11 +1667,33 @@ export function HomeClient({ mode = "dashboard" }: { mode?: "dashboard" | "journ
                 id="edit-entry-title"
                 className="panel-title-cherry text-lg"
               >
-                עריכת כמות
+                עריכת מוצר
               </h2>
-              <p className="text-sm text-[var(--text)]/90">
-                <span className="bidi-isolate-rtl">{editEntry.food}</span>
-              </p>
+              <label className="block">
+                <span className="mb-1 block text-xs font-semibold text-[var(--text)]">
+                  {gf(gender, "שם המוצר", "שם המוצר")}
+                </span>
+                <input
+                  type="text"
+                  value={editFoodNameDraft}
+                  onChange={(e) => setEditFoodNameDraft(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") void saveEdit();
+                  }}
+                  className="input-luxury-dark w-full"
+                  dir="rtl"
+                  aria-label={gf(gender, "שם המוצר", "שם המוצר")}
+                />
+              </label>
+              {editEntry && getJournalMealPresetBreakdown(editEntry) ? (
+                <p className="text-xs leading-relaxed text-[var(--stem)]/80">
+                  {gf(
+                    gender,
+                    "ארוחה שמורה — ניתן לשנות כאן רק את השם. הכמות היא מנה אחת מהארוחה.",
+                    "ארוחה שמורה — ניתן לשנות כאן רק את השם. הכמות היא מנה אחת מהארוחה."
+                  )}
+                </p>
+              ) : null}
               <div className="flex flex-wrap gap-3">
                 <label className="min-w-[6rem] flex-1">
                   <span className="mb-1 block text-xs font-semibold text-[var(--text)]">
@@ -1562,6 +1703,9 @@ export function HomeClient({ mode = "dashboard" }: { mode?: "dashboard" | "journ
                     type="text"
                     inputMode="decimal"
                     value={editQtyText}
+                    disabled={Boolean(
+                      editEntry && getJournalMealPresetBreakdown(editEntry)
+                    )}
                     onFocus={(e) => {
                       if (e.currentTarget.value.trim() === "0") {
                         setEditQtyText("");
@@ -1593,7 +1737,7 @@ export function HomeClient({ mode = "dashboard" }: { mode?: "dashboard" | "journ
                         return String(clampQuantity(n, editUnit));
                       })
                     }
-                    className="input-luxury-dark w-full"
+                    className="input-luxury-dark w-full disabled:cursor-not-allowed disabled:opacity-55"
                   />
                 </label>
                 <label className="min-w-[8rem] flex-[2]">
@@ -1602,6 +1746,9 @@ export function HomeClient({ mode = "dashboard" }: { mode?: "dashboard" | "journ
                   </span>
                   <select
                     value={editUnit}
+                    disabled={Boolean(
+                      editEntry && getJournalMealPresetBreakdown(editEntry)
+                    )}
                     onChange={(e) => {
                       const u = e.target.value as FoodUnit;
                       setEditUnit(u);
@@ -1611,7 +1758,7 @@ export function HomeClient({ mode = "dashboard" }: { mode?: "dashboard" | "journ
                         return String(clampQuantity(n, u));
                       });
                     }}
-                    className="select-luxury w-full"
+                    className="select-luxury w-full disabled:cursor-not-allowed disabled:opacity-55"
                   >
                     {UNITS.map((u) => (
                       <option key={u} value={u}>
@@ -1621,7 +1768,8 @@ export function HomeClient({ mode = "dashboard" }: { mode?: "dashboard" | "journ
                   </select>
                 </label>
               </div>
-              {editUnit !== "גרם" && (
+              {editUnit !== "גרם" &&
+              !(editEntry && getJournalMealPresetBreakdown(editEntry)) ? (
                 <div className="flex min-w-0 flex-nowrap justify-start gap-2 overflow-x-auto pb-1">
                   {FRACTION_DECIMAL_ROWS.map(([num, label]) => {
                     const selected = approxEq(editQty, num);
@@ -1643,12 +1791,17 @@ export function HomeClient({ mode = "dashboard" }: { mode?: "dashboard" | "journ
                     );
                   })}
                 </div>
-              )}
+              ) : null}
               <div className="flex gap-2">
                 <button
                   type="button"
                   className="btn-stem flex-1 rounded-xl py-3 font-semibold disabled:opacity-50"
-                  disabled={editLoading}
+                  disabled={
+                    editLoading ||
+                    !editFoodNameDraft.trim() ||
+                    (!(editEntry && getJournalMealPresetBreakdown(editEntry)) &&
+                      editQty <= 0)
+                  }
                   onClick={() => void saveEdit()}
                 >
                   {editLoading ? "שומרים…" : "שמירה"}
@@ -1961,20 +2114,6 @@ export function HomeClient({ mode = "dashboard" }: { mode?: "dashboard" | "journ
       {isJournalMode ? (
         <>
           <div className="sticky top-0 z-[55] isolate -mx-3 mb-3 sm:-mx-4 sm:mb-4">
-            <input
-              ref={datePickerRef}
-              type="date"
-              value={viewDateKey}
-              className="sr-only"
-              aria-hidden
-              tabIndex={-1}
-              onChange={(e) => {
-                const dk = e.target.value;
-                if (dk && /^\d{4}-\d{2}-\d{2}$/.test(dk)) {
-                  navigateToDate(dk);
-                }
-              }}
-            />
             <div className="overflow-hidden rounded-xl border border-[var(--border-cherry-soft)]/40 bg-white shadow-[0_1px_8px_rgba(0,0,0,0.06)]">
               {/* החלקה בין ימים רק כאן — לא על רשימת הפריטים (פחות התנגשות עם גלילה / כרטיסים / לחיצה ארוכה) */}
               <motion.div
@@ -1987,54 +2126,70 @@ export function HomeClient({ mode = "dashboard" }: { mode?: "dashboard" | "journ
                 className="touch-manipulation"
               >
               {/* שורה 1 — תאריך וניווט ימים בלבד */}
-              <div className="px-2 py-1.5 sm:px-2.5 sm:py-2">
-                <div
-                  className="grid w-full grid-cols-[2.5rem_minmax(0,1fr)_2.5rem] items-center gap-0.5 sm:grid-cols-[2.75rem_minmax(0,1fr)_2.75rem]"
-                  dir="ltr"
-                >
+              <div className="relative px-2 py-1.5 sm:px-2.5 sm:py-2">
+                <div className="absolute left-1 top-1/2 z-10 flex -translate-y-1/2 items-center gap-1 sm:left-1.5 sm:gap-1.5">
+                  {!isViewingToday ? (
+                    <button
+                      type="button"
+                      dir="rtl"
+                      className="flex h-10 shrink-0 items-center justify-center rounded-full border-2 border-[var(--cherry)] bg-[var(--cherry)] px-2.5 text-[11px] font-extrabold leading-none text-white shadow-[0_3px_10px_rgba(155,27,48,0.38)] ring-2 ring-white/70 transition hover:brightness-110 hover:shadow-[0_4px_14px_rgba(155,27,48,0.45)] active:scale-[0.94] sm:h-11 sm:px-3 sm:text-xs"
+                      onClick={() => navigateToDate(getTodayKey())}
+                      aria-label="חזרה להיום"
+                      title="חזרה להיום"
+                    >
+                      היום
+                    </button>
+                  ) : null}
                   <button
                     type="button"
-                    className="flex h-9 w-full items-center justify-center rounded-lg text-lg leading-none text-[var(--stem)]/70 transition hover:bg-[var(--cherry-muted)]/35 active:bg-[var(--cherry-muted)]/45 disabled:pointer-events-none disabled:opacity-35 sm:h-10 sm:text-xl"
+                    className="flex h-9 w-10 shrink-0 items-center justify-center rounded-lg text-lg leading-none text-[var(--stem)]/70 transition hover:bg-[var(--cherry-muted)]/35 active:bg-[var(--cherry-muted)]/45 disabled:pointer-events-none disabled:opacity-35 sm:h-10 sm:w-11 sm:text-xl"
                     onClick={() =>
-                      canGoNextDay && navigateToDate(addDaysToDateKey(viewDateKey, 1))
+                      canGoNextDay &&
+                      navigateToDate(addDaysToDateKey(viewDateKey, 1))
                     }
                     disabled={!canGoNextDay}
                     aria-label="יום הבא — עתיד"
                   >
                     ‹
                   </button>
-                  <div className="flex min-h-9 min-w-0 items-center justify-center gap-1.5 px-0.5 sm:min-h-10 sm:gap-2">
-                    <button
-                      type="button"
-                      dir="rtl"
-                      className="min-h-9 min-w-0 flex-1 px-1 py-1 text-center text-[13px] font-semibold leading-snug text-[var(--stem)] sm:min-h-10 sm:text-sm"
-                      onClick={() => navigateToDate(getTodayKey())}
-                      aria-label={
-                        isViewingToday
-                          ? "היום"
-                          : `חזרה להיום — מציגים ${formatDateKeyHeJournalNav(viewDateKey)}`
-                      }
-                    >
-                      <span className="line-clamp-2 max-w-full text-balance">
-                        {formatDateKeyHeJournalNav(viewDateKey)}
-                      </span>
-                    </button>
-                    <Link
-                      href={`/add-food?from=journal&date=${encodeURIComponent(viewDateKey)}`}
-                      className="flex size-10 shrink-0 items-center justify-center rounded-full border-2 border-[var(--cherry)] bg-[var(--cherry)] text-[1.35rem] font-extrabold leading-none text-white shadow-[0_3px_10px_rgba(155,27,48,0.38)] ring-2 ring-white/70 transition hover:brightness-110 hover:shadow-[0_4px_14px_rgba(155,27,48,0.45)] active:scale-[0.94] sm:size-11 sm:text-[1.5rem]"
-                      aria-label={gf(gender, "הוספת מזון", "הוספת מזון")}
-                      title={gf(gender, "הוספת מזון", "הוספת מזון")}
-                    >
-                      <span aria-hidden>+</span>
-                    </Link>
-                  </div>
+                </div>
+                <div className="absolute right-1 top-1/2 z-10 flex -translate-y-1/2 items-center gap-1 sm:right-1.5 sm:gap-1.5">
+                  <Link
+                    href={`/add-food?from=journal&date=${encodeURIComponent(viewDateKey)}`}
+                    className="flex size-10 shrink-0 items-center justify-center rounded-full border-2 border-[var(--cherry)] bg-[var(--cherry)] text-[1.35rem] font-extrabold leading-none text-white shadow-[0_3px_10px_rgba(155,27,48,0.38)] ring-2 ring-white/70 transition hover:brightness-110 hover:shadow-[0_4px_14px_rgba(155,27,48,0.45)] active:scale-[0.94] sm:size-11 sm:text-[1.5rem]"
+                    aria-label={gf(gender, "הוספת מזון", "הוספת מזון")}
+                    title={gf(gender, "הוספת מזון", "הוספת מזון")}
+                  >
+                    <span aria-hidden>+</span>
+                  </Link>
                   <button
                     type="button"
-                    className="flex h-9 w-full items-center justify-center rounded-lg text-lg leading-none text-[var(--stem)]/70 transition hover:bg-[var(--cherry-muted)]/35 active:bg-[var(--cherry-muted)]/45 sm:h-10 sm:text-xl"
-                    onClick={() => navigateToDate(addDaysToDateKey(viewDateKey, -1))}
+                    className="flex h-9 w-10 shrink-0 items-center justify-center rounded-lg text-lg leading-none text-[var(--stem)]/70 transition hover:bg-[var(--cherry-muted)]/35 active:bg-[var(--cherry-muted)]/45 sm:h-10 sm:w-11 sm:text-xl"
+                    onClick={() =>
+                      navigateToDate(addDaysToDateKey(viewDateKey, -1))
+                    }
                     aria-label="יום קודם — עבר"
                   >
                     ›
+                  </button>
+                </div>
+                <div
+                  className={`flex min-h-10 min-w-0 items-center justify-center sm:min-h-11 ${
+                    isViewingToday
+                      ? "px-[5.25rem] sm:px-[5.75rem]"
+                      : "px-[7.25rem] sm:px-[7.75rem]"
+                  }`}
+                >
+                  <button
+                    type="button"
+                    dir="rtl"
+                    className="min-w-0 max-w-[min(18rem,calc(100vw-11rem))] px-1 py-1.5 text-center text-base font-semibold leading-snug text-[var(--stem)] sm:text-lg"
+                    onClick={openJournalCalendar}
+                    aria-label={`בחירת תאריך — ${formatDateKeyHeJournalNav(viewDateKey)}`}
+                  >
+                    <span className="line-clamp-2 max-w-full text-balance">
+                      {formatDateKeyHeJournalNav(viewDateKey)}
+                    </span>
                   </button>
                 </div>
               </div>
@@ -2094,6 +2249,194 @@ export function HomeClient({ mode = "dashboard" }: { mode?: "dashboard" | "journ
               </motion.div>
             </div>
           </div>
+
+      <AnimatePresence>
+        {journalCalendarOpen && isJournalMode && (
+          <motion.div
+            className="fixed inset-0 z-[610] flex items-center justify-center bg-black/35 p-4 backdrop-blur-[2px]"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            role="presentation"
+            onClick={(e) => {
+              if (e.target === e.currentTarget) setJournalCalendarOpen(false);
+            }}
+          >
+            <motion.div
+              role="dialog"
+              aria-modal
+              aria-labelledby="journal-cal-title"
+              className="w-full max-w-sm overflow-hidden rounded-2xl border-2 border-[var(--border-cherry-soft)] bg-white shadow-2xl"
+              initial={{ scale: 0.96, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.97, opacity: 0 }}
+              transition={{ type: "spring", damping: 26, stiffness: 320 }}
+              onClick={(e) => e.stopPropagation()}
+              dir="rtl"
+            >
+              <div className="bg-[var(--cherry)] px-4 pb-4 pt-4 text-white">
+                <div className="flex items-start gap-3">
+                  <div className="min-w-0 flex-1">
+                    <p
+                      id="journal-cal-title"
+                      className="text-[10px] font-extrabold uppercase tracking-wider text-white/90"
+                    >
+                      בחירת תאריך
+                    </p>
+                    {journalCalHeaderEdit ? (
+                      <input
+                        type="date"
+                        value={calendarSelectedKey}
+                        onChange={(e) => {
+                          const dk = e.target.value;
+                          if (!/^\d{4}-\d{2}-\d{2}$/.test(dk)) return;
+                          setCalendarSelectedKey(dk);
+                          const p = parseDateKeyParts(dk);
+                          if (p)
+                            setCalendarMonthY({ y: p.y, m0: p.m0 });
+                        }}
+                        className="mt-2 w-full max-w-[min(100%,16rem)] rounded-xl border-2 border-white/55 bg-white px-3 py-2 text-base font-extrabold text-[var(--stem)] shadow-inner outline-none focus-visible:ring-2 focus-visible:ring-white/80"
+                        aria-label="תאריך לעריכה"
+                      />
+                    ) : (
+                      <p className="mt-1 text-xl font-extrabold leading-tight sm:text-2xl">
+                        {formatDateKeyHeCalendarHeader(calendarSelectedKey)}
+                      </p>
+                    )}
+                  </div>
+                  <button
+                    type="button"
+                    className="mt-0.5 shrink-0 rounded-xl p-2 text-white transition hover:bg-white/15 active:bg-white/20"
+                    aria-label={
+                      journalCalHeaderEdit
+                        ? "סגירת עריכת תאריך"
+                        : "עריכת תאריך"
+                    }
+                    aria-pressed={journalCalHeaderEdit}
+                    onClick={() =>
+                      setJournalCalHeaderEdit((open) => !open)
+                    }
+                  >
+                    <Pencil className="size-5" strokeWidth={2.2} aria-hidden />
+                  </button>
+                </div>
+              </div>
+              <div className="px-3 pb-2 pt-3">
+                <div className="mb-3 flex items-center justify-between gap-2">
+                  <p className="min-w-0 truncate text-base font-extrabold text-[var(--stem)]">
+                    {new Date(
+                      calendarMonthY.y,
+                      calendarMonthY.m0,
+                      1
+                    ).toLocaleDateString("he-IL", {
+                      month: "long",
+                      year: "numeric",
+                    })}
+                  </p>
+                  <div className="flex shrink-0 items-center gap-0.5">
+                    <button
+                      type="button"
+                      className="flex h-9 w-9 items-center justify-center rounded-lg text-lg text-[var(--cherry)] transition hover:bg-[var(--cherry-muted)]/45"
+                      aria-label="חודש קודם"
+                      onClick={() =>
+                        setCalendarMonthY(({ y, m0 }) => {
+                          const nm = m0 - 1;
+                          return nm < 0 ? { y: y - 1, m0: 11 } : { y, m0: nm };
+                        })
+                      }
+                    >
+                      ‹
+                    </button>
+                    <button
+                      type="button"
+                      className="flex h-9 w-9 items-center justify-center rounded-lg text-lg text-[var(--cherry)] transition hover:bg-[var(--cherry-muted)]/45"
+                      aria-label="חודש הבא"
+                      onClick={() =>
+                        setCalendarMonthY(({ y, m0 }) => {
+                          const nm = m0 + 1;
+                          return nm > 11 ? { y: y + 1, m0: 0 } : { y, m0: nm };
+                        })
+                      }
+                    >
+                      ›
+                    </button>
+                  </div>
+                </div>
+                <div
+                  className="grid grid-cols-7 gap-y-1 text-center text-[11px] font-extrabold text-[var(--stem)]/55"
+                  dir="rtl"
+                >
+                  {(["א", "ב", "ג", "ד", "ה", "ו", "ש"] as const).map(
+                    (h) => (
+                      <div key={h}>{h}</div>
+                    )
+                  )}
+                </div>
+                <div className="mt-1 grid grid-cols-7 gap-y-1" dir="rtl">
+                  {journalCalCells.map((dayNum, idx) => (
+                    <div
+                      key={idx}
+                      className="flex aspect-square max-h-11 items-center justify-center p-0.5"
+                    >
+                      {dayNum == null ? (
+                        <span aria-hidden />
+                      ) : (
+                        (() => {
+                          const dk = dateKeyFromParts(
+                            calendarMonthY.y,
+                            calendarMonthY.m0,
+                            dayNum
+                          );
+                          const isSel = calendarSelectedKey === dk;
+                          const isTodayCell = dk === getTodayKey();
+                          return (
+                            <button
+                              type="button"
+                              className={`flex h-9 w-9 items-center justify-center rounded-full text-sm font-extrabold transition ${
+                                isSel
+                                  ? "bg-[var(--cherry)] text-white shadow-[inset_0_1px_2px_rgba(0,0,0,0.12)]"
+                                  : "text-[var(--stem)] hover:bg-[var(--cherry-muted)]/45"
+                              } ${
+                                !isSel && isTodayCell
+                                  ? "ring-2 ring-[var(--cherry)] ring-offset-0"
+                                  : ""
+                              }`}
+                              onClick={() => setCalendarSelectedKey(dk)}
+                              aria-label={`יום ${dayNum}`}
+                              aria-current={isSel ? "date" : undefined}
+                            >
+                              {dayNum}
+                            </button>
+                          );
+                        })()
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+              <div className="flex justify-end gap-5 border-t border-[var(--border-cherry-soft)]/45 px-4 py-3">
+                <button
+                  type="button"
+                  className="text-sm font-extrabold text-[var(--cherry)] transition hover:brightness-110"
+                  onClick={() => setJournalCalendarOpen(false)}
+                >
+                  ביטול
+                </button>
+                <button
+                  type="button"
+                  className="text-sm font-extrabold text-[var(--cherry)] transition hover:brightness-110"
+                  onClick={() => {
+                    navigateToDate(calendarSelectedKey);
+                    setJournalCalendarOpen(false);
+                  }}
+                >
+                  אישור
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       <AnimatePresence>
         {journalInfoOpen && isJournalMode && (
@@ -2239,244 +2582,181 @@ export function HomeClient({ mode = "dashboard" }: { mode?: "dashboard" | "journ
                   onPointerCancel={handleJournalCardPointerEnd}
                   onContextMenu={(e) => handleJournalCardContextMenu(e, item)}
                 >
-                  <div className="flex min-w-0 flex-row items-start gap-3 px-3 py-2.5">
-                    <div
-                      className="flex min-w-0 flex-1 flex-col gap-1"
-                      dir="rtl"
-                    >
-                      {journalFoodNameEditId === item.id && !isDayClosed ? (
-                        <div
-                          className="flex min-w-0 flex-col gap-2"
-                          data-skip-journal-longpress
-                        >
-                          <div className="flex w-full flex-row justify-end gap-1.5">
-                            <button
-                              type="button"
-                              className="rounded-lg border border-[var(--border-cherry-soft)] bg-white px-3 py-1.5 text-xs font-extrabold text-[var(--stem)] transition hover:bg-[var(--cherry-muted)]/45"
-                              onClick={(e) => {
-                                e.preventDefault();
-                                e.stopPropagation();
-                                saveJournalFoodNameEdit();
-                              }}
-                            >
-                              {gf(gender, "שמור", "שמור")}
-                            </button>
-                            <button
-                              type="button"
-                              className="rounded-lg border border-[var(--border-cherry-soft)] bg-white px-3 py-1.5 text-xs font-extrabold text-[var(--text)]/80 transition hover:bg-[var(--cherry-muted)]/45"
-                              onClick={(e) => {
-                                e.preventDefault();
-                                e.stopPropagation();
-                                cancelJournalFoodNameEdit();
-                              }}
-                            >
-                              {gf(gender, "ביטול", "ביטול")}
-                            </button>
-                          </div>
-                          <input
-                            ref={journalFoodNameInputRef}
-                            type="text"
-                            value={journalFoodNameDraft}
-                            onChange={(e) =>
-                              setJournalFoodNameDraft(e.target.value)
-                            }
-                            onKeyDown={(e) => {
-                              if (e.key === "Escape") cancelJournalFoodNameEdit();
-                              if (e.key === "Enter") saveJournalFoodNameEdit();
-                            }}
-                            className="min-w-0 w-full rounded-lg border border-[var(--border-cherry-soft)] bg-white px-2 py-1.5 text-base font-normal text-[var(--stem)] outline-none focus:ring-2 focus:ring-[var(--stem)]/25"
-                            aria-label={gf(
-                              gender,
-                              "שם להצגה ביומן",
-                              "שם להצגה ביומן"
-                            )}
-                          />
-                        </div>
-                      ) : (
-                        <>
-                          <div className="flex w-full min-w-0 flex-row items-start gap-2">
-                            <button
-                              type="button"
-                              disabled={isDayClosed}
-                              data-skip-journal-longpress
-                              className="min-w-0 flex-1 py-0 text-start transition hover:bg-[var(--cherry-muted)]/25 disabled:opacity-50"
-                              onClick={(e) => {
-                                e.preventDefault();
-                                e.stopPropagation();
-                                if (isDayClosed) return;
-                                setJournalFoodNameEditId(item.id);
-                                setJournalFoodNameDraft(item.food);
-                              }}
-                              title={`${item.food}\n${gf(
-                                gender,
-                                "לחצי לעריכת השם",
-                                "לחץ לעריכת השם"
-                              )}`}
-                              aria-label={`${gf(
-                                gender,
-                                "עריכת שם להצגה",
-                                "עריכת שם להצגה"
-                              )}: ${item.food}`}
-                            >
-                              <span className="bidi-isolate-rtl block min-w-0 whitespace-normal break-words text-base font-normal leading-snug">
-                                {journalMealPreset ? (
-                                  <>
-                                    <span className="font-semibold text-[var(--stem)]">
-                                      ארוחה
-                                    </span>
-                                    <span className="text-neutral-400" aria-hidden>
-                                      {" "}
-                                      —{" "}
-                                    </span>
-                                    <span className="text-[var(--cherry)]">
-                                      {truncateJournalFoodDisplayLabel(
-                                        item.food
-                                      )}
-                                    </span>
-                                  </>
-                                ) : (
-                                  <span className="text-[var(--cherry)]">
-                                    {truncateJournalFoodDisplayLabel(item.food)}
-                                  </span>
-                                )}
-                              </span>
-                            </button>
-                            {journalMealPreset || !isDayClosed ? (
-                              <div
-                                className="flex min-w-0 shrink-0 flex-row flex-wrap items-center justify-end gap-2 pt-0.5"
-                                data-skip-journal-longpress
-                                role="group"
-                                aria-label={
-                                  journalMealPreset
-                                    ? gf(
-                                        gender,
-                                        "פירוט ארוחה שמורה",
-                                        "פירוט ארוחה שמורה"
-                                      )
-                                    : gf(
-                                        gender,
-                                        "פעולות על המנה",
-                                        "פעולות על המנה"
-                                      )
-                                }
-                              >
-                                {!journalMealPreset &&
-                                mealHintInlineEntryId === item.id ? (
-                                  <p className="max-w-[min(18rem,calc(100vw-7rem))] text-end text-sm font-semibold leading-snug text-[var(--cherry)]">
-                                    {gf(
-                                      gender,
-                                      "בחרי לפחות עוד מוצר אחד ליצירת ארוחה.",
-                                      "בחר לפחות עוד מוצר אחד ליצירת ארוחה."
-                                    )}
-                                  </p>
-                                ) : null}
-                                {journalMealPreset ? (
-                                  <button
-                                    type="button"
-                                    className="rounded-full p-1.5 text-[var(--stem)] transition hover:bg-[var(--cherry-muted)]/45"
-                                    aria-expanded={
-                                      journalMealPresetExpandedId === item.id
-                                    }
-                                    aria-label={gf(
-                                      gender,
-                                      "הצגת המנות שנבחרו לארוחה",
-                                      "הצגת המנות שנבחרו לארוחה"
-                                    )}
-                                    title={gf(
-                                      gender,
-                                      "מה נכלל בארוחה",
-                                      "מה נכלל בארוחה"
-                                    )}
-                                    onClick={(e) => {
-                                      e.preventDefault();
-                                      e.stopPropagation();
-                                      setJournalMealPresetExpandedId((x) =>
-                                        x === item.id ? null : item.id
-                                      );
-                                    }}
-                                  >
-                                    <ChevronDown
-                                      className={`${journalToolbarIconClass} transition-transform duration-200 ${
-                                        journalMealPresetExpandedId === item.id
-                                          ? "rotate-180"
-                                          : ""
-                                      }`}
-                                      strokeWidth={2.25}
-                                      aria-hidden
-                                    />
-                                  </button>
-                                ) : (
-                                  <button
-                                    type="button"
-                                    className={`rounded-full p-1.5 transition ${
-                                      mealOn
-                                        ? "border-2 border-[var(--cherry)] text-[var(--stem)]"
-                                        : "border-2 border-transparent text-[var(--stem)] hover:bg-[var(--cherry-muted)]/45"
-                                    }`}
-                                    title="סימון כארוחה קבועה במילון הארוחות"
-                                    aria-label="ארוחה קבועה — סימון לשמירה כארוחה במילון"
-                                    aria-pressed={mealOn}
-                                    onClick={(e) => {
-                                      e.preventDefault();
-                                      e.stopPropagation();
-                                      toggleMealStar(item.id);
-                                    }}
-                                  >
-                                    <IconUtensilsMeal
-                                      className={journalToolbarIconClass}
-                                    />
-                                  </button>
-                                )}
-                              </div>
-                            ) : null}
-                          </div>
-                          <div
-                            className="w-full space-y-1 text-[var(--text)]/80"
-                            dir="rtl"
-                            data-skip-journal-longpress
-                          >
-                            <p className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5 text-base font-bold leading-snug">
-                              {isDayClosed ? (
-                                <span className="bidi-isolate-rtl">
-                                  {formatQtyLabel(item.quantity, item.unit)}{" "}
-                                  {item.unit}
+                  <div className="flex min-w-0 flex-col gap-1 px-3 py-2.5">
+                    <div className="flex min-w-0 flex-row items-start gap-3">
+                      <div
+                        className="flex min-w-0 flex-1 flex-col gap-1"
+                        dir="rtl"
+                      >
+                      <div className="flex w-full min-w-0 flex-row items-start gap-2">
+                        <div className="min-w-0 flex-1 py-0 text-start">
+                          <span className="bidi-isolate-rtl block min-w-0 whitespace-normal break-words text-base font-normal leading-snug">
+                            {journalMealPreset ? (
+                              <>
+                                <span className="font-semibold text-[var(--stem)]">
+                                  ארוחה
                                 </span>
-                              ) : (
-                                <button
-                                  type="button"
-                                  title={gf(
+                                <span className="text-neutral-400" aria-hidden>
+                                  {" "}
+                                  —{" "}
+                                </span>
+                                <span className="text-[var(--cherry)]">
+                                  {truncateJournalFoodDisplayLabel(item.food)}
+                                </span>
+                              </>
+                            ) : (
+                              <span className="text-[var(--cherry)]">
+                                {truncateJournalFoodDisplayLabel(item.food)}
+                              </span>
+                            )}
+                          </span>
+                        </div>
+                        {journalMealPreset || !isDayClosed ? (
+                          <div
+                            className="flex min-w-0 shrink-0 flex-row flex-wrap items-center justify-end gap-2 pt-0.5"
+                            data-skip-journal-longpress
+                            role="group"
+                            aria-label={
+                              journalMealPreset
+                                ? gf(
                                     gender,
-                                    "לחצי כדי לשנות כמות או יחידה",
-                                    "לחץ כדי לשנות כמות או יחידה"
-                                  )}
-                                  className="bidi-isolate-rtl inline-flex items-center gap-1 rounded px-0.5 text-[var(--stem)] underline decoration-dotted decoration-[var(--stem)]/40 underline-offset-2 transition hover:bg-[var(--cherry-muted)]/45 hover:decoration-[var(--stem)]/70"
-                                  onClick={(e) => {
-                                    e.preventDefault();
-                                    e.stopPropagation();
-                                    openEdit(item);
-                                  }}
-                                  aria-label={gf(
+                                    "פירוט ארוחה שמורה",
+                                    "פירוט ארוחה שמורה"
+                                  )
+                                : gf(
                                     gender,
-                                    "עריכת כמות ויחידה — לחיצה לפתיחת עריכה",
-                                    "עריכת כמות ויחידה — לחיצה לפתיחת עריכה"
-                                  )}
-                                >
-                                  <span>
-                                    {formatQtyLabel(item.quantity, item.unit)}{" "}
-                                    {item.unit}
-                                  </span>
-                                  <Pencil
-                                    className="size-3.5 shrink-0 text-[var(--stem)]/55"
-                                    strokeWidth={2.25}
-                                    aria-hidden
-                                  />
-                                </button>
-                              )}
-                            </p>
+                                    "פעולות על המנה",
+                                    "פעולות על המנה"
+                                  )
+                            }
+                          >
+                            {journalMealPreset ? (
+                              <button
+                                type="button"
+                                className="rounded-full p-1.5 text-[var(--stem)] transition hover:bg-[var(--cherry-muted)]/45"
+                                aria-expanded={
+                                  journalMealPresetExpandedId === item.id
+                                }
+                                aria-label={gf(
+                                  gender,
+                                  "הצגת המנות שנבחרו לארוחה",
+                                  "הצגת המנות שנבחרו לארוחה"
+                                )}
+                                title={gf(
+                                  gender,
+                                  "מה נכלל בארוחה",
+                                  "מה נכלל בארוחה"
+                                )}
+                                onClick={(e) => {
+                                  e.preventDefault();
+                                  e.stopPropagation();
+                                  setJournalMealPresetExpandedId((x) =>
+                                    x === item.id ? null : item.id
+                                  );
+                                }}
+                              >
+                                <ChevronDown
+                                  className={`${journalToolbarIconClass} transition-transform duration-200 ${
+                                    journalMealPresetExpandedId === item.id
+                                      ? "rotate-180"
+                                      : ""
+                                  }`}
+                                  strokeWidth={2.25}
+                                  aria-hidden
+                                />
+                              </button>
+                            ) : (
+                              <button
+                                type="button"
+                                className={`rounded-full p-1.5 transition ${
+                                  mealOn
+                                    ? "border-2 border-[var(--cherry)] text-[var(--stem)]"
+                                    : "border-2 border-transparent text-[var(--stem)] hover:bg-[var(--cherry-muted)]/45"
+                                }`}
+                                title="סימון כארוחה קבועה במילון הארוחות"
+                                aria-label="ארוחה קבועה — סימון לשמירה כארוחה במילון"
+                                aria-pressed={mealOn}
+                                onClick={(e) => {
+                                  e.preventDefault();
+                                  e.stopPropagation();
+                                  toggleMealStar(item.id);
+                                }}
+                              >
+                                <IconUtensilsMeal
+                                  className={journalToolbarIconClass}
+                                />
+                              </button>
+                            )}
                           </div>
-                        </>
-                      )}
+                        ) : null}
+                      </div>
+                      {!journalMealPreset &&
+                      mealHintInlineEntryId === item.id &&
+                      !isDayClosed ? (
+                        <p className="w-full min-w-0 text-end text-sm font-semibold leading-snug text-[var(--cherry)]">
+                          {gf(
+                            gender,
+                            "בחרי לפחות עוד מוצר אחד ליצירת ארוחה.",
+                            "בחר לפחות עוד מוצר אחד ליצירת ארוחה."
+                          )}
+                        </p>
+                      ) : null}
+                      </div>
+                      <div
+                        className="shrink-0 select-none pt-0.5 text-base font-bold tabular-nums leading-snug text-neutral-900"
+                        dir="ltr"
+                        aria-label={`${item.calories} קק״ל`}
+                      >
+                        <span className="bidi-isolate-rtl whitespace-nowrap">
+                          {item.calories} קק״ל
+                        </span>
+                      </div>
+                    </div>
 
+                    <div className="flex min-w-0 flex-row items-center gap-3">
+                      <div
+                        className="min-w-0 flex-1 space-y-1 text-[var(--text)]/80"
+                        dir="rtl"
+                      >
+                        <p className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5 text-base font-bold leading-snug">
+                          <span className="bidi-isolate-rtl">
+                            {formatQtyLabel(item.quantity, item.unit)}{" "}
+                            {item.unit}
+                            {item.unit === "יחידה" &&
+                            item.gramsPerUnit != null &&
+                            Number.isFinite(item.gramsPerUnit) &&
+                            item.gramsPerUnit > 0 ? (
+                              <>
+                                {" "}
+                                ·{" "}
+                                {formatJournalGramsPerUnitSuffix(item.gramsPerUnit)}
+                              </>
+                            ) : null}
+                          </span>
+                        </p>
+                      </div>
+                      {!isDayClosed ? (
+                        <button
+                          type="button"
+                          data-skip-journal-longpress
+                          className="shrink-0 rounded-md px-1 py-0 text-[1.15rem] font-extrabold leading-none tracking-[0.12em] text-[var(--stem)]/75 transition hover:bg-[var(--cherry-muted)]/45 hover:text-[var(--stem)]"
+                          title={gf(gender, "עריכת מוצר", "עריכת מוצר")}
+                          aria-label={gf(gender, "עריכת מוצר", "עריכת מוצר")}
+                          dir="ltr"
+                          onClick={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            openEdit(item);
+                          }}
+                        >
+                          <span aria-hidden>...</span>
+                        </button>
+                      ) : (
+                        <span className="shrink-0 w-[1.6rem]" aria-hidden />
+                      )}
+                    </div>
+
+                    <div className="flex min-w-0 flex-col gap-1" dir="rtl">
                       <AnimatePresence initial={false}>
                         {journalMealPreset &&
                           journalMealPresetExpandedId === item.id && (
@@ -2607,16 +2887,6 @@ export function HomeClient({ mode = "dashboard" }: { mode?: "dashboard" | "journ
                           </motion.div>
                         )}
                       </AnimatePresence>
-                    </div>
-
-                    <div
-                      className="shrink-0 select-none pt-0.5 text-base font-bold tabular-nums leading-snug text-neutral-900"
-                      dir="ltr"
-                      aria-label={`${item.calories} קק״ל`}
-                    >
-                      <span className="bidi-isolate-rtl whitespace-nowrap">
-                        {item.calories} קק״ל
-                      </span>
                     </div>
                   </div>
 

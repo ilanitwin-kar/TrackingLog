@@ -404,3 +404,22 @@ export function IconNavChart({ className = "" }: { className?: string }) {
     </svg>
   );
 }
+
+export function IconSearch({ className = "" }: { className?: string }) {
+  return (
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={1.75}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className={className}
+      aria-hidden
+    >
+      <circle cx="11" cy="11" r="7.25" />
+      <path d="M20 20 16.65 16.65" />
+    </svg>
+  );
+}

@@ -42,6 +42,8 @@ export type LogEntry = {
   calories: number;
   quantity: number;
   unit: FoodUnit;
+  /** משקל יחידה בגרם כש־unit הוא «יחידה» (לתצוגה ביומן וחישובים) */
+  gramsPerUnit?: number;
   createdAt: string;
   /** מסומן ליצירת ארוחה קבועה */
   mealStarred?: boolean;
