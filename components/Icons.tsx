@@ -25,13 +25,7 @@ export function IconStar({
 }
 
 /** סכין ומזלג מוצלבים — סימון ארוחה קבועה במילון */
-export function IconUtensilsMeal({
-  marked,
-  className = "",
-}: {
-  marked?: boolean;
-  className?: string;
-}) {
+export function IconUtensilsMeal({ className = "" }: { className?: string }) {
   return (
     <svg
       xmlns="http://www.w3.org/2000/svg"
@@ -44,9 +38,6 @@ export function IconUtensilsMeal({
       className={className}
       aria-hidden
     >
-      {marked ? (
-        <circle cx="12" cy="12" r="10.5" fill="currentColor" opacity={0.14} />
-      ) : null}
       <path d="m16 2-2.3 2.3a3 3 0 0 0 0 4.2l1.8 1.8a3 3 0 0 0 4.2 0L22 8" />
       <path d="M15 15 3.3 3.3a4.2 4.2 0 0 0 0 6l7.3 7.3c.7.7 2 .7 2.8 0L15 15Zm0 0 7 7" />
       <path d="m2.1 21.8 6.4-6.3" />
