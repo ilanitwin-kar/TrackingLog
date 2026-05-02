@@ -2040,7 +2040,7 @@ export function AddFoodClient({
         {pickModalRow && pickPreview && (
           <motion.div
             role="presentation"
-            className="fixed inset-0 z-[430] flex items-center justify-center bg-black/40 p-4 backdrop-blur-[2px]"
+            className="fixed inset-0 z-[430] flex items-stretch justify-center bg-black/40 p-0 backdrop-blur-[2px] sm:items-center sm:p-4"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
@@ -2052,36 +2052,39 @@ export function AddFoodClient({
               role="dialog"
               aria-modal
               aria-labelledby={pickTitleId}
-              className="glass-panel max-h-[90dvh] w-full max-w-md overflow-y-auto p-5 shadow-2xl"
-              initial={{ scale: 0.94, opacity: 0 }}
-              animate={{ scale: 1, opacity: 1 }}
-              exit={{ scale: 0.96, opacity: 0 }}
+              className="glass-panel flex h-[100dvh] max-h-[100dvh] w-full max-w-none flex-col overflow-hidden rounded-none shadow-2xl sm:h-auto sm:max-h-[90dvh] sm:max-w-md sm:rounded-2xl"
+              initial={{ opacity: 0, y: 16 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: 12 }}
               transition={{ type: "spring", damping: 26, stiffness: 320 }}
               onClick={(e) => e.stopPropagation()}
             >
-              <div className="mb-4 flex items-start justify-between gap-3">
-                <h2
-                  id={pickTitleId}
-                  className="panel-title-cherry text-lg leading-snug"
-                >
-                  עריכת פריט
-                </h2>
-                <button
-                  type="button"
-                  onClick={closePickModal}
-                  className="rounded-lg border-2 border-[var(--border-cherry-soft)] bg-white px-3 py-1.5 text-sm font-semibold text-[var(--stem)] transition hover:bg-[var(--cherry-muted)]"
-                >
-                  סגירה
-                </button>
+              <div className="shrink-0 border-b border-[var(--border-cherry-soft)]/35 px-5 pb-3 pt-[max(0.75rem,env(safe-area-inset-top))]">
+                <div className="flex items-start justify-between gap-3">
+                  <h2
+                    id={pickTitleId}
+                    className="panel-title-cherry text-lg leading-snug"
+                  >
+                    עריכת פריט
+                  </h2>
+                  <button
+                    type="button"
+                    onClick={closePickModal}
+                    className="rounded-lg border-2 border-[var(--border-cherry-soft)] bg-white px-3 py-1.5 text-sm font-semibold text-[var(--stem)] transition hover:bg-[var(--cherry-muted)]"
+                  >
+                    סגירה
+                  </button>
+                </div>
               </div>
-              <p className="mb-3 text-base font-semibold text-[var(--stem)]">
-                {pickModalRow.name}
-              </p>
-              <p className="mb-2 text-xs font-semibold text-[var(--stem)]/65">
-                ל־100 גרם
-              </p>
-              <div className="mb-4 grid grid-cols-2 gap-2 rounded-xl border border-[var(--border-cherry-soft)] bg-white/80 px-3 py-3 text-sm">
-                <div>
+              <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-5 py-4 [-webkit-overflow-scrolling:touch]">
+                <p className="mb-3 text-base font-semibold text-[var(--stem)]">
+                  {pickModalRow.name}
+                </p>
+                <p className="mb-2 text-xs font-semibold text-[var(--stem)]/65">
+                  ל־100 גרם
+                </p>
+                <div className="mb-4 grid grid-cols-2 gap-2 rounded-xl border border-[var(--border-cherry-soft)] bg-white/80 px-3 py-3 text-sm [&>div]:min-w-0">
+                <div className="min-w-0">
                   <span className="text-xs font-extrabold tracking-wide text-[var(--cherry)]">
                     קלוריות
                   </span>
@@ -2089,7 +2092,7 @@ export function AddFoodClient({
                     {Math.round(pickModalRow.calories ?? 0)} קק״ל
                   </p>
                 </div>
-                <div>
+                <div className="min-w-0">
                   <span className="text-xs font-extrabold tracking-wide text-[var(--cherry)]">
                     חלבון
                   </span>
@@ -2097,7 +2100,7 @@ export function AddFoodClient({
                     {pickModalRow.protein ?? "—"} ג׳
                   </p>
                 </div>
-                <div>
+                <div className="min-w-0">
                   <span className="text-xs font-extrabold tracking-wide text-[var(--cherry)]">
                     פחמימה
                   </span>
@@ -2105,7 +2108,7 @@ export function AddFoodClient({
                     {pickModalRow.carbs ?? "—"} ג׳
                   </p>
                 </div>
-                <div>
+                <div className="min-w-0">
                   <span className="text-xs font-extrabold tracking-wide text-[var(--cherry)]">
                     שומן
                   </span>
@@ -2113,176 +2116,179 @@ export function AddFoodClient({
                     {pickModalRow.fat ?? "—"} ג׳
                   </p>
                 </div>
-              </div>
-              <label className="mb-3 block">
-                <span className="mb-1 block text-xs font-semibold text-[var(--stem)]">
-                  משקל יחידה (גרם, אופציונלי)
-                </span>
-                <input
-                  type="text"
-                  inputMode="decimal"
-                  value={pickUnitWeightText}
-                  onFocus={(e) => e.currentTarget.select()}
-                  onChange={(e) => {
-                    if ((e.nativeEvent as InputEvent).isComposing) return;
-                    setPickUnitWeightText(sanitizeDecimalTyping(e.target.value));
-                  }}
-                  onBlur={() => {
-                    const t = pickUnitWeightText.trim();
-                    if (t === "") return;
-                    const n = parseFloat(t.replace(",", "."));
-                    if (!Number.isFinite(n) || n <= 0) {
-                      setPickUnitWeightText("");
-                      return;
-                    }
-                    setPickUnitWeightText(String(clampUnitWeightG(n)));
-                  }}
-                  placeholder="למשל משקל פרי אחד"
-                  className="input-luxury-dark w-full"
-                />
-              </label>
-              {pickUnitWeightG != null ? (
+                </div>
                 <label className="mb-3 block">
                   <span className="mb-1 block text-xs font-semibold text-[var(--stem)]">
-                    כמות יחידות
+                    משקל יחידה (גרם, אופציונלי)
                   </span>
                   <input
                     type="text"
                     inputMode="decimal"
-                    value={pickUnitsText}
+                    value={pickUnitWeightText}
                     onFocus={(e) => e.currentTarget.select()}
                     onChange={(e) => {
                       if ((e.nativeEvent as InputEvent).isComposing) return;
-                      setPickUnitsText(sanitizeDecimalTyping(e.target.value));
+                      setPickUnitWeightText(sanitizeDecimalTyping(e.target.value));
                     }}
                     onBlur={() => {
-                      const n = parseFloat(pickUnitsText.replace(",", "."));
+                      const t = pickUnitWeightText.trim();
+                      if (t === "") return;
+                      const n = parseFloat(t.replace(",", "."));
                       if (!Number.isFinite(n) || n <= 0) {
-                        setPickUnitsText("1");
+                        setPickUnitWeightText("");
                         return;
                       }
-                      setPickUnitsText(String(clampServingUnits(n)));
+                      setPickUnitWeightText(String(clampUnitWeightG(n)));
                     }}
+                    placeholder="למשל משקל פרי אחד"
                     className="input-luxury-dark w-full"
                   />
                 </label>
-              ) : (
-                <label className="mb-3 block">
-                  <span className="mb-1 block text-xs font-semibold text-[var(--stem)]">
-                    משקל המנה (גרם)
-                  </span>
-                  <input
-                    type="text"
-                    inputMode="decimal"
-                    value={pickGramsText}
-                    onFocus={(e) => e.currentTarget.select()}
-                    onChange={(e) => {
-                      if ((e.nativeEvent as InputEvent).isComposing) return;
-                      const raw = e.target.value;
-                      if (raw.trim() === "") {
-                        setPickGramsText("");
-                        return;
-                      }
-                      const cleaned = raw
-                        .replace(",", ".")
-                        .replace(/[^\d.]/g, "")
-                        .replace(/^0+(?=\d)/, "");
-                      const parts = cleaned.split(".");
-                      const normalized =
-                        parts.length <= 1
-                          ? parts[0]
-                          : `${parts[0]}.${parts.slice(1).join("")}`;
-                      setPickGramsText(normalized);
-                    }}
-                    onBlur={() => {
-                      const n = parseFloat(pickGramsText.replace(",", "."));
-                      if (!Number.isFinite(n)) {
-                        setPickGramsText("100");
-                        return;
-                      }
-                      setPickGramsText(String(clampGrams(n)));
-                    }}
-                    className="input-luxury-dark w-full"
-                  />
-                </label>
-              )}
-              <div className="mb-4 rounded-xl border border-[#f0c8d4]/85 bg-[#fdf2f6] px-3 py-3 text-[var(--stem)] shadow-[0_2px_14px_-4px_rgba(185,104,122,0.22)]">
-                <p className="text-base font-bold leading-snug text-[var(--stem)]">
-                  {pickUnitWeightG != null
-                    ? `למנה: ${pickUnitsQty} יחידות (סה״כ ${pickEffectiveTotalGrams} ג׳)`
-                    : `למנה (${pickEffectiveTotalGrams} ג׳)`}
-                </p>
-                <p className="mt-2 flex flex-wrap items-baseline gap-x-2.5 gap-y-1.5 text-[15px] leading-snug sm:text-base">
-                  <span className="inline-flex items-baseline gap-1">
-                    <span className="font-extrabold text-[var(--cherry)]">קק״ל</span>
-                    <span className="font-extrabold tabular-nums text-[var(--stem)]">
-                      {pickPreview.kcal}
+                {pickUnitWeightG != null ? (
+                  <label className="mb-3 block">
+                    <span className="mb-1 block text-xs font-semibold text-[var(--stem)]">
+                      כמות יחידות
                     </span>
-                  </span>
-                  {pickPreview.proteinG != null && (
+                    <input
+                      type="text"
+                      inputMode="decimal"
+                      value={pickUnitsText}
+                      onFocus={(e) => e.currentTarget.select()}
+                      onChange={(e) => {
+                        if ((e.nativeEvent as InputEvent).isComposing) return;
+                        setPickUnitsText(sanitizeDecimalTyping(e.target.value));
+                      }}
+                      onBlur={() => {
+                        const n = parseFloat(pickUnitsText.replace(",", "."));
+                        if (!Number.isFinite(n) || n <= 0) {
+                          setPickUnitsText("1");
+                          return;
+                        }
+                        setPickUnitsText(String(clampServingUnits(n)));
+                      }}
+                      className="input-luxury-dark w-full"
+                    />
+                  </label>
+                ) : (
+                  <label className="mb-3 block">
+                    <span className="mb-1 block text-xs font-semibold text-[var(--stem)]">
+                      משקל המנה (גרם)
+                    </span>
+                    <input
+                      type="text"
+                      inputMode="decimal"
+                      value={pickGramsText}
+                      onFocus={(e) => e.currentTarget.select()}
+                      onChange={(e) => {
+                        if ((e.nativeEvent as InputEvent).isComposing) return;
+                        const raw = e.target.value;
+                        if (raw.trim() === "") {
+                          setPickGramsText("");
+                          return;
+                        }
+                        const cleaned = raw
+                          .replace(",", ".")
+                          .replace(/[^\d.]/g, "")
+                          .replace(/^0+(?=\d)/, "");
+                        const parts = cleaned.split(".");
+                        const normalized =
+                          parts.length <= 1
+                            ? parts[0]
+                            : `${parts[0]}.${parts.slice(1).join("")}`;
+                        setPickGramsText(normalized);
+                      }}
+                      onBlur={() => {
+                        const n = parseFloat(pickGramsText.replace(",", "."));
+                        if (!Number.isFinite(n)) {
+                          setPickGramsText("100");
+                          return;
+                        }
+                        setPickGramsText(String(clampGrams(n)));
+                      }}
+                      className="input-luxury-dark w-full"
+                    />
+                  </label>
+                )}
+                <div className="mb-4 rounded-xl border border-[#f0c8d4]/85 bg-[#fdf2f6] px-3 py-3 text-[var(--stem)] shadow-[0_2px_14px_-4px_rgba(185,104,122,0.22)]">
+                  <p className="text-base font-bold leading-snug text-[var(--stem)]">
+                    {pickUnitWeightG != null
+                      ? `למנה: ${pickUnitsQty} יחידות (סה״כ ${pickEffectiveTotalGrams} ג׳)`
+                      : `למנה (${pickEffectiveTotalGrams} ג׳)`}
+                  </p>
+                  <p className="mt-2 flex flex-wrap items-baseline gap-x-2.5 gap-y-1.5 text-[15px] leading-snug sm:text-base">
                     <span className="inline-flex items-baseline gap-1">
-                      <span className="font-extrabold text-[var(--cherry)]">חלבון</span>
+                      <span className="font-extrabold text-[var(--cherry)]">קק״ל</span>
                       <span className="font-extrabold tabular-nums text-[var(--stem)]">
-                        {pickPreview.proteinG} ג׳
+                        {pickPreview.kcal}
                       </span>
                     </span>
-                  )}
-                  {pickPreview.carbsG != null && (
-                    <span className="inline-flex items-baseline gap-1">
-                      <span className="font-extrabold text-[var(--cherry)]">פחמימה</span>
-                      <span className="font-extrabold tabular-nums text-[var(--stem)]">
-                        {pickPreview.carbsG} ג׳
+                    {pickPreview.proteinG != null && (
+                      <span className="inline-flex items-baseline gap-1">
+                        <span className="font-extrabold text-[var(--cherry)]">חלבון</span>
+                        <span className="font-extrabold tabular-nums text-[var(--stem)]">
+                          {pickPreview.proteinG} ג׳
+                        </span>
                       </span>
-                    </span>
-                  )}
-                  {pickPreview.fatG != null && (
-                    <span className="inline-flex items-baseline gap-1">
-                      <span className="font-extrabold text-[var(--cherry)]">שומן</span>
-                      <span className="font-extrabold tabular-nums text-[var(--stem)]">
-                        {pickPreview.fatG} ג׳
+                    )}
+                    {pickPreview.carbsG != null && (
+                      <span className="inline-flex items-baseline gap-1">
+                        <span className="font-extrabold text-[var(--cherry)]">פחמימה</span>
+                        <span className="font-extrabold tabular-nums text-[var(--stem)]">
+                          {pickPreview.carbsG} ג׳
+                        </span>
                       </span>
-                    </span>
-                  )}
-                </p>
+                    )}
+                    {pickPreview.fatG != null && (
+                      <span className="inline-flex items-baseline gap-1">
+                        <span className="font-extrabold text-[var(--cherry)]">שומן</span>
+                        <span className="font-extrabold tabular-nums text-[var(--stem)]">
+                          {pickPreview.fatG} ג׳
+                        </span>
+                      </span>
+                    )}
+                  </p>
+                </div>
               </div>
-              <div className="grid grid-cols-3 gap-2">
-                <motion.button
-                  type="button"
-                  className={`${pickCubeBaseClass} ${
-                    pickPressedDiary ? pickCubePressedGreen : pickCubeIdleGreen
-                  } active:scale-[0.99]`}
-                  whileTap={{ scale: 0.98 }}
-                  aria-pressed={pickPressedDiary}
-                  onClick={submitPickDiaryOnly}
-                >
-                  {pickFlash?.slot === "diary" ? pickFlash.text : "הוספה ליומן"}
-                </motion.button>
-                <motion.button
-                  type="button"
-                  className={`${pickCubeBaseClass} ${
-                    pickPressedDictionary ? pickCubePressedGreen : pickCubeIdleGreen
-                  } active:scale-[0.99]`}
-                  whileTap={{ scale: 0.98 }}
-                  aria-pressed={pickPressedDictionary}
-                  onClick={submitPickDictionaryOnly}
-                >
-                  {pickFlash?.slot === "dictionary"
-                    ? pickFlash.text
-                    : "הוספה למילון"}
-                </motion.button>
-                <motion.button
-                  type="button"
-                  className={`${pickCubeBaseClass} ${
-                    pickPressedShopping ? pickCubePressedGreen : pickCubeIdleGreen
-                  } active:scale-[0.99]`}
-                  whileTap={{ scale: 0.98 }}
-                  aria-pressed={pickPressedShopping}
-                  onClick={submitPickShoppingOnly}
-                >
-                  {pickFlash?.slot === "shopping"
-                    ? pickFlash.text
-                    : "הוספה לסל קניות"}
-                </motion.button>
+              <div className="shrink-0 border-t border-[var(--border-cherry-soft)]/35 bg-white/95 px-5 pb-[max(1rem,env(safe-area-inset-bottom))] pt-3 backdrop-blur-[2px]">
+                <div className="grid grid-cols-3 gap-2">
+                  <motion.button
+                    type="button"
+                    className={`${pickCubeBaseClass} ${
+                      pickPressedDiary ? pickCubePressedGreen : pickCubeIdleGreen
+                    } active:scale-[0.99]`}
+                    whileTap={{ scale: 0.98 }}
+                    aria-pressed={pickPressedDiary}
+                    onClick={submitPickDiaryOnly}
+                  >
+                    {pickFlash?.slot === "diary" ? pickFlash.text : "הוספה ליומן"}
+                  </motion.button>
+                  <motion.button
+                    type="button"
+                    className={`${pickCubeBaseClass} ${
+                      pickPressedDictionary ? pickCubePressedGreen : pickCubeIdleGreen
+                    } active:scale-[0.99]`}
+                    whileTap={{ scale: 0.98 }}
+                    aria-pressed={pickPressedDictionary}
+                    onClick={submitPickDictionaryOnly}
+                  >
+                    {pickFlash?.slot === "dictionary"
+                      ? pickFlash.text
+                      : "הוספה למילון"}
+                  </motion.button>
+                  <motion.button
+                    type="button"
+                    className={`${pickCubeBaseClass} ${
+                      pickPressedShopping ? pickCubePressedGreen : pickCubeIdleGreen
+                    } active:scale-[0.99]`}
+                    whileTap={{ scale: 0.98 }}
+                    aria-pressed={pickPressedShopping}
+                    onClick={submitPickShoppingOnly}
+                  >
+                    {pickFlash?.slot === "shopping"
+                      ? pickFlash.text
+                      : "הוספה לסל קניות"}
+                  </motion.button>
+                </div>
               </div>
             </motion.div>
           </motion.div>
@@ -2292,7 +2298,7 @@ export function AddFoodClient({
       <AnimatePresence>
         {manualOpen && (
           <motion.div
-            className="fixed inset-0 z-[420] flex items-center justify-center bg-black/35 p-4 backdrop-blur-[2px]"
+            className="fixed inset-0 z-[420] flex items-stretch justify-center bg-black/35 p-0 backdrop-blur-[2px] sm:items-center sm:p-4"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
@@ -2308,152 +2314,160 @@ export function AddFoodClient({
               role="dialog"
               aria-modal
               aria-labelledby={manualTitleId}
-              className="glass-panel relative max-h-[90dvh] w-full max-w-md overflow-y-auto p-5 shadow-2xl"
-              initial={{ scale: 0.94, opacity: 0 }}
-              animate={{ scale: 1, opacity: 1 }}
-              exit={{ scale: 0.96, opacity: 0 }}
+              className="glass-panel relative flex h-[100dvh] max-h-[100dvh] w-full max-w-none flex-col overflow-hidden rounded-none shadow-2xl sm:h-auto sm:max-h-[90dvh] sm:max-w-md sm:rounded-2xl"
+              initial={{ opacity: 0, y: 16 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: 12 }}
               transition={{ type: "spring", damping: 26, stiffness: 320 }}
               onClick={(e) => e.stopPropagation()}
             >
-              <div className="mb-4 flex items-start justify-between gap-3">
-                <h2
-                  id={manualTitleId}
-                  className="text-lg font-bold leading-tight text-[#b9687a]"
-                >
-                  הוספת פריט אישי
-                </h2>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setManualOpen(false);
-                    resetManualForm();
-                  }}
-                  className="rounded-lg border-2 border-[var(--border-cherry-soft)] bg-white px-3 py-1.5 text-sm font-semibold text-[var(--stem)] transition hover:bg-[var(--cherry-muted)]"
-                >
-                  סגירה
-                </button>
-              </div>
-              <form className="space-y-3" onSubmit={(e) => void handleManualSubmit(e)}>
-                <label className="block">
-                  <span className="mb-1 block text-xs font-bold text-[#b9687a]">
-                    שם המזון{" "}
-                    <span className="text-[#b91c1c]" aria-hidden>
-                      *
-                    </span>
-                  </span>
-                  <input
-                    type="text"
-                    value={manName}
-                    onChange={(e) => setManName(e.target.value)}
-                    className="input-luxury-dark w-full"
-                    autoComplete="off"
-                  />
-                </label>
-                <label className="block">
-                  <span className="mb-1 block text-xs font-bold text-[#b9687a]">
-                    קלוריות ל־100 ג׳{" "}
-                    <span className="text-[#b91c1c]" aria-hidden>
-                      *
-                    </span>
-                  </span>
-                  <input
-                    type="text"
-                    inputMode="decimal"
-                    value={manKcal100}
-                    onChange={(e) =>
-                      setManKcal100(
-                        e.target.value.replace(",", ".").replace(/[^\d.]/g, "")
-                      )
-                    }
-                    className="input-luxury-dark w-full"
-                  />
-                </label>
-                <div className="grid grid-cols-3 gap-2">
-                  <label className="block">
-                    <span className="mb-1 block text-xs font-bold text-[#b9687a]">
-                      חלבון /100ג{" "}
-                      <span className="text-[#b91c1c]" aria-hidden>
-                        *
-                      </span>
-                    </span>
-                    <input
-                      type="text"
-                      inputMode="decimal"
-                      value={manProtein100}
-                      onChange={(e) =>
-                        setManProtein100(
-                          e.target.value.replace(",", ".").replace(/[^\d.]/g, "")
-                        )
-                      }
-                      className="input-luxury-dark w-full"
-                    />
-                  </label>
-                  <label className="block">
-                    <span className="mb-1 block text-xs font-bold text-[#b9687a]">
-                      פחמימה /100ג{" "}
-                      <span className="text-[#b91c1c]" aria-hidden>
-                        *
-                      </span>
-                    </span>
-                    <input
-                      type="text"
-                      inputMode="decimal"
-                      value={manCarbs100}
-                      onChange={(e) =>
-                        setManCarbs100(
-                          e.target.value.replace(",", ".").replace(/[^\d.]/g, "")
-                        )
-                      }
-                      className="input-luxury-dark w-full"
-                    />
-                  </label>
-                  <label className="block">
-                    <span className="mb-1 block text-xs font-bold text-[#b9687a]">
-                      שומן /100ג{" "}
-                      <span className="text-[#b91c1c]" aria-hidden>
-                        *
-                      </span>
-                    </span>
-                    <input
-                      type="text"
-                      inputMode="decimal"
-                      value={manFat100}
-                      onChange={(e) =>
-                        setManFat100(
-                          e.target.value.replace(",", ".").replace(/[^\d.]/g, "")
-                        )
-                      }
-                      className="input-luxury-dark w-full"
-                    />
-                  </label>
-                </div>
-                <label className="block">
-                  <span className="mb-1 block text-xs font-bold text-[#b9687a]">
-                    משקל יחידה (גרם, אופציונלי)
-                  </span>
-                  <input
-                    type="text"
-                    inputMode="decimal"
-                    value={manUnitWeightText}
-                    onChange={(e) =>
-                      setManUnitWeightText(sanitizeDecimalTyping(e.target.value))
-                    }
-                    onBlur={() => {
-                      const t = manUnitWeightText.trim();
-                      if (t === "") return;
-                      const n = parseFloat(t.replace(",", "."));
-                      if (!Number.isFinite(n) || n <= 0) {
-                        setManUnitWeightText("");
-                        return;
-                      }
-                      setManUnitWeightText(String(clampUnitWeightG(n)));
+              <div className="shrink-0 border-b border-[var(--border-cherry-soft)]/35 px-5 pb-3 pt-[max(0.75rem,env(safe-area-inset-top))]">
+                <div className="flex items-start justify-between gap-3">
+                  <h2
+                    id={manualTitleId}
+                    className="text-lg font-bold leading-tight text-[#b9687a]"
+                  >
+                    הוספת פריט אישי
+                  </h2>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setManualOpen(false);
+                      resetManualForm();
                     }}
-                    placeholder="אם ממלאים — נפתחת כמות ביחידות"
-                    className="input-luxury-dark w-full"
-                  />
-                </label>
+                    className="rounded-lg border-2 border-[var(--border-cherry-soft)] bg-white px-3 py-1.5 text-sm font-semibold text-[var(--stem)] transition hover:bg-[var(--cherry-muted)]"
+                  >
+                    סגירה
+                  </button>
+                </div>
+              </div>
+              <form
+                className="flex min-h-0 flex-1 flex-col overflow-hidden"
+                onSubmit={(e) => void handleManualSubmit(e)}
+              >
+                <div className="min-h-0 flex-1 space-y-3 overflow-y-auto overscroll-contain px-5 py-4 [-webkit-overflow-scrolling:touch]">
+                  <label className="block min-w-0">
+                    <span className="mb-1 block text-xs font-bold text-[#b9687a]">
+                      שם המזון{" "}
+                      <span className="text-[#b91c1c]" aria-hidden>
+                        *
+                      </span>
+                    </span>
+                    <input
+                      type="text"
+                      value={manName}
+                      onChange={(e) => setManName(e.target.value)}
+                      className="input-luxury-dark min-h-[2.75rem] w-full"
+                      autoComplete="off"
+                    />
+                  </label>
+                  <div className="grid grid-cols-2 gap-2">
+                    <label className="block min-w-0">
+                      <span className="mb-1 block text-xs font-bold text-[#b9687a]">
+                        קלוריות ל־100 ג׳{" "}
+                        <span className="text-[#b91c1c]" aria-hidden>
+                          *
+                        </span>
+                      </span>
+                      <input
+                        type="text"
+                        inputMode="decimal"
+                        value={manKcal100}
+                        onChange={(e) =>
+                          setManKcal100(
+                            e.target.value.replace(",", ".").replace(/[^\d.]/g, "")
+                          )
+                        }
+                        className="input-luxury-dark min-h-[2.75rem] w-full"
+                      />
+                    </label>
+                    <label className="block min-w-0">
+                      <span className="mb-1 block text-xs font-bold text-[#b9687a]">
+                        חלבון /100ג{" "}
+                        <span className="text-[#b91c1c]" aria-hidden>
+                          *
+                        </span>
+                      </span>
+                      <input
+                        type="text"
+                        inputMode="decimal"
+                        value={manProtein100}
+                        onChange={(e) =>
+                          setManProtein100(
+                            e.target.value.replace(",", ".").replace(/[^\d.]/g, "")
+                          )
+                        }
+                        className="input-luxury-dark min-h-[2.75rem] w-full"
+                      />
+                    </label>
+                  </div>
+                  <div className="grid grid-cols-2 gap-2">
+                    <label className="block min-w-0">
+                      <span className="mb-1 block text-xs font-bold text-[#b9687a]">
+                        פחמימה /100ג{" "}
+                        <span className="text-[#b91c1c]" aria-hidden>
+                          *
+                        </span>
+                      </span>
+                      <input
+                        type="text"
+                        inputMode="decimal"
+                        value={manCarbs100}
+                        onChange={(e) =>
+                          setManCarbs100(
+                            e.target.value.replace(",", ".").replace(/[^\d.]/g, "")
+                          )
+                        }
+                        className="input-luxury-dark min-h-[2.75rem] w-full"
+                      />
+                    </label>
+                    <label className="block min-w-0">
+                      <span className="mb-1 block text-xs font-bold text-[#b9687a]">
+                        שומן /100ג{" "}
+                        <span className="text-[#b91c1c]" aria-hidden>
+                          *
+                        </span>
+                      </span>
+                      <input
+                        type="text"
+                        inputMode="decimal"
+                        value={manFat100}
+                        onChange={(e) =>
+                          setManFat100(
+                            e.target.value.replace(",", ".").replace(/[^\d.]/g, "")
+                          )
+                        }
+                        className="input-luxury-dark min-h-[2.75rem] w-full"
+                      />
+                    </label>
+                  </div>
+                  <label className="block min-w-0">
+                    <span className="mb-1 block text-xs font-bold text-[#b9687a]">
+                      משקל יחידה (גרם, אופציונלי)
+                    </span>
+                    <input
+                      type="text"
+                      inputMode="decimal"
+                      value={manUnitWeightText}
+                      onChange={(e) =>
+                        setManUnitWeightText(sanitizeDecimalTyping(e.target.value))
+                      }
+                      onBlur={() => {
+                        const t = manUnitWeightText.trim();
+                        if (t === "") return;
+                        const n = parseFloat(t.replace(",", "."));
+                        if (!Number.isFinite(n) || n <= 0) {
+                          setManUnitWeightText("");
+                          return;
+                        }
+                        setManUnitWeightText(String(clampUnitWeightG(n)));
+                      }}
+                      placeholder="אם ממלאים — נפתחת כמות ביחידות"
+                      className="input-luxury-dark min-h-[2.75rem] w-full"
+                    />
+                  </label>
                 {manUnitWeightG != null ? (
-                  <label className="block">
+                  <label className="block min-w-0">
                     <span className="mb-1 block text-xs font-bold text-[#b9687a]">
                       כמות יחידות
                     </span>
@@ -2472,11 +2486,11 @@ export function AddFoodClient({
                         }
                         setManUnitsText(String(clampServingUnits(n)));
                       }}
-                      className="input-luxury-dark w-full"
+                      className="input-luxury-dark min-h-[2.75rem] w-full"
                     />
                   </label>
                 ) : (
-                  <label className="block">
+                  <label className="block min-w-0">
                     <span className="mb-1 block text-xs font-bold text-[#b9687a]">
                       משקל המנה (גרם)
                     </span>
@@ -2487,21 +2501,24 @@ export function AddFoodClient({
                       onChange={(e) =>
                         setManGrams(e.target.value.replace(/[^\d]/g, ""))
                       }
-                      className="input-luxury-dark w-full"
+                      className="input-luxury-dark min-h-[2.75rem] w-full"
                     />
                   </label>
                 )}
-                {manError && (
-                  <p className="text-sm font-semibold text-[#a94444]">{manError}</p>
-                )}
-                <motion.button
-                  type="submit"
-                  disabled={manLoading}
-                  className="w-full rounded-xl border border-[var(--border-cherry-soft)] bg-white py-3 text-base font-bold text-[var(--stem)] shadow-[0_4px_16px_rgba(22,163,74,0.14)] transition hover:shadow-[0_6px_20px_rgba(22,163,74,0.2)] disabled:opacity-50"
-                  whileTap={{ scale: 0.98 }}
-                >
-                  {manLoading ? "שומר…" : "הוספה ליומן"}
-                </motion.button>
+                  {manError && (
+                    <p className="text-base font-semibold text-[#a94444]">{manError}</p>
+                  )}
+                </div>
+                <div className="shrink-0 border-t border-[var(--border-cherry-soft)]/35 bg-white/95 px-5 pb-[max(1rem,env(safe-area-inset-bottom))] pt-3 backdrop-blur-[2px]">
+                  <motion.button
+                    type="submit"
+                    disabled={manLoading}
+                    className="w-full rounded-xl border border-[var(--border-cherry-soft)] bg-white py-3.5 text-base font-bold text-[var(--stem)] shadow-[0_4px_16px_rgba(22,163,74,0.14)] transition hover:shadow-[0_6px_20px_rgba(22,163,74,0.2)] disabled:opacity-50 sm:py-3"
+                    whileTap={{ scale: 0.98 }}
+                  >
+                    {manLoading ? "שומר…" : "הוספה ליומן"}
+                  </motion.button>
+                </div>
               </form>
             </motion.div>
           </motion.div>
