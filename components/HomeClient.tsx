@@ -47,6 +47,7 @@ import {
   addDictionaryFromJournalEntryIfAbsent,
   getJournalMealPresetBreakdown,
 } from "@/lib/storage";
+import { truncateJournalFoodDisplayLabel } from "@/lib/displayFoodLabel";
 import { buildDashboardGreetingRich } from "@/lib/dashboardGreeting";
 import { dailyMacroTargetsGramsForProfile } from "@/lib/macroTargets";
 import {
@@ -2306,16 +2307,16 @@ export function HomeClient({ mode = "dashboard" }: { mode?: "dashboard" | "journ
                                 setJournalFoodNameEditId(item.id);
                                 setJournalFoodNameDraft(item.food);
                               }}
-                              title={gf(
+                              title={`${item.food}\n${gf(
                                 gender,
                                 "לחצי לעריכת השם",
                                 "לחץ לעריכת השם"
-                              )}
-                              aria-label={gf(
+                              )}`}
+                              aria-label={`${gf(
                                 gender,
                                 "עריכת שם להצגה",
                                 "עריכת שם להצגה"
-                              )}
+                              )}: ${item.food}`}
                             >
                               <span className="bidi-isolate-rtl block min-w-0 whitespace-normal break-words text-base font-normal leading-snug">
                                 {journalMealPreset ? (
@@ -2328,12 +2329,14 @@ export function HomeClient({ mode = "dashboard" }: { mode?: "dashboard" | "journ
                                       —{" "}
                                     </span>
                                     <span className="text-[var(--cherry)]">
-                                      {item.food}
+                                      {truncateJournalFoodDisplayLabel(
+                                        item.food
+                                      )}
                                     </span>
                                   </>
                                 ) : (
                                   <span className="text-[var(--cherry)]">
-                                    {item.food}
+                                    {truncateJournalFoodDisplayLabel(item.food)}
                                   </span>
                                 )}
                               </span>
@@ -2519,7 +2522,9 @@ export function HomeClient({ mode = "dashboard" }: { mode?: "dashboard" | "journ
                                         className="leading-relaxed"
                                       >
                                         <p className="text-sm font-semibold text-[var(--stem)]">
-                                          {c.food}{" "}
+                                          {truncateJournalFoodDisplayLabel(
+                                            c.food
+                                          )}{" "}
                                           <span className="text-xs font-semibold text-[var(--stem)]/70">
                                             ({formatQtyLabel(c.quantity, c.unit)}{" "}
                                             {c.unit})
@@ -2581,7 +2586,9 @@ export function HomeClient({ mode = "dashboard" }: { mode?: "dashboard" | "journ
                                         className="leading-relaxed"
                                       >
                                         <p className="font-semibold text-[var(--stem)]">
-                                          {r.item}{" "}
+                                          {truncateJournalFoodDisplayLabel(
+                                            r.item
+                                          )}{" "}
                                           <span className="text-xs font-semibold text-[var(--stem)]/70">
                                             ({r.qty})
                                           </span>
@@ -2699,8 +2706,11 @@ export function HomeClient({ mode = "dashboard" }: { mode?: "dashboard" | "journ
                 <p
                   id="journal-entry-action-food"
                   className="line-clamp-3 text-center text-base font-semibold text-[var(--stem)]"
+                  title={journalCardActionEntry.food}
                 >
-                  {journalCardActionEntry.food}
+                  {truncateJournalFoodDisplayLabel(
+                    journalCardActionEntry.food
+                  )}
                 </p>
                 <div className="mt-4 space-y-2">
                   <button
