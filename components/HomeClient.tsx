@@ -1944,7 +1944,7 @@ export function HomeClient({ mode = "dashboard" }: { mode?: "dashboard" | "journ
 
           <motion.section
             key={viewDateKey}
-            className="touch-manipulation bg-transparent px-0 pb-28 pt-1"
+            className="touch-manipulation max-w-full overflow-x-hidden bg-transparent px-0 pb-28 pt-1"
             drag="x"
             dragDirectionLock
             dragConstraints={{ left: 0, right: 0 }}
@@ -1954,7 +1954,7 @@ export function HomeClient({ mode = "dashboard" }: { mode?: "dashboard" | "journ
           >
         {isDayClosed && (
           <div
-            className="-mx-3 mb-4 flex items-start gap-2.5 rounded-2xl border border-[var(--border-cherry-soft)]/70 bg-gradient-to-br from-[var(--cherry-muted)]/25 to-white px-3.5 py-3 shadow-[0_2px_12px_rgba(0,0,0,0.04)]"
+            className="mb-4 flex min-w-0 w-full max-w-full items-start gap-2.5 rounded-2xl border border-[var(--border-cherry-soft)]/70 bg-gradient-to-br from-[var(--cherry-muted)]/25 to-white px-3.5 py-3 shadow-[0_2px_12px_rgba(0,0,0,0.04)]"
             role="status"
           >
             <span className="mt-0.5 shrink-0 text-base opacity-80" aria-hidden>
@@ -1982,7 +1982,7 @@ export function HomeClient({ mode = "dashboard" }: { mode?: "dashboard" | "journ
             )}{" "}
           </p>
         ) : (
-          <ul className="-mx-3 space-y-3" data-dict-rev={dictTick}>
+          <ul className="space-y-3" data-dict-rev={dictTick}>
             {[...entries]
               .sort((a, b) => {
                 const ta = entryTimeHHmm(a.createdAt) || "99:99";
@@ -2022,7 +2022,7 @@ export function HomeClient({ mode = "dashboard" }: { mode?: "dashboard" | "journ
                   transition={{
                     layout: { type: "spring", damping: 28, stiffness: 400 },
                   }}
-                  className={`flex flex-col rounded-xl border-2 border-[var(--border-cherry-soft)] bg-gradient-to-b from-[var(--cherry-muted)]/24 via-white to-white px-3 py-3 shadow-[0_4px_14px_rgba(0,0,0,0.06)] ${isDayClosed ? "opacity-85" : ""}`}
+                  className={`flex min-w-0 w-full max-w-full flex-col rounded-xl border-2 border-[var(--border-cherry-soft)] bg-gradient-to-b from-[var(--cherry-muted)]/24 via-white to-white px-3 py-3 shadow-[0_4px_14px_rgba(0,0,0,0.06)] ${isDayClosed ? "opacity-85" : ""}`}
                 >
                   {/*
                     יומן — כרטיס עם רקע/צל עדין; פעולות (ארוחה · מילון · מחיקה) בשורת הכותרת ללא מסגרות.
