@@ -65,6 +65,7 @@ import { CelebrationConfetti } from "./Fireworks";
 import { useAppVariant } from "./useAppVariant";
 import { QuickWeightModal } from "./QuickWeightModal";
 import { QuickStepsModal } from "./QuickStepsModal";
+import { Pencil } from "lucide-react";
 import {
   IconBookmark,
   IconTrash,
@@ -2103,13 +2104,13 @@ export function HomeClient({ mode = "dashboard" }: { mode?: "dashboard" | "journ
                           />
                           {!isDayClosed ? (
                             <div
-                              className="flex shrink-0 items-center gap-0.5 pt-0.5"
+                              className="flex shrink-0 items-start gap-1 pt-0.5 sm:gap-1.5"
                               role="group"
                               aria-label="פעולות על המנה"
                             >
                               <button
                                 type="button"
-                                className="rounded-md p-1.5 text-[var(--stem)] transition hover:bg-[var(--cherry-muted)]/45"
+                                className="flex min-w-0 flex-col items-center gap-0.5 rounded-md px-1 py-1 text-[var(--stem)] transition hover:bg-[var(--cherry-muted)]/45"
                                 title="סימון כארוחה קבועה במילון הארוחות"
                                 aria-label="ארוחה קבועה — סימון לשמירה כארוחה במילון"
                                 aria-pressed={mealOn}
@@ -2123,10 +2124,13 @@ export function HomeClient({ mode = "dashboard" }: { mode?: "dashboard" | "journ
                                   marked={mealOn}
                                   className={journalToolbarIconClass}
                                 />
+                                <span className="max-w-[3.5rem] text-center text-[10px] font-extrabold leading-none text-[var(--stem)]/90">
+                                  ארוחה
+                                </span>
                               </button>
                               <button
                                 type="button"
-                                className="rounded-md p-1.5 text-[var(--stem)] transition hover:bg-[var(--cherry-muted)]/45"
+                                className="flex min-w-0 flex-col items-center gap-0.5 rounded-md px-1 py-1 text-[var(--stem)] transition hover:bg-[var(--cherry-muted)]/45"
                                 title="שמירה במילון האישי שלי"
                                 aria-label="מילון — שמירת הפריט במילון"
                                 aria-pressed={inDictionary}
@@ -2141,10 +2145,13 @@ export function HomeClient({ mode = "dashboard" }: { mode?: "dashboard" | "journ
                                   filled={inDictionary}
                                   className={journalToolbarIconClass}
                                 />
+                                <span className="max-w-[3.5rem] text-center text-[10px] font-extrabold leading-none text-[var(--stem)]/90">
+                                  מילון
+                                </span>
                               </button>
                               <button
                                 type="button"
-                                className="rounded-md p-1.5 text-red-700 transition hover:bg-red-50/90"
+                                className="flex min-w-0 flex-col items-center gap-0.5 rounded-md px-1 py-1 text-red-700 transition hover:bg-red-50/90"
                                 onClick={(e) => {
                                   e.preventDefault();
                                   e.stopPropagation();
@@ -2154,6 +2161,9 @@ export function HomeClient({ mode = "dashboard" }: { mode?: "dashboard" | "journ
                                 title="מחיקה מהיומן"
                               >
                                 <IconTrash className={journalToolbarIconClass} />
+                                <span className="max-w-[3.5rem] text-center text-[10px] font-extrabold leading-none">
+                                  {gf(gender, "מחקי", "מחק")}
+                                </span>
                               </button>
                             </div>
                           ) : null}
@@ -2196,7 +2206,12 @@ export function HomeClient({ mode = "dashboard" }: { mode?: "dashboard" | "journ
                         ) : (
                           <button
                             type="button"
-                            className="bidi-isolate-rtl rounded px-0.5 text-[var(--stem)] underline decoration-dotted decoration-[var(--stem)]/40 underline-offset-2 transition hover:bg-[var(--cherry-muted)]/45 hover:decoration-[var(--stem)]/70"
+                            title={gf(
+                              gender,
+                              "לחצי כדי לשנות כמות או יחידה",
+                              "לחץ כדי לשנות כמות או יחידה"
+                            )}
+                            className="bidi-isolate-rtl inline-flex items-center gap-1 rounded px-0.5 text-[var(--stem)] underline decoration-dotted decoration-[var(--stem)]/40 underline-offset-2 transition hover:bg-[var(--cherry-muted)]/45 hover:decoration-[var(--stem)]/70"
                             onClick={(e) => {
                               e.preventDefault();
                               e.stopPropagation();
@@ -2204,17 +2219,34 @@ export function HomeClient({ mode = "dashboard" }: { mode?: "dashboard" | "journ
                             }}
                             aria-label={gf(
                               gender,
-                              "עריכת כמות ויחידה",
-                              "עריכת כמות ויחידה"
+                              "עריכת כמות ויחידה — לחיצה לפתיחת עריכה",
+                              "עריכת כמות ויחידה — לחיצה לפתיחת עריכה"
                             )}
                           >
-                            {formatQtyLabel(item.quantity, item.unit)} {item.unit}
+                            <span>
+                              {formatQtyLabel(item.quantity, item.unit)}{" "}
+                              {item.unit}
+                            </span>
+                            <Pencil
+                              className="size-3.5 shrink-0 text-[var(--stem)]/55"
+                              strokeWidth={2.25}
+                              aria-hidden
+                            />
                           </button>
                         )}
                         <span className="bidi-isolate-rtl text-neutral-900">
                           {item.calories} קק״ל
                         </span>
                       </p>
+                      {!isDayClosed ? (
+                        <p className="bidi-isolate-rtl text-[10px] font-semibold leading-tight text-[var(--stem)]/55">
+                          {gf(
+                            gender,
+                            "לחצי על הכמות כדי לערוך",
+                            "לחץ על הכמות כדי לערוך"
+                          )}
+                        </p>
+                      ) : null}
                       <p className="bidi-isolate-rtl text-xs font-normal text-neutral-900">
                         חלבון {formatMacroCell(item.proteinG)}
                         {" · "}
