@@ -117,6 +117,25 @@ function HeaderBarContent({
 export function AppBrandMark() {
   const pathname = usePathname();
   const router = useRouter();
+
+  const [journalStreakTick, setJournalStreakTick] = useState(0);
+  useEffect(() => {
+    const bump = () => setJournalStreakTick((t) => t + 1);
+    window.addEventListener("cj-profile-updated", bump);
+    window.addEventListener("cj-journal-closed-changed", bump);
+    return () => {
+      window.removeEventListener("cj-profile-updated", bump);
+      window.removeEventListener("cj-journal-closed-changed", bump);
+    };
+  }, []);
+
+  const isJournal = pathname === "/journal";
+  const journalHeaderStreak = useMemo(() => {
+    void journalStreakTick;
+    if (!isJournal) return null;
+    return getJournalStreakDays();
+  }, [isJournal, journalStreakTick]);
+
   if (pathname === "/welcome" || pathname === "/pick-theme") return null;
 
   const isHome = pathname === "/";
@@ -164,23 +183,6 @@ export function AppBrandMark() {
     pathname === "/shopping";
   const isDictionary = pathname === "/dictionary";
   const isShopping = pathname === "/shopping";
-  const isJournal = pathname === "/journal";
-
-  const [journalStreakTick, setJournalStreakTick] = useState(0);
-  useEffect(() => {
-    const bump = () => setJournalStreakTick((t) => t + 1);
-    window.addEventListener("cj-profile-updated", bump);
-    window.addEventListener("cj-journal-closed-changed", bump);
-    return () => {
-      window.removeEventListener("cj-profile-updated", bump);
-      window.removeEventListener("cj-journal-closed-changed", bump);
-    };
-  }, []);
-
-  const journalHeaderStreak = useMemo(() => {
-    if (!isJournal) return null;
-    return getJournalStreakDays();
-  }, [isJournal, journalStreakTick]);
 
   return (
     <header

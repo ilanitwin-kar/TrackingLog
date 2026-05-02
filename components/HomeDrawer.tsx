@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import Link from "next/link";
 import { AnimatePresence, motion } from "framer-motion";
 import { useEffect, useRef, useState } from "react";
@@ -152,9 +153,12 @@ export function HomeDrawer({ displayName = "אילנית" }: Props) {
                   title="העלאת תמונת פרופיל"
                 >
                   {avatarUrl ? (
-                    <img
+                    <Image
                       src={avatarUrl}
                       alt=""
+                      width={44}
+                      height={44}
+                      unoptimized
                       className="h-11 w-11 rounded-full border-2 border-[var(--border-cherry-soft)] object-cover"
                     />
                   ) : (

@@ -834,6 +834,7 @@ export function HomeClient({ mode = "dashboard" }: { mode?: "dashboard" | "journ
   );
 
   const weightDue = useMemo(() => {
+    void weightSkipRev;
     if (!profile || !isViewingToday) return false;
     try {
       // Baseline row may be created lazily; do not require it.

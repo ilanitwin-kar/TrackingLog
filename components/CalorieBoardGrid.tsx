@@ -273,7 +273,7 @@ export function CalorieBoardGrid({ profileRev = 0 }: { profileRev?: number }) {
                 <div
                   key={`${dateKey}-${i}`}
                   role="listitem"
-                  aria-disabled
+                  aria-label={`תאריך עתידי ${formatDayMonth(dateKey)} — לא זמין`}
                   tabIndex={-1}
                   className={`${cellShell} ${futureGrey3d}`}
                 >
@@ -312,26 +312,30 @@ export function CalorieBoardGrid({ profileRev = 0 }: { profileRev?: number }) {
             }
 
             return (
-              <motion.button
+              <div
                 key={`${dateKey}-${i}`}
-                type="button"
                 role="listitem"
-                whileTap={{ scale: 0.97 }}
-                transition={{ type: "spring", stiffness: 520, damping: 30 }}
-                aria-pressed={isGold}
-                aria-label={`${formatDayMonth(dateKey)}, גירעון לאחר סגירת יום`}
-                className={commonClass}
-                onClick={() => {
-                  if (isLastSquare && isGold) {
-                    setCelebrationOpen(true);
-                    return;
-                  }
-                  setGoldMap(toggleStoryRevealUnlock(i));
-                }}
+                className="min-w-0 max-w-full shrink-0"
               >
-                {innerTop}
-                {centerBlock}
-              </motion.button>
+                <motion.button
+                  type="button"
+                  whileTap={{ scale: 0.97 }}
+                  transition={{ type: "spring", stiffness: 520, damping: 30 }}
+                  aria-pressed={isGold}
+                  aria-label={`${formatDayMonth(dateKey)}, גירעון לאחר סגירת יום`}
+                  className={`${commonClass} h-full w-full`}
+                  onClick={() => {
+                    if (isLastSquare && isGold) {
+                      setCelebrationOpen(true);
+                      return;
+                    }
+                    setGoldMap(toggleStoryRevealUnlock(i));
+                  }}
+                >
+                  {innerTop}
+                  {centerBlock}
+                </motion.button>
+              </div>
             );
           })}
         </div>

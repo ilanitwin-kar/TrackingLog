@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import Link from "next/link";
 import { AnimatePresence, motion } from "framer-motion";
 import { useRouter } from "next/navigation";
@@ -153,9 +154,12 @@ export function ProfileMenu() {
         onClick={() => setOpen((v) => !v)}
       >
         {avatarUrl ? (
-          <img
+          <Image
             src={avatarUrl}
             alt=""
+            width={32}
+            height={32}
+            unoptimized
             className="h-8 w-8 shrink-0 rounded-full border-2 border-[var(--border-cherry-soft)] object-cover"
           />
         ) : appVariant === "blueberry" ? (
