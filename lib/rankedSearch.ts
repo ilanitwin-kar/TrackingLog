@@ -27,6 +27,32 @@ function mergeRanges(ranges: Array<[number, number]>): Array<[number, number]> {
   return out;
 }
 
+/**
+ * הדגשה בתוצאות בלבד — רק מחרוזת החיפוש כפי שנכתבה (רצף רציף), ללא קשר ל-Fuse.
+ * אם אין הופעה ליטראלית במחרוזת, לא מגיעים טווחים (ללא סימון מטעה).
+ */
+export function literalQueryHighlightRanges(
+  displayText: string,
+  query: string
+): MatchRange[] {
+  const q = query.trim();
+  if (q.length < 2) return [];
+  const qlen = q.length;
+  const needleLower = q.toLowerCase();
+  const haystack = displayText;
+  const ranges: Array<[number, number]> = [];
+  let i = 0;
+  while (i <= haystack.length - qlen) {
+    if (haystack.slice(i, i + qlen).toLowerCase() === needleLower) {
+      ranges.push([i, i + qlen - 1]);
+      i += qlen;
+    } else {
+      i += 1;
+    }
+  }
+  return mergeRanges(ranges);
+}
+
 export function rankedFuzzySearchByText<T>(
   items: T[],
   query: string,
@@ -55,7 +81,7 @@ export function rankedFuzzySearchByText<T>(
     if (t.startsWith(q)) {
       prefix.push({
         item: m.item,
-        ranges: [[0, Math.max(0, q.length - 1)]],
+        ranges: literalQueryHighlightRanges(m.text, query),
         isPrefix: true,
       });
     }
@@ -93,12 +119,10 @@ export function rankedFuzzySearchByText<T>(
   for (const r of fuzzyRes) {
     const key = r.item.key;
     if (seen.has(key)) continue;
-    const match = r.matches?.find((m) => m.key === "text");
-    const ranges = mergeRanges((match?.indices ?? []).map((x) => [x[0], x[1]]));
     pushHit(
       {
         item: r.item.item,
-        ranges,
+        ranges: literalQueryHighlightRanges(r.item.text, query),
         isPrefix: false,
       },
       key

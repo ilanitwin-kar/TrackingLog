@@ -1716,7 +1716,7 @@ export default function DictionaryPage() {
                   )}
           </p>
         ) : (
-          <ul className="notebook-list space-y-2">
+          <ul className="notebook-list -mx-3 space-y-2">
             {visibleSaved.map((d) => {
               const preset =
                 d.mealPresetId != null
