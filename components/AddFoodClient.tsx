@@ -15,6 +15,10 @@ import { BarcodeScanModal } from "@/components/BarcodeScanModal";
 import { IconCaption } from "@/components/IconCaption";
 import { IconPlusCircle, IconScanBarcode, IconVerified } from "@/components/Icons";
 import { getTodayKey } from "@/lib/dateKey";
+import {
+  parseMealSlotParam,
+  withMealSlotFromQuery,
+} from "@/lib/journalMeals";
 import { type HomeSuggestRow, sortHomeLocalRows } from "@/lib/foodSearchShared";
 import { optionalMacroGram } from "@/lib/macroGrams";
 import { SEARCH_DEBOUNCE_MS } from "@/lib/searchDebounce";
@@ -368,6 +372,14 @@ export function AddFoodClient({
   const searchParams = useSearchParams();
   const dateKey = resolveDateKey(searchParams.get("date"));
   const from = searchParams.get("from") ?? "";
+  const mealSlotFromQuery = useMemo(
+    () => parseMealSlotParam(searchParams.get("mealSlot")),
+    [searchParams]
+  );
+
+  function attachMealSlot(entry: LogEntry): LogEntry {
+    return withMealSlotFromQuery(entry, mealSlotFromQuery);
+  }
 
   const [food, setFood] = useState("");
 
@@ -604,7 +616,7 @@ export function AddFoodClient({
     if (includeDictionary) {
       upsertDictionaryFromAiMeal(cleanName, r.totals);
     }
-    const entry: LogEntry = {
+    const entry: LogEntry = attachMealSlot({
       id: uid(),
       food: cleanName,
       calories: Math.max(0, Math.round(r.totals.calories)),
@@ -618,7 +630,7 @@ export function AddFoodClient({
       proteinG: r.totals.protein,
       carbsG: r.totals.carbs,
       fatG: r.totals.fat,
-    };
+    });
     const existing = getEntriesForDate(dateKey);
     saveDayLogEntries(dateKey, [entry, ...existing]);
     setAiPending(null);
@@ -1105,7 +1117,7 @@ export function AddFoodClient({
     const row = pickModalRow;
     const srv = resolvePickServing();
     const m = macrosFromPickRow(row, srv.totalG);
-    const entry: LogEntry = {
+    const entry: LogEntry = attachMealSlot({
       id: uid(),
       food: row.name.trim(),
       calories: m.kcal,
@@ -1117,7 +1129,7 @@ export function AddFoodClient({
       proteinG: m.proteinG,
       carbsG: m.carbsG,
       fatG: m.fatG,
-    };
+    });
     const existing = getEntriesForDate(dateKey);
     saveDayLogEntries(dateKey, [entry, ...existing]);
     saveFoodMemoryKey(row.name.trim(), srv.qty, srv.unit, srv.gramsPerUnit);
@@ -1156,7 +1168,7 @@ export function AddFoodClient({
       fatPer100g: m.f100,
       gramsPerUnit: srv.gramsPerUnit,
     });
-    const entry: LogEntry = {
+    const entry: LogEntry = attachMealSlot({
       id: uid(),
       food: row.name.trim(),
       calories: m.kcal,
@@ -1168,7 +1180,7 @@ export function AddFoodClient({
       proteinG: m.proteinG,
       carbsG: m.carbsG,
       fatG: m.fatG,
-    };
+    });
     const existing = getEntriesForDate(dateKey);
     saveDayLogEntries(dateKey, [entry, ...existing]);
     saveFoodMemoryKey(row.name.trim(), srv.qty, srv.unit, srv.gramsPerUnit);
@@ -1285,7 +1297,7 @@ export function AddFoodClient({
     const kcal = Math.max(1, Math.round(c100 * factor));
     setManLoading(true);
     try {
-      const entry: LogEntry = {
+      const entry: LogEntry = attachMealSlot({
         id: uid(),
         food: name,
         calories: kcal,
@@ -1297,7 +1309,7 @@ export function AddFoodClient({
         proteinG: optionalMacroGram(protein100 > 0 ? protein100 * factor : undefined),
         carbsG: optionalMacroGram(carbs100 > 0 ? carbs100 * factor : undefined),
         fatG: optionalMacroGram(fat100 > 0 ? fat100 * factor : undefined),
-      };
+      });
       const existing = getEntriesForDate(dateKey);
       saveDayLogEntries(dateKey, [entry, ...existing]);
       upsertDictionaryFromScan({
@@ -1377,7 +1389,7 @@ export function AddFoodClient({
     const factor = gramsTotal > 0 ? gramsTotal / 100 : qty / 100;
     const calories = Math.max(1, Math.round(per100 * factor));
 
-    const entry: LogEntry = {
+    const entry: LogEntry = attachMealSlot({
       id: uid(),
       food: row.name.trim(),
       calories,
@@ -1388,7 +1400,7 @@ export function AddFoodClient({
       ...(row.protein != null ? { proteinG: Math.round(row.protein * factor * 10) / 10 } : {}),
       ...(row.carbs != null ? { carbsG: Math.round(row.carbs * factor * 10) / 10 } : {}),
       ...(row.fat != null ? { fatG: Math.round(row.fat * factor * 10) / 10 } : {}),
-    };
+    });
     const existing = getEntriesForDate(dateKey);
     saveDayLogEntries(dateKey, [entry, ...existing]);
     rememberFoodPick(row);

@@ -31,7 +31,10 @@ function resolveAddFoodDateKey(
   dateParam: string | null
 ): string {
   const today = getTodayKey();
-  if (pathname === "/" && dateParam && /^\d{4}-\d{2}-\d{2}$/.test(dateParam)) {
+  const usesDateParam =
+    pathname === "/" ||
+    pathname === "/journal";
+  if (usesDateParam && dateParam && /^\d{4}-\d{2}-\d{2}$/.test(dateParam)) {
     if (dateParam <= today) return dateParam;
   }
   return resolveJournalTargetDateKey({ allowFuture: true });

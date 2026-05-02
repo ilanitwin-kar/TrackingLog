@@ -1,4 +1,6 @@
 import { addDaysToDateKey, getTodayKey } from "./dateKey";
+import type { JournalMealSlot } from "./journalMeals";
+import { normalizeStoredMealSlot } from "./journalMeals";
 import type { ActivityLevel, Gender, NutritionGoal } from "./tdee";
 import { getAppVariant } from "./appVariant";
 import { getFirebaseCurrentUser } from "@/lib/firebaseUserAuth";
@@ -55,6 +57,8 @@ export type LogEntry = {
   aiMeal?: boolean;
   /** פירוט חישוב של ה-AI (JSON) להצגה באקורדיון */
   aiBreakdownJson?: string;
+  /** מקטע ארוחה — יומן לפי ארוחות (נסיון) */
+  mealSlot?: JournalMealSlot;
 };
 
 export type MealPresetComponent = {
@@ -555,11 +559,16 @@ export function loadDayLogs(): DayLogsMap {
     for (const [dateKey, list] of Object.entries(parsed)) {
       if (!Array.isArray(list)) continue;
       out[dateKey] = list.map((e) => {
-        const { meal, ...rest } = e as LogEntry & { meal?: unknown };
+        const { meal, mealSlot: rawSlot, ...rest } = e as LogEntry & {
+          meal?: unknown;
+          mealSlot?: unknown;
+        };
         void meal;
+        const mealSlot = normalizeStoredMealSlot(rawSlot);
         return {
           ...rest,
           unit: normalizeFoodUnit(String(e.unit)),
+          ...(mealSlot ? { mealSlot } : {}),
         };
       });
     }
@@ -825,6 +834,34 @@ export function toggleDictionaryFromEntry(entry: LogEntry): DictionaryItem[] {
   return items;
 }
 
+/** מוסיף פריט מהיומן למילון האישי רק אם אין כבר רשומה עם אותו שם מזון מנורמל */
+export function addDictionaryFromJournalEntryIfAbsent(entry: LogEntry): boolean {
+  const items = loadDictionary();
+  const n = normalizeFoodKey(entry.food);
+  if (items.some((d) => normalizeFoodKey(d.food) === n)) return false;
+  const row: DictionaryItem = {
+    id: `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
+    food: entry.food,
+    quantity: entry.quantity,
+    unit: normalizeFoodUnit(String(entry.unit)),
+    lastCalories: entry.calories,
+    source: "journal",
+    ...(entry.proteinG != null && Number.isFinite(entry.proteinG)
+      ? { lastProteinG: entry.proteinG }
+      : {}),
+    ...(entry.carbsG != null && Number.isFinite(entry.carbsG)
+      ? { lastCarbsG: entry.carbsG }
+      : {}),
+    ...(entry.fatG != null && Number.isFinite(entry.fatG)
+      ? { lastFatG: entry.fatG }
+      : {}),
+    ...nutritionPer100gFromJournalGramEntry(entry),
+  };
+  items.push(row);
+  saveDictionary(items);
+  return true;
+}
+
 export function removeDictionaryItem(id: string): DictionaryItem[] {
   const items = loadDictionary();
   const victim = items.find((d) => d.id === id);
@@ -923,6 +960,55 @@ export function getMealPresetIdFromJournalEntry(e: LogEntry): string | null {
       j.presetId.length > 0
     ) {
       return j.presetId;
+    }
+  } catch {
+    /* ignore */
+  }
+  return null;
+}
+
+/** פירוט ארוחה שמורה בשורת יומן (מ־aiBreakdownJson מסוג meal-preset) */
+export function getJournalMealPresetBreakdown(e: LogEntry): {
+  presetId: string;
+  name: string;
+  components: MealPresetComponent[];
+} | null {
+  if (typeof e.aiBreakdownJson !== "string" || !e.aiBreakdownJson.trim()) {
+    return null;
+  }
+  try {
+    const j = JSON.parse(e.aiBreakdownJson) as {
+      type?: string;
+      presetId?: string;
+      name?: string;
+      components?: MealPresetComponent[];
+    };
+    if (
+      j?.type === "meal-preset" &&
+      typeof j.presetId === "string" &&
+      j.presetId.length > 0 &&
+      Array.isArray(j.components)
+    ) {
+      const name =
+        typeof j.name === "string" && j.name.trim()
+          ? j.name.trim()
+          : e.food.trim();
+      return {
+        presetId: j.presetId,
+        name,
+        components: j.components.map((raw) => {
+          const c = raw as MealPresetComponent;
+          return {
+            food: String(c.food ?? ""),
+            quantity: Number(c.quantity) || 0,
+            unit: normalizeFoodUnit(String(c.unit)),
+            calories: Number(c.calories) || 0,
+            proteinG: c.proteinG,
+            carbsG: c.carbsG,
+            fatG: c.fatG,
+          };
+        }),
+      };
     }
   } catch {
     /* ignore */
@@ -1426,6 +1512,13 @@ export function loadMealPresets(): MealPreset[] {
   }
 }
 
+/** האם כבר קיימת ארוחה שמורה עם אותו שם (נירמול כמו למילון) */
+export function isMealPresetNameTaken(rawName: string): boolean {
+  const k = normalizeFoodKey(rawName);
+  if (!k) return false;
+  return loadMealPresets().some((p) => normalizeFoodKey(p.name) === k);
+}
+
 export function saveMealPresets(presets: MealPreset[], opts?: { skipCloud?: boolean }): void {
   localStorage.setItem(KEYS.mealPresets, JSON.stringify(presets));
   if (!opts?.skipCloud) {
@@ -1468,26 +1561,40 @@ export function deleteMealPreset(id: string): MealPreset[] {
 }
 
 /** הוספת ארוחה כ"רשומה אחת" ליומן היום (למעלה) */
-export function applyMealPresetToToday(preset: MealPreset): LogEntry[] {
-  const dateKey = getTodayKey();
-  const existing = getTodayEntries();
-  const sumCalories = preset.components.reduce((s, c) => s + (Number.isFinite(c.calories) ? c.calories : 0), 0);
-  const sumProtein = preset.components.reduce((s, c) => s + (Number.isFinite(c.proteinG) ? (c.proteinG ?? 0) : 0), 0);
-  const sumCarbs = preset.components.reduce((s, c) => s + (Number.isFinite(c.carbsG) ? (c.carbsG ?? 0) : 0), 0);
-  const sumFat = preset.components.reduce((s, c) => s + (Number.isFinite(c.fatG) ? (c.fatG ?? 0) : 0), 0);
+/** רשומת יומן אחת המייצגת ארוחה שמורה (מילון / preset) */
+export function logEntryFromMealPreset(
+  preset: MealPreset,
+  opts?: { createdAt?: string; mealSlot?: JournalMealSlot }
+): LogEntry {
+  const sumCalories = preset.components.reduce(
+    (s, c) => s + (Number.isFinite(c.calories) ? c.calories : 0),
+    0
+  );
+  const sumProtein = preset.components.reduce(
+    (s, c) => s + (Number.isFinite(c.proteinG) ? (c.proteinG ?? 0) : 0),
+    0
+  );
+  const sumCarbs = preset.components.reduce(
+    (s, c) => s + (Number.isFinite(c.carbsG) ? (c.carbsG ?? 0) : 0),
+    0
+  );
+  const sumFat = preset.components.reduce(
+    (s, c) => s + (Number.isFinite(c.fatG) ? (c.fatG ?? 0) : 0),
+    0
+  );
 
-  const entry: LogEntry = {
+  return {
     id: makeId(),
     food: preset.name,
     calories: Math.max(1, Math.round(sumCalories)),
     quantity: 1,
     unit: "יחידה",
-    createdAt: new Date().toISOString(),
+    createdAt: opts?.createdAt ?? new Date().toISOString(),
     mealStarred: false,
     ...(sumProtein > 0 ? { proteinG: Math.round(sumProtein * 10) / 10 } : {}),
     ...(sumCarbs > 0 ? { carbsG: Math.round(sumCarbs * 10) / 10 } : {}),
     ...(sumFat > 0 ? { fatG: Math.round(sumFat * 10) / 10 } : {}),
-    // לא מציגים רכיבים כרשומות נפרדות, אבל שומרים פירוט אם נרצה להציג/לשחזר בעתיד
+    ...(opts?.mealSlot ? { mealSlot: opts.mealSlot } : {}),
     aiBreakdownJson: JSON.stringify({
       type: "meal-preset",
       presetId: preset.id,
@@ -1495,7 +1602,12 @@ export function applyMealPresetToToday(preset: MealPreset): LogEntry[] {
       components: preset.components,
     }),
   };
+}
 
+export function applyMealPresetToToday(preset: MealPreset): LogEntry[] {
+  const dateKey = getTodayKey();
+  const existing = getTodayEntries();
+  const entry = logEntryFromMealPreset(preset);
   const merged = [entry, ...existing];
   saveDayLogEntries(dateKey, merged);
   return merged;
