@@ -17,6 +17,7 @@ import {
 import { getTodayKey } from "@/lib/dateKey";
 import { loadRecipes, removeRecipe, type RecipeIngredient, type SavedRecipe } from "@/lib/recipeStorage";
 import { loadRecipesFromCloud } from "@/lib/recipeCloud";
+import { DictionarySwipeDeleteRow } from "@/components/DictionarySwipeDeleteRow";
 
 const fontFood =
   "font-[Calibri,'Segoe_UI','Helvetica_Neue',system-ui,sans-serif]";
@@ -214,18 +215,44 @@ export default function MyRecipesPage() {
               const per100 = per100FromRecipe(r);
               const isOpen = openId === r.id;
               return (
-                <li key={r.id} className="rounded-2xl border-2 border-[var(--border-cherry-soft)] bg-white p-3">
-                  <button type="button" className="w-full text-start" onClick={() => setOpenId((x) => (x === r.id ? null : r.id))}>
-                    <div className="flex items-start justify-between gap-2">
-                      <div className="min-w-0 flex-1">
-                        <p className="break-words text-base font-extrabold text-[var(--stem)]">{r.title}</p>
-                        <p className="mt-1 text-xs text-[var(--stem)]/65">
-                          מרכיבים: {r.ingredients.length} · משקל סופי: {finalW}g · ל־100ג׳ {per100.calories} קק״ל
-                        </p>
-                      </div>
-                      <span className="shrink-0 text-xs font-bold text-[var(--stem)]/55">{isOpen ? "▲" : "▼"}</span>
+                <li key={r.id}>
+                  <DictionarySwipeDeleteRow
+                    onDelete={() => {
+                      setRecipes((prev) => prev.filter((x) => x.id !== r.id));
+                      setOpenId((x) => (x === r.id ? null : x));
+                      setShareId((x) => (x === r.id ? null : x));
+                      removeRecipe(r.id);
+                    }}
+                  >
+                  <div className="rounded-2xl border-2 border-[var(--border-cherry-soft)] bg-white p-3">
+                  <div className="flex items-start justify-between gap-2">
+                    <div
+                      role="button"
+                      tabIndex={0}
+                      className="min-w-0 flex-1 cursor-pointer rounded-xl text-start"
+                      onClick={() => setOpenId((x) => (x === r.id ? null : r.id))}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" || e.key === " ") {
+                          e.preventDefault();
+                          setOpenId((x) => (x === r.id ? null : r.id));
+                        }
+                      }}
+                    >
+                      <p className="break-words text-base font-extrabold text-[var(--stem)]">{r.title}</p>
+                      <p className="mt-1 text-xs text-[var(--stem)]/65">
+                        מרכיבים: {r.ingredients.length} · משקל סופי: {finalW}g · ל־100ג׳ {per100.calories} קק״ל
+                      </p>
                     </div>
-                  </button>
+                    <button
+                      type="button"
+                      data-dict-no-swipe
+                      className="shrink-0 rounded-lg px-2 py-1 text-xs font-bold text-[var(--stem)]/55"
+                      aria-expanded={isOpen}
+                      onClick={() => setOpenId((x) => (x === r.id ? null : r.id))}
+                    >
+                      {isOpen ? "▲" : "▼"}
+                    </button>
+                  </div>
 
                   <AnimatePresence>
                     {isOpen && (
@@ -243,7 +270,7 @@ export default function MyRecipesPage() {
                           ל־100ג׳: <span className="font-extrabold text-[var(--cherry)]">{per100.calories}</span> קק״ל · ח {per100.protein} · פח {per100.carbs} · ש {per100.fat}
                         </p>
 
-                        <div className="mt-3 rounded-2xl border border-[var(--border-cherry-soft)] bg-[var(--cherry-muted)]/40 p-3">
+                        <div className="mt-3 rounded-2xl border border-[var(--border-cherry-soft)] bg-[var(--cherry-muted)]/40 p-3" data-dict-no-swipe>
                           <p className="text-sm font-extrabold text-[var(--stem)]">מחשבון מנה</p>
                           <label className="mt-2 block">
                             <span className="mb-1 block text-xs font-semibold text-[var(--cherry)]">גרם למנה</span>
@@ -266,7 +293,7 @@ export default function MyRecipesPage() {
                           )}
                         </div>
 
-                        <div className="mt-3 grid grid-cols-2 gap-2">
+                        <div className="mt-3 grid grid-cols-2 gap-2" data-dict-no-swipe>
                           <button
                             type="button"
                             className="rounded-xl bg-[var(--stem)] px-4 py-3 text-xs font-extrabold text-white disabled:opacity-50"
@@ -296,20 +323,9 @@ export default function MyRecipesPage() {
                           >
                             שתף מתכון (PDF/ווטסאפ/מייל)
                           </button>
-                          <button
-                            type="button"
-                            className="col-span-2 rounded-xl border-2 border-red-300/70 bg-white px-4 py-3 text-xs font-extrabold text-red-800 hover:bg-red-50"
-                            onClick={() => {
-                              setRecipes((prev) => prev.filter((x) => x.id !== r.id));
-                              if (openId === r.id) setOpenId(null);
-                              removeRecipe(r.id);
-                            }}
-                          >
-                            מחק מתכון
-                          </button>
                         </div>
 
-                        <details className="mt-3 rounded-2xl border border-[var(--border-cherry-soft)] bg-white px-3 py-2">
+                        <details className="mt-3 rounded-2xl border border-[var(--border-cherry-soft)] bg-white px-3 py-2" data-dict-no-swipe>
                           <summary className="cursor-pointer text-sm font-extrabold text-[var(--stem)]">
                             מרכיבים
                           </summary>
@@ -324,6 +340,8 @@ export default function MyRecipesPage() {
                       </motion.div>
                     )}
                   </AnimatePresence>
+                  </div>
+                  </DictionarySwipeDeleteRow>
                 </li>
               );
             })}
