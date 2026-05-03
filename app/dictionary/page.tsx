@@ -8,9 +8,11 @@ import {
   useMemo,
   useRef,
   useState,
+  type Dispatch,
   type MouseEvent,
   type PointerEvent,
   type ReactNode,
+  type SetStateAction,
 } from "react";
 import { flushSync } from "react-dom";
 import {
@@ -35,12 +37,18 @@ import {
 import { useDocumentScrollOnlyIfOverflowing } from "@/lib/useDocumentScrollOnlyIfOverflowing";
 import Link from "next/link";
 import { ChevronDown, Circle, Droplet, MoreVertical, Zap } from "lucide-react";
+import type { Gender } from "@/lib/tdee";
 import { rankedFuzzySearchByText, type MatchRange } from "@/lib/rankedSearch";
 import {
   firstWordStrongPrefixMatch,
   matchesAllQueryWords,
 } from "@/lib/foodSearchRules";
 import { truncateDisplayFoodLabel } from "@/lib/displayFoodLabel";
+import {
+  LONG_PRESS_DELETE_RIGHT_DX,
+  LONG_PRESS_MS,
+  shouldCancelLongPressForSwipeDelete,
+} from "@/lib/longPressSwipeDelete";
 
 const fontFood =
   "font-[Calibri,'Segoe_UI','Helvetica_Neue',system-ui,sans-serif]";
@@ -56,8 +64,6 @@ type ExplorerFoodRow = {
   brand?: string;
 };
 
-const DICT_LONG_PRESS_MS = 520;
-const DICT_LONG_PRESS_CANCEL_DIST2 = 100;
 
 type DictLetterGroup = { key: string; label: string; items: DictionaryItem[] };
 
@@ -226,6 +232,238 @@ function dominantDictMacro(
   return "fat";
 }
 
+type DictMacroFilterKind = "protein" | "carbs" | "fat";
+
+function parseDictMacroBound(s: string): number | null {
+  const t = s.trim();
+  if (t === "") return null;
+  const n = parseFloat(t.replace(",", "."));
+  return Number.isFinite(n) ? n : null;
+}
+
+/** ערך מאקרו לסינון — ג׳ ל־100 ג׳: קודם שדות per100g, אחרת מ־last*G וכמות */
+function dictMacroPer100ForFilter(
+  d: DictionaryItem,
+  macro: DictMacroFilterKind
+): number | null {
+  const per100 =
+    macro === "protein"
+      ? d.proteinPer100g
+      : macro === "carbs"
+        ? d.carbsPer100g
+        : d.fatPer100g;
+  if (per100 != null && Number.isFinite(per100)) return Math.max(0, per100);
+
+  const lastG =
+    macro === "protein"
+      ? d.lastProteinG
+      : macro === "carbs"
+        ? d.lastCarbsG
+        : d.lastFatG;
+  if (lastG == null || !Number.isFinite(lastG)) return null;
+
+  if (d.unit === "גרם") {
+    const g = clampGramQty(Number(d.quantity));
+    return Math.max(0, (lastG / g) * 100);
+  }
+  if (
+    d.unit === "יחידה" &&
+    d.gramsPerUnit != null &&
+    Number.isFinite(d.gramsPerUnit) &&
+    d.gramsPerUnit > 0
+  ) {
+    const totalG = Math.max(1e-9, d.quantity * d.gramsPerUnit);
+    return Math.max(0, (lastG / totalG) * 100);
+  }
+  return null;
+}
+
+function passesDictMacroFilters(
+  d: DictionaryItem,
+  range: {
+    proteinMin: string;
+    proteinMax: string;
+    carbsMin: string;
+    carbsMax: string;
+    fatMin: string;
+    fatMax: string;
+  }
+): boolean {
+  const checks: Array<[DictMacroFilterKind, string, string]> = [
+    ["protein", range.proteinMin, range.proteinMax],
+    ["carbs", range.carbsMin, range.carbsMax],
+    ["fat", range.fatMin, range.fatMax],
+  ];
+  for (const [macro, minS, maxS] of checks) {
+    const lo = parseDictMacroBound(minS);
+    const hi = parseDictMacroBound(maxS);
+    if (lo == null && hi == null) continue;
+    const v = dictMacroPer100ForFilter(d, macro);
+    if (v == null) return false;
+    if (lo != null && v < lo) return false;
+    if (hi != null && v > hi) return false;
+  }
+  return true;
+}
+
+type DictMacroRangeState = {
+  proteinMin: string;
+  proteinMax: string;
+  carbsMin: string;
+  carbsMax: string;
+  fatMin: string;
+  fatMax: string;
+};
+
+/** תוכן פאנל מאקרו יחיד — רק סוג אחד ברגע נתון */
+function DictMacroFilterPanelFields({
+  kind,
+  dictMacroRange,
+  setDictMacroRange,
+  gender,
+}: {
+  kind: DictMacroFilterKind;
+  dictMacroRange: DictMacroRangeState;
+  setDictMacroRange: Dispatch<SetStateAction<DictMacroRangeState>>;
+  gender: Gender;
+}) {
+  const inputCls =
+    "rounded-lg border-2 border-[var(--border-cherry-soft)] bg-white px-2 py-1.5 text-sm font-semibold text-[var(--stem)] shadow-sm";
+  switch (kind) {
+    case "protein":
+      return (
+        <div className="space-y-2">
+          <p className="text-[11px] leading-snug text-[var(--stem)]/75">
+            {gf(
+              gender,
+              "הרשימה מציגה רק פריטים שבהן חלבון דומיננטי — כמו האייקון ליד השם.",
+              "הרשימה מציגה רק פריטים שבהם חלבון דומיננטי — כמו האייקון ליד השם."
+            )}
+          </p>
+          <div className="flex flex-wrap items-end gap-2 sm:gap-3">
+          <span className="mb-0.5 w-full text-xs font-extrabold text-[var(--stem)] sm:mb-0 sm:w-auto sm:min-w-[9rem]">
+            חלבון (ג׳ ל־100 ג׳)
+          </span>
+          <label className="flex min-w-[6.5rem] flex-1 flex-col gap-0.5 text-[11px] font-bold text-[var(--stem)]/80">
+            מינימום
+            <input
+              type="text"
+              inputMode="decimal"
+              autoComplete="off"
+              className={inputCls}
+              value={dictMacroRange.proteinMin}
+              onChange={(e) =>
+                setDictMacroRange((r) => ({ ...r, proteinMin: e.target.value }))
+              }
+            />
+          </label>
+          <label className="flex min-w-[6.5rem] flex-1 flex-col gap-0.5 text-[11px] font-bold text-[var(--stem)]/80">
+            מקסימום
+            <input
+              type="text"
+              inputMode="decimal"
+              autoComplete="off"
+              className={inputCls}
+              value={dictMacroRange.proteinMax}
+              onChange={(e) =>
+                setDictMacroRange((r) => ({ ...r, proteinMax: e.target.value }))
+              }
+            />
+          </label>
+        </div>
+        </div>
+      );
+    case "carbs":
+      return (
+        <div className="space-y-2">
+          <p className="text-[11px] leading-snug text-[var(--stem)]/75">
+            {gf(
+              gender,
+              "הרשימה מציגה רק פריטים שבהן פחמימה דומיננטית — כמו האייקון ליד השם.",
+              "הרשימה מציגה רק פריטים שבהם פחמימה דומיננטית — כמו האייקון ליד השם."
+            )}
+          </p>
+          <div className="flex flex-wrap items-end gap-2 sm:gap-3">
+          <span className="mb-0.5 w-full text-xs font-extrabold text-[var(--stem)] sm:mb-0 sm:w-auto sm:min-w-[9rem]">
+            פחמימה (ג׳ ל־100 ג׳)
+          </span>
+          <label className="flex min-w-[6.5rem] flex-1 flex-col gap-0.5 text-[11px] font-bold text-[var(--stem)]/80">
+            מינימום
+            <input
+              type="text"
+              inputMode="decimal"
+              autoComplete="off"
+              className={inputCls}
+              value={dictMacroRange.carbsMin}
+              onChange={(e) =>
+                setDictMacroRange((r) => ({ ...r, carbsMin: e.target.value }))
+              }
+            />
+          </label>
+          <label className="flex min-w-[6.5rem] flex-1 flex-col gap-0.5 text-[11px] font-bold text-[var(--stem)]/80">
+            מקסימום
+            <input
+              type="text"
+              inputMode="decimal"
+              autoComplete="off"
+              className={inputCls}
+              value={dictMacroRange.carbsMax}
+              onChange={(e) =>
+                setDictMacroRange((r) => ({ ...r, carbsMax: e.target.value }))
+              }
+            />
+          </label>
+        </div>
+        </div>
+      );
+    case "fat":
+      return (
+        <div className="space-y-2">
+          <p className="text-[11px] leading-snug text-[var(--stem)]/75">
+            {gf(
+              gender,
+              "הרשימה מציגה רק פריטים שבהן שומן דומיננטי — כמו האייקון ליד השם.",
+              "הרשימה מציגה רק פריטים שבהם שומן דומיננטי — כמו האייקון ליד השם."
+            )}
+          </p>
+          <div className="flex flex-wrap items-end gap-2 sm:gap-3">
+          <span className="mb-0.5 w-full text-xs font-extrabold text-[var(--stem)] sm:mb-0 sm:w-auto sm:min-w-[9rem]">
+            שומן (ג׳ ל־100 ג׳)
+          </span>
+          <label className="flex min-w-[6.5rem] flex-1 flex-col gap-0.5 text-[11px] font-bold text-[var(--stem)]/80">
+            מינימום
+            <input
+              type="text"
+              inputMode="decimal"
+              autoComplete="off"
+              className={inputCls}
+              value={dictMacroRange.fatMin}
+              onChange={(e) =>
+                setDictMacroRange((r) => ({ ...r, fatMin: e.target.value }))
+              }
+            />
+          </label>
+          <label className="flex min-w-[6.5rem] flex-1 flex-col gap-0.5 text-[11px] font-bold text-[var(--stem)]/80">
+            מקסימום
+            <input
+              type="text"
+              inputMode="decimal"
+              autoComplete="off"
+              className={inputCls}
+              value={dictMacroRange.fatMax}
+              onChange={(e) =>
+                setDictMacroRange((r) => ({ ...r, fatMax: e.target.value }))
+              }
+            />
+          </label>
+        </div>
+        </div>
+      );
+    default:
+      return null;
+  }
+}
+
 /** חלבון — נתיבי Twemoji 💪 (U+1F4AA), CC-BY 4.0; צבע/זוהר מ־DictDominantMacroGlyph */
 function DictMacroProteinLensIcon({ className }: { className?: string }) {
   return (
@@ -376,10 +614,14 @@ function fmtMacroG(n: number | undefined): string {
   return n.toFixed(1);
 }
 
-/** מאקרו בכרטיס מוצר נפתח במילון — שם + מספר באותו צבע */
-const DICT_CARD_MACRO_P = "font-semibold text-[#F5C518]";
-const DICT_CARD_MACRO_C = "font-semibold text-[#3B82F6]";
-const DICT_CARD_MACRO_F = "font-semibold text-[#22C55E]";
+function pointerEventTargetElement(
+  e: { target: EventTarget | null }
+): Element | null {
+  const t = e.target;
+  if (t instanceof Element) return t;
+  if (t instanceof Text && t.parentElement) return t.parentElement;
+  return null;
+}
 
 /** נשמר מהיומן (או רשומה ישנה בלי source) — מציגים רק את המנה שנרשמה */
 function isDictionaryFromJournal(d: DictionaryItem): boolean {
@@ -399,6 +641,107 @@ function dictionaryPortionRedundantWithPer100(d: DictionaryItem): boolean {
     return false;
   }
   return Math.round(d.lastCalories) === Math.round(d.caloriesPer100g);
+}
+
+const DICT_COMPACT_PEEK_CLASS =
+  "text-base font-medium leading-relaxed text-neutral-950";
+
+/** שורת מאקרו קומפקטית ליד השם — דסקטופ: נראה ב־hover; מגע: תמיד */
+function DictRowCompactMacroPeek({
+  d,
+  preset,
+  isMeal,
+  isOpen,
+}: {
+  d: DictionaryItem;
+  preset: MealPreset | undefined;
+  isMeal: boolean;
+  isOpen: boolean;
+}): ReactNode {
+  if (isOpen) return null;
+
+  if (isMeal && preset) {
+    const s = sumPresetTotals(preset);
+    return (
+      <p className={DICT_COMPACT_PEEK_CLASS}>
+        <span className="font-semibold">
+          סה״כ ארוחה: {Math.round(s.kcal)} קק״ל
+        </span>
+        {" · "}
+        ח׳ {s.protein.toFixed(1)} · פ׳ {s.carbs.toFixed(1)} · ש׳ {s.fat.toFixed(1)}{" "}
+        ג׳
+      </p>
+    );
+  }
+
+  const fromJournal = isDictionaryFromJournal(d);
+  const hasK100 =
+    d.caloriesPer100g != null && Number.isFinite(d.caloriesPer100g);
+  const showPer100 = hasK100 && !fromJournal;
+  const redundant = dictionaryPortionRedundantWithPer100(d);
+  const hasPortion =
+    d.lastCalories != null ||
+    d.lastProteinG != null ||
+    d.lastCarbsG != null ||
+    d.lastFatG != null;
+  const showPortionLine = hasPortion && (fromJournal || !redundant);
+
+  if (!showPer100 && !showPortionLine) return null;
+
+  return (
+    <p className={DICT_COMPACT_PEEK_CLASS}>
+      {showPer100 ? (
+        <>
+          <span className="font-semibold">
+            ל־100 ג׳: {Math.round(d.caloriesPer100g!)} קק״ל
+          </span>
+          {d.proteinPer100g != null &&
+          d.carbsPer100g != null &&
+          d.fatPer100g != null ? (
+            <>
+              {" · "}
+              ח׳ {d.proteinPer100g.toFixed(1)} · פ׳ {d.carbsPer100g.toFixed(1)} ·
+              ש׳ {d.fatPer100g.toFixed(1)} ג׳
+            </>
+          ) : null}
+        </>
+      ) : null}
+      {showPer100 && showPortionLine ? (
+        <span className="text-neutral-950" aria-hidden>
+          {" "}
+          ·{" "}
+        </span>
+      ) : null}
+      {showPortionLine ? (
+        <>
+          <span className="font-semibold">
+            {fromJournal ? "מנה" : "למנה"} (
+            <span className="bidi-isolate-rtl inline-block">
+              {d.quantity} {d.unit}
+              {d.unit === "יחידה" &&
+              d.gramsPerUnit != null &&
+              d.gramsPerUnit > 0
+                ? ` · ${d.gramsPerUnit} ג׳ ליחידה`
+                : ""}
+            </span>
+            ):{" "}
+            {d.lastCalories != null
+              ? `${Math.round(d.lastCalories)} קק״ל`
+              : "—"}
+          </span>
+          {d.lastProteinG != null ||
+          d.lastCarbsG != null ||
+          d.lastFatG != null ? (
+            <>
+              {" · "}
+              ח׳ {fmtMacroG(d.lastProteinG)} · פ׳ {fmtMacroG(d.lastCarbsG)} · ש׳{" "}
+              {fmtMacroG(d.lastFatG)} ג׳
+            </>
+          ) : null}
+        </>
+      ) : null}
+    </p>
+  );
 }
 
 function sortSavedByQuery(items: DictionaryItem[], query: string): DictionaryItem[] {
@@ -469,6 +812,17 @@ export default function DictionaryPage() {
   const [activeLetter, setActiveLetter] = useState<string | null>(null);
   const [openSavedId, setOpenSavedId] = useState<string | null>(null);
   const [dictTab, setDictTab] = useState<"all" | "foods" | "meals">("all");
+  const [dictMacroFilterOpen, setDictMacroFilterOpen] = useState<
+    DictMacroFilterKind | null
+  >(null);
+  const [dictMacroRange, setDictMacroRange] = useState<DictMacroRangeState>({
+    proteinMin: "",
+    proteinMax: "",
+    carbsMin: "",
+    carbsMax: "",
+    fatMin: "",
+    fatMax: "",
+  });
   const [justAddedId, setJustAddedId] = useState<string | null>(null);
   const justAddedTimerRef = useRef<number | null>(null);
   const [exportOpen, setExportOpen] = useState(false);
@@ -490,12 +844,18 @@ export default function DictionaryPage() {
     startX: number;
     startY: number;
     itemId: string | null;
+    pendingItem: DictionaryItem | null;
+    lastDx: number;
+    lastDy: number;
   }>({
     timer: null,
     pointerId: null,
     startX: 0,
     startY: 0,
     itemId: null,
+    pendingItem: null,
+    lastDx: 0,
+    lastDy: 0,
   });
   const [dictionaryActionItem, setDictionaryActionItem] =
     useState<DictionaryItem | null>(null);
@@ -591,10 +951,24 @@ export default function DictionaryPage() {
       if (dictTab === "foods") return d.mealPresetId == null;
       return true;
     });
+    /** בעת פתיחת אייקון מאקרו — רק פריטים שהמאקרו הזה דומיננטי בהם (כמו האייקון ליד השם) */
+    const dominantFiltered =
+      dictMacroFilterOpen == null
+        ? tabbed
+        : tabbed.filter((d) => {
+            const preset =
+              d.mealPresetId != null
+                ? presetMap.get(d.mealPresetId)
+                : undefined;
+            return dominantDictMacro(d, preset) === dictMacroFilterOpen;
+          });
+    const macroFiltered = dominantFiltered.filter((d) =>
+      passesDictMacroFilters(d, dictMacroRange)
+    );
     if (debouncedQ.trim().length >= 2) {
-      return tabbed;
+      return macroFiltered;
     }
-    const sorted = [...tabbed].sort((a, b) =>
+    const sorted = [...macroFiltered].sort((a, b) =>
       normalizeTitleForIndex(a.food).localeCompare(
         normalizeTitleForIndex(b.food),
         "he"
@@ -602,7 +976,16 @@ export default function DictionaryPage() {
     );
     if (!activeLetter) return sorted;
     return sorted.filter((x) => firstHebLetter(x.food) === activeLetter);
-  }, [savedHits, filteredSaved, dictTab, debouncedQ, activeLetter]);
+  }, [
+    savedHits,
+    filteredSaved,
+    dictTab,
+    debouncedQ,
+    activeLetter,
+    dictMacroRange,
+    dictMacroFilterOpen,
+    presetMap,
+  ]);
 
   const visibleSavedGrouped = useMemo((): DictLetterGroup[] => {
     if (visibleSaved.length === 0) return [];
@@ -713,6 +1096,8 @@ export default function DictionaryPage() {
         tab: dictTab,
         letter: activeLetter,
         query: rawQ.trim(),
+        dominantMacroPanel: dictMacroFilterOpen,
+        macroPer100g: dictMacroRange,
       },
       items: exportItems,
       mealPresets: Array.from(presetsUsed.values()),
@@ -951,6 +1336,7 @@ export default function DictionaryPage() {
     dictLongPressRef.current.timer = null;
     dictLongPressRef.current.pointerId = null;
     dictLongPressRef.current.itemId = null;
+    dictLongPressRef.current.pendingItem = null;
   }
 
   function handleDictRowPointerDown(
@@ -959,8 +1345,8 @@ export default function DictionaryPage() {
   ) {
     if (exportSelectMode) return;
     if (e.pointerType === "mouse" && e.button !== 0) return;
-    const el = e.target;
-    if (!(el instanceof Element)) return;
+    const el = pointerEventTargetElement(e);
+    if (!el) return;
     if (el.closest("[data-skip-dict-longpress]")) return;
 
     clearDictLongPressTimer();
@@ -968,30 +1354,43 @@ export default function DictionaryPage() {
     dictLongPressRef.current.startX = e.clientX;
     dictLongPressRef.current.startY = e.clientY;
     dictLongPressRef.current.itemId = d.id;
+    dictLongPressRef.current.pendingItem = d;
+    dictLongPressRef.current.lastDx = 0;
+    dictLongPressRef.current.lastDy = 0;
     try {
       e.currentTarget.setPointerCapture(e.pointerId);
     } catch {
       /* ignore */
     }
     dictLongPressRef.current.timer = window.setTimeout(() => {
+      const victim = dictLongPressRef.current.pendingItem;
+      const dx = dictLongPressRef.current.lastDx;
       dictLongPressRef.current.timer = null;
       dictLongPressRef.current.pointerId = null;
       dictLongPressRef.current.itemId = null;
+      dictLongPressRef.current.pendingItem = null;
+      if (!victim) return;
       setDictRowMenuOpenId(null);
-      setDictionaryActionItem(d);
-      try {
-        navigator.vibrate?.(12);
-      } catch {
-        /* ignore */
+      if (dx >= LONG_PRESS_DELETE_RIGHT_DX) {
+        setSaved(removeDictionaryItem(victim.id));
+        setDictionaryActionItem(null);
+        setOpenSavedId((x) => (x === victim.id ? null : x));
+        try {
+          navigator.vibrate?.(18);
+        } catch {
+          /* ignore */
+        }
       }
-    }, DICT_LONG_PRESS_MS);
+    }, LONG_PRESS_MS);
   }
 
   function handleDictRowPointerMove(e: PointerEvent<HTMLLIElement>) {
     if (dictLongPressRef.current.pointerId !== e.pointerId) return;
     const dx = e.clientX - dictLongPressRef.current.startX;
     const dy = e.clientY - dictLongPressRef.current.startY;
-    if (dx * dx + dy * dy > DICT_LONG_PRESS_CANCEL_DIST2) {
+    dictLongPressRef.current.lastDx = dx;
+    dictLongPressRef.current.lastDy = dy;
+    if (shouldCancelLongPressForSwipeDelete(dx, dy)) {
       clearDictLongPressTimer();
       try {
         e.currentTarget.releasePointerCapture(e.pointerId);
@@ -1016,8 +1415,8 @@ export default function DictionaryPage() {
     d: DictionaryItem
   ) {
     if (exportSelectMode) return;
-    const el = e.target;
-    if (!(el instanceof Element)) return;
+    const el = pointerEventTargetElement(e);
+    if (!el) return;
     if (el.closest("[data-skip-dict-longpress]")) return;
     e.preventDefault();
     clearDictLongPressTimer();
@@ -1526,23 +1925,135 @@ export default function DictionaryPage() {
                   );
                 })}
               </div>
-              <button
-                type="button"
-                id="dictionary-more-actions-toggle"
-                className="ms-auto flex shrink-0 items-center gap-1 rounded-lg border-2 border-[var(--border-cherry-soft)] bg-white px-2.5 py-1.5 text-xs font-extrabold text-[var(--cherry)] shadow-sm transition hover:bg-[var(--cherry-muted)] sm:gap-1.5 sm:px-3 sm:py-2 sm:text-sm"
-                aria-expanded={dictionaryMoreActionsOpen}
-                aria-controls="dictionary-more-actions"
-                onClick={() => setDictionaryMoreActionsOpen((o) => !o)}
-              >
-                {gf(gender, "עוד", "עוד")}
-                <ChevronDown
-                  className={`h-3.5 w-3.5 shrink-0 transition-transform duration-200 sm:h-4 sm:w-4 ${
-                    dictionaryMoreActionsOpen ? "rotate-180" : ""
+              <div className="ms-auto flex shrink-0 items-center gap-1 sm:gap-1.5">
+                <button
+                  type="button"
+                  id="dictionary-macro-filter-protein"
+                  className={`flex shrink-0 items-center justify-center rounded-lg border-2 px-2 py-1.5 transition sm:px-2.5 sm:py-2 ${
+                    dictMacroFilterOpen === "protein"
+                      ? "border-[var(--border-cherry-soft)] bg-cherry-faint shadow-sm"
+                      : "border-[var(--border-cherry-soft)] bg-white shadow-sm hover:bg-[var(--cherry-muted)]"
                   }`}
-                  aria-hidden
-                />
-              </button>
+                  aria-expanded={dictMacroFilterOpen === "protein"}
+                  aria-controls="dictionary-macro-filter-panel"
+                  title={gf(
+                    gender,
+                    "סינון לפי חלבון (גרם ל־100 גרם)",
+                    "סינון לפי חלבון (גרם ל־100 גרם)"
+                  )}
+                  aria-label={gf(
+                    gender,
+                    "סינון לפי חלבון ל־100 גרם",
+                    "סינון לפי חלבון ל־100 גרם"
+                  )}
+                  onClick={() =>
+                    setDictMacroFilterOpen((o) =>
+                      o === "protein" ? null : "protein"
+                    )
+                  }
+                >
+                  <DictMacroProteinLensIcon className="h-[18px] w-[18px] shrink-0 text-[#CA8A04] drop-shadow-[0_0_6px_rgba(202,138,4,0.55)]" />
+                </button>
+                <button
+                  type="button"
+                  id="dictionary-macro-filter-carbs"
+                  className={`flex shrink-0 items-center justify-center rounded-lg border-2 px-2 py-1.5 transition sm:px-2.5 sm:py-2 ${
+                    dictMacroFilterOpen === "carbs"
+                      ? "border-[var(--border-cherry-soft)] bg-cherry-faint shadow-sm"
+                      : "border-[var(--border-cherry-soft)] bg-white shadow-sm hover:bg-[var(--cherry-muted)]"
+                  }`}
+                  aria-expanded={dictMacroFilterOpen === "carbs"}
+                  aria-controls="dictionary-macro-filter-panel"
+                  title={gf(
+                    gender,
+                    "סינון לפי פחמימה (גרם ל־100 גרם)",
+                    "סינון לפי פחמימה (גרם ל־100 גרם)"
+                  )}
+                  aria-label={gf(
+                    gender,
+                    "סינון לפי פחמימה ל־100 גרם",
+                    "סינון לפי פחמימה ל־100 גרם"
+                  )}
+                  onClick={() =>
+                    setDictMacroFilterOpen((o) =>
+                      o === "carbs" ? null : "carbs"
+                    )
+                  }
+                >
+                  <Zap
+                    className="h-[18px] w-[18px] shrink-0 text-[#2563EB] drop-shadow-[0_0_6px_rgba(37,99,235,0.55)]"
+                    strokeWidth={2.35}
+                    aria-hidden
+                  />
+                </button>
+                <button
+                  type="button"
+                  id="dictionary-macro-filter-fat"
+                  className={`flex shrink-0 items-center justify-center rounded-lg border-2 px-2 py-1.5 transition sm:px-2.5 sm:py-2 ${
+                    dictMacroFilterOpen === "fat"
+                      ? "border-[var(--border-cherry-soft)] bg-cherry-faint shadow-sm"
+                      : "border-[var(--border-cherry-soft)] bg-white shadow-sm hover:bg-[var(--cherry-muted)]"
+                  }`}
+                  aria-expanded={dictMacroFilterOpen === "fat"}
+                  aria-controls="dictionary-macro-filter-panel"
+                  title={gf(
+                    gender,
+                    "סינון לפי שומן (גרם ל־100 גרם)",
+                    "סינון לפי שומן (גרם ל־100 גרם)"
+                  )}
+                  aria-label={gf(
+                    gender,
+                    "סינון לפי שומן ל־100 גרם",
+                    "סינון לפי שומן ל־100 גרם"
+                  )}
+                  onClick={() =>
+                    setDictMacroFilterOpen((o) => (o === "fat" ? null : "fat"))
+                  }
+                >
+                  <Droplet
+                    className="h-[18px] w-[18px] shrink-0 text-[#16A34A] drop-shadow-[0_0_6px_rgba(22,163,74,0.5)]"
+                    strokeWidth={2.35}
+                    aria-hidden
+                  />
+                </button>
+                <button
+                  type="button"
+                  id="dictionary-more-actions-toggle"
+                  className="flex shrink-0 items-center gap-1 rounded-lg border-2 border-[var(--border-cherry-soft)] bg-white px-2.5 py-1.5 text-xs font-extrabold text-[var(--cherry)] shadow-sm transition hover:bg-[var(--cherry-muted)] sm:gap-1.5 sm:px-3 sm:py-2 sm:text-sm"
+                  aria-expanded={dictionaryMoreActionsOpen}
+                  aria-controls="dictionary-more-actions"
+                  onClick={() => setDictionaryMoreActionsOpen((o) => !o)}
+                >
+                  {gf(gender, "עוד", "עוד")}
+                  <ChevronDown
+                    className={`h-3.5 w-3.5 shrink-0 transition-transform duration-200 sm:h-4 sm:w-4 ${
+                      dictionaryMoreActionsOpen ? "rotate-180" : ""
+                    }`}
+                    aria-hidden
+                  />
+                </button>
+              </div>
             </div>
+            {dictMacroFilterOpen ? (
+              <div
+                key={dictMacroFilterOpen}
+                id="dictionary-macro-filter-panel"
+                className="border-t border-[var(--border-cherry-soft)]/50 bg-[var(--cherry-muted)]/15 px-2.5 py-2 sm:px-3 sm:py-2.5"
+                role="region"
+                aria-label={gf(
+                  gender,
+                  "טווח מאקרו ל־100 גרם",
+                  "טווח מאקרו ל־100 גרם"
+                )}
+              >
+                <DictMacroFilterPanelFields
+                  kind={dictMacroFilterOpen}
+                  dictMacroRange={dictMacroRange}
+                  setDictMacroRange={setDictMacroRange}
+                  gender={gender}
+                />
+              </div>
+            ) : null}
             {activeLetter ? (
               <div className="border-t border-[var(--border-cherry-soft)]/50 px-2.5 pb-2 pt-1.5 sm:px-3 sm:pb-2.5 sm:pt-2">
                 <button
@@ -1650,6 +2161,14 @@ export default function DictionaryPage() {
                     "הקלד לפחות 2 אותיות כדי לסנן את הרשימה."
                   )}
           </p>
+        ) : visibleSaved.length === 0 ? (
+          <p className="text-[var(--text)]/85">
+            {gf(
+              gender,
+              "אין פריטים התואמים לסינון הנוכחי — נסי לשנות טאב, אות, טווח מאקרו או חיפוש.",
+              "אין פריטים התואמים לסינון הנוכחי — נסה לשנות טאב, אות, טווח מאקרו או חיפוש."
+            )}
+          </p>
         ) : (
           <div className="-mx-3 space-y-4">
             {visibleSavedGrouped.map((group) => (
@@ -1721,69 +2240,80 @@ export default function DictionaryPage() {
                         />
                       </button>
                     ) : null}
-                    <div className="flex min-w-0 flex-1 items-center gap-2 text-right">
-                      <span
-                        className="flex w-8 shrink-0 items-center justify-center"
-                        title={macroAria}
-                        aria-label={macroAria}
-                      >
-                        <DictDominantMacroGlyph kind={dominantMacro} />
-                      </span>
-                      {!isOpen ? (
-                        <button
-                          type="button"
-                          className="min-w-0 flex-1 text-right"
-                          onClick={() =>
-                            setOpenSavedId((x) => (x === d.id ? null : d.id))
-                          }
-                          aria-expanded={false}
-                          title={d.food}
+                    <div className="group flex min-w-0 flex-1 flex-col gap-0.5 text-right">
+                      <div className="flex min-w-0 items-center gap-2">
+                        <span
+                          className="flex w-8 shrink-0 items-center justify-center"
+                          title={macroAria}
+                          aria-label={macroAria}
                         >
-                          <span className="flex min-w-0 items-center justify-end gap-1.5">
-                            <span className="min-w-0 flex-1 break-words text-base font-normal leading-snug text-[var(--cherry)]">
-                              {renderDictListFoodTitle(d)}
-                            </span>
-                            <span
-                              className="shrink-0 text-xs font-normal text-[var(--stem)]/55"
-                              aria-hidden
-                            >
-                              ▼
-                            </span>
-                          </span>
-                        </button>
-                      ) : (
-                        <div className="flex min-w-0 flex-1 items-center gap-1.5">
-                          <span className="min-w-0 flex-1 break-words px-1 py-0.5 text-right text-base font-normal leading-snug text-[var(--cherry)]">
-                            {renderDictListFoodTitle(d)}
-                          </span>
+                          <DictDominantMacroGlyph kind={dominantMacro} />
+                        </span>
+                        {!isOpen ? (
                           <button
                             type="button"
                             data-skip-dict-longpress
-                            className="shrink-0 rounded-md p-1 text-xs font-normal text-[var(--stem)]/55 transition hover:bg-[var(--cherry-muted)]/40"
-                            onClick={(e) => {
-                              e.preventDefault();
-                              e.stopPropagation();
-                              setOpenSavedId((x) =>
-                                x === d.id ? null : x
-                              );
-                            }}
-                            aria-expanded={true}
-                            aria-label={gf(
-                              gender,
-                              "סגירת פרטי הפריט",
-                              "סגירת פרטי הפריט"
-                            )}
-                            title={gf(gender, "סגירה", "סגירה")}
+                            className="min-w-0 flex-1 text-right"
+                            onClick={() =>
+                              setOpenSavedId((x) => (x === d.id ? null : d.id))
+                            }
+                            aria-expanded={false}
+                            title={d.food}
                           >
-                            <span aria-hidden>▲</span>
+                            <span className="flex min-w-0 items-center justify-end gap-1.5">
+                              <span className="min-w-0 flex-1 break-words text-base font-normal leading-snug text-[var(--cherry)]">
+                                {renderDictListFoodTitle(d)}
+                              </span>
+                              <span
+                                className="shrink-0 text-xs font-normal text-[var(--stem)]/55"
+                                aria-hidden
+                              >
+                                ▼
+                              </span>
+                            </span>
                           </button>
-                        </div>
-                      )}
-                      {isMeal && (
-                        <span className="shrink-0 rounded-md bg-[var(--cherry-muted)] px-2 py-0.5 text-xs font-normal text-[var(--cherry)]">
-                          ארוחה
-                        </span>
-                      )}
+                        ) : (
+                          <div className="flex min-w-0 flex-1 items-center gap-1.5">
+                            <span className="min-w-0 flex-1 break-words px-1 py-0.5 text-right text-base font-normal leading-snug text-[var(--cherry)]">
+                              {renderDictListFoodTitle(d)}
+                            </span>
+                            <button
+                              type="button"
+                              data-skip-dict-longpress
+                              className="shrink-0 rounded-md p-1 text-xs font-normal text-[var(--stem)]/55 transition hover:bg-[var(--cherry-muted)]/40"
+                              onClick={(e) => {
+                                e.preventDefault();
+                                e.stopPropagation();
+                                setOpenSavedId((x) =>
+                                  x === d.id ? null : x
+                                );
+                              }}
+                              aria-expanded={true}
+                              aria-label={gf(
+                                gender,
+                                "סגירת פרטי הפריט",
+                                "סגירת פרטי הפריט"
+                              )}
+                              title={gf(gender, "סגירה", "סגירה")}
+                            >
+                              <span aria-hidden>▲</span>
+                            </button>
+                          </div>
+                        )}
+                        {isMeal && (
+                          <span className="shrink-0 rounded-md bg-[var(--cherry-muted)] px-2 py-0.5 text-xs font-normal text-[var(--cherry)]">
+                            ארוחה
+                          </span>
+                        )}
+                      </div>
+                      <div className="empty:hidden hidden min-w-0 ps-10 text-end [@media(hover:hover)]:group-hover:block [@media(hover:none)]:block">
+                        <DictRowCompactMacroPeek
+                          d={d}
+                          preset={preset}
+                          isMeal={isMeal}
+                          isOpen={isOpen}
+                        />
+                      </div>
                     </div>
 
                     <div className="relative flex shrink-0 items-center gap-1">
@@ -1893,18 +2423,10 @@ export default function DictionaryPage() {
                                       </span>
                                       {")"}
                                     </div>
-                                    <div className="mt-0.5 text-xs text-[var(--stem)]/75">
-                                      <span className={DICT_CARD_MACRO_P}>
-                                        חלבון {fmtMacroG(c.proteinG)} ג׳
-                                      </span>
-                                      <span className={DICT_CARD_MACRO_C}>
-                                        {" · "}
-                                        פחמימות {fmtMacroG(c.carbsG)} ג׳
-                                      </span>
-                                      <span className={DICT_CARD_MACRO_F}>
-                                        {" · "}
-                                        שומן {fmtMacroG(c.fatG)} ג׳
-                                      </span>
+                                    <div className="mt-0.5 text-base font-medium leading-relaxed text-neutral-950">
+                                      ח׳ {fmtMacroG(c.proteinG)} · פ׳{" "}
+                                      {fmtMacroG(c.carbsG)} · ש׳ {fmtMacroG(c.fatG)}{" "}
+                                      ג׳
                                     </div>
                                   </li>
                                 ))}
@@ -1912,25 +2434,12 @@ export default function DictionaryPage() {
                               {(() => {
                                 const s = sumPresetTotals(preset);
                                 return (
-                                  <p className="text-sm font-normal">
-                                    <span className="font-semibold text-[var(--cherry)]">
-                                      סה״כ ארוחה:
-                                    </span>{" "}
-                                    <span className="bidi-isolate-rtl inline-block font-bold text-neutral-900">
-                                      {Math.round(s.kcal)} קק״ל
-                                    </span>
-                                    <span className={DICT_CARD_MACRO_P}>
-                                      {" "}
-                                      · ח {s.protein.toFixed(1)}
-                                    </span>
-                                    <span className={DICT_CARD_MACRO_C}>
-                                      {" "}
-                                      · פחם {s.carbs.toFixed(1)}
-                                    </span>
-                                    <span className={DICT_CARD_MACRO_F}>
-                                      {" "}
-                                      · שומן {s.fat.toFixed(1)} ג׳
-                                    </span>
+                                  <p className="text-base font-medium text-neutral-950">
+                                    <span className="font-semibold">סה״כ ארוחה:</span>{" "}
+                                    {Math.round(s.kcal)} קק״ל
+                                    {" · "}
+                                    ח׳ {s.protein.toFixed(1)} · פ׳ {s.carbs.toFixed(1)} ·
+                                    ש׳ {s.fat.toFixed(1)} ג׳
                                   </p>
                                 );
                               })()}
@@ -1955,55 +2464,50 @@ export default function DictionaryPage() {
                                 hasPortion && (fromJournal || !redundant);
 
                               return showPer100 || showPortionLine ? (
-                                <p className="text-xs font-normal leading-snug text-[var(--stem)]/85">
+                                <p className="text-base font-medium leading-relaxed text-neutral-950">
                                   {showPer100 ? (
-                                    <span className="text-[var(--text)]/70">
-                                      <span className="bidi-isolate-rtl inline-block font-bold text-neutral-900">
-                                        ל־100 גרם:{" "}
+                                    <>
+                                      <span className="font-semibold">
+                                        ל־100 ג׳:{" "}
                                         {Math.round(d.caloriesPer100g!)} קק״ל
                                       </span>
                                       {d.proteinPer100g != null &&
                                         d.carbsPer100g != null &&
                                         d.fatPer100g != null && (
                                           <>
-                                            <span className={DICT_CARD_MACRO_P}>
-                                              {" "}
-                                              · חלבון {d.proteinPer100g.toFixed(1)}{" "}
-                                              ג׳
-                                            </span>
-                                            <span className={DICT_CARD_MACRO_C}>
-                                              {" "}
-                                              · פחמימות{" "}
-                                              {d.carbsPer100g.toFixed(1)} ג׳
-                                            </span>
-                                            <span className={DICT_CARD_MACRO_F}>
-                                              {" "}
-                                              · שומן {d.fatPer100g.toFixed(1)} ג׳
-                                            </span>
+                                            {" · "}
+                                            ח׳ {d.proteinPer100g.toFixed(1)} · פ׳{" "}
+                                            {d.carbsPer100g.toFixed(1)} · ש׳{" "}
+                                            {d.fatPer100g.toFixed(1)} ג׳
                                           </>
                                         )}
-                                      {d.barcode ? ` · ברקוד ${d.barcode}` : ""}
-                                    </span>
+                                      {d.barcode ? (
+                                        <span className="text-sm font-normal text-neutral-600">
+                                          {" "}
+                                          · ברקוד {d.barcode}
+                                        </span>
+                                      ) : null}
+                                    </>
                                   ) : null}
                                   {showPer100 && showPortionLine ? (
-                                    <span className="text-[var(--stem)]/40" aria-hidden>
+                                    <span className="text-neutral-950" aria-hidden>
                                       {" "}
                                       ·{" "}
                                     </span>
                                   ) : null}
                                   {showPortionLine ? (
                                     <>
-                                      {fromJournal ? "מנה" : "למנה"} (
-                                      <span className="bidi-isolate-rtl inline-block font-bold text-neutral-900">
-                                        {d.quantity} {d.unit}
-                                        {d.unit === "יחידה" &&
-                                        d.gramsPerUnit != null &&
-                                        d.gramsPerUnit > 0
-                                          ? ` · ${d.gramsPerUnit} ג׳ ליחידה`
-                                          : ""}
-                                      </span>
-                                      ):{" "}
-                                      <span className="bidi-isolate-rtl inline-block font-bold text-neutral-900">
+                                      <span className="font-semibold">
+                                        {fromJournal ? "מנה" : "למנה"} (
+                                        <span className="bidi-isolate-rtl inline-block">
+                                          {d.quantity} {d.unit}
+                                          {d.unit === "יחידה" &&
+                                          d.gramsPerUnit != null &&
+                                          d.gramsPerUnit > 0
+                                            ? ` · ${d.gramsPerUnit} ג׳ ליחידה`
+                                            : ""}
+                                        </span>
+                                        ):{" "}
                                         {d.lastCalories != null
                                           ? `${Math.round(d.lastCalories)} קק״ל`
                                           : "—"}
@@ -2012,18 +2516,10 @@ export default function DictionaryPage() {
                                       d.lastCarbsG != null ||
                                       d.lastFatG != null ? (
                                         <>
-                                          <span className={DICT_CARD_MACRO_P}>
-                                            {" "}
-                                            · חלבון {fmtMacroG(d.lastProteinG)} ג׳
-                                          </span>
-                                          <span className={DICT_CARD_MACRO_C}>
-                                            {" "}
-                                            · פחמימות {fmtMacroG(d.lastCarbsG)} ג׳
-                                          </span>
-                                          <span className={DICT_CARD_MACRO_F}>
-                                            {" "}
-                                            · שומן {fmtMacroG(d.lastFatG)} ג׳
-                                          </span>
+                                          {" · "}
+                                          ח׳ {fmtMacroG(d.lastProteinG)} · פ׳{" "}
+                                          {fmtMacroG(d.lastCarbsG)} · ש׳{" "}
+                                          {fmtMacroG(d.lastFatG)} ג׳
                                         </>
                                       ) : null}
                                     </>
@@ -2118,8 +2614,8 @@ export default function DictionaryPage() {
               <p className="mt-3 text-center text-xs text-[var(--text)]/75">
                 {gf(
                   gender,
-                  "לחיצה ארוכה — מחיקה מהמילון (כמו ביומן).",
-                  "לחיצה ארוכה — מחיקה מהמילון (כמו ביומן)."
+                  "לחיצה ארוכה והחלקה ימינה — מחיקה מהמילון (לחיצה ימנית כאן לאישור).",
+                  "לחיצה ארוכה והחלקה ימינה — מחיקה מהמילון (לחיצה ימנית כאן לאישור)."
                 )}
               </p>
               <div className="mt-4 space-y-2">
