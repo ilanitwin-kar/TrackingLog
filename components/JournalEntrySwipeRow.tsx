@@ -47,12 +47,14 @@ export function JournalEntrySwipeRow({
     startClientY: number;
     baseOffset: number;
     cancelled: boolean;
+    maxDxMag: number;
   }>({
     pointerId: null,
     startClientX: 0,
     startClientY: 0,
     baseOffset: 0,
     cancelled: false,
+    maxDxMag: 0,
   });
 
   useEffect(() => {
@@ -70,6 +72,7 @@ export function JournalEntrySwipeRow({
         startClientY: e.clientY,
         baseOffset: offset,
         cancelled: false,
+        maxDxMag: 0,
       };
       setIsDragging(true);
       try {
@@ -88,8 +91,8 @@ export function JournalEntrySwipeRow({
     const dy = e.clientY - dragRef.current.startClientY;
     if (
       !dragRef.current.cancelled &&
-      Math.abs(dy) > 18 &&
-      Math.abs(dy) > dxMag * 1.2
+      Math.abs(dy) > 28 &&
+      Math.abs(dy) > dxMag * 1.25
     ) {
       dragRef.current.cancelled = true;
       offsetRef.current = dragRef.current.baseOffset;
@@ -98,6 +101,7 @@ export function JournalEntrySwipeRow({
     }
     if (dragRef.current.cancelled) return;
 
+    dragRef.current.maxDxMag = Math.max(dragRef.current.maxDxMag, dxMag);
     const base = dragRef.current.baseOffset;
     /** סגור: משיכה בכל כיוון אופקי; פתוח נעול («העבר אל»): תזוזה חתומה לסגירה / המשך */
     const next =
@@ -124,13 +128,16 @@ export function JournalEntrySwipeRow({
       if (cancelled) return;
 
       const ox = offsetRef.current;
-      if (ox >= DELETE_AT_PX) {
+      const maxDx = dragRef.current.maxDxMag;
+      const minDragForDelete = 52;
+      if (ox >= DELETE_AT_PX && maxDx >= minDragForDelete) {
         offsetRef.current = 0;
         setOffset(0);
         onDelete();
         return;
       }
-      if (ox >= CLOSE_BELOW_PX) {
+      const minDragForSnap = 12;
+      if (ox >= CLOSE_BELOW_PX && maxDx >= minDragForSnap) {
         offsetRef.current = SNAP_OPEN_PX;
         setOffset(SNAP_OPEN_PX);
         return;
@@ -178,7 +185,7 @@ export function JournalEntrySwipeRow({
         }`}
         style={{
           transform: `translateX(${offset}px)`,
-          touchAction: "pan-x pan-y",
+          touchAction: "pan-y",
           boxShadow: "var(--list-row-shadow)",
         }}
         onPointerDownCapture={onPointerDownCapture}
