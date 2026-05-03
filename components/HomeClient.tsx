@@ -74,7 +74,6 @@ import {
   type JournalMealSlot,
 } from "@/lib/journalMeals";
 import { useDocumentScrollOnlyIfOverflowing } from "@/lib/useDocumentScrollOnlyIfOverflowing";
-import { JournalEntrySwipeRow } from "./JournalEntrySwipeRow";
 import { CelebrationConfetti } from "./Fireworks";
 import { useAppVariant } from "./useAppVariant";
 import { QuickWeightModal } from "./QuickWeightModal";
@@ -83,8 +82,8 @@ import {
   ChevronDown,
   ChevronLeft,
   ChevronRight,
+  MoreVertical,
   Pencil,
-  Trash2,
 } from "lucide-react";
 import { IconUtensilsMeal } from "./Icons";
 import { LiveClock } from "./LiveClock";
@@ -584,6 +583,10 @@ export function HomeClient({ mode = "dashboard" }: { mode?: "dashboard" | "journ
   const [journalCardActionEntry, setJournalCardActionEntry] =
     useState<LogEntry | null>(null);
   const [journalCardMoveOpen, setJournalCardMoveOpen] = useState(false);
+  /** תפריט ⋮ לפריט ביומן — מחק / העבר אל / עריכה */
+  const [journalRowMenuOpenId, setJournalRowMenuOpenId] = useState<
+    string | null
+  >(null);
 
   const [celebration, setCelebration] = useState({
     show: false,
@@ -677,6 +680,20 @@ export function HomeClient({ mode = "dashboard" }: { mode?: "dashboard" | "journ
     setJournalClosedMap(loadDayJournalClosedMap());
   }, []);
 
+  useEffect(() => {
+    if (journalRowMenuOpenId == null) return;
+    const onPointerDownCapture = (e: PointerEvent) => {
+      const t = e.target;
+      if (t instanceof Element && t.closest("[data-journal-row-menu]")) return;
+      if (t instanceof Text && t.parentElement?.closest("[data-journal-row-menu]"))
+        return;
+      setJournalRowMenuOpenId(null);
+    };
+    document.addEventListener("pointerdown", onPointerDownCapture, true);
+    return () =>
+      document.removeEventListener("pointerdown", onPointerDownCapture, true);
+  }, [journalRowMenuOpenId]);
+
   const [greetingHour, setGreetingHour] = useState(() =>
     new Date().getHours()
   );
@@ -754,11 +771,11 @@ export function HomeClient({ mode = "dashboard" }: { mode?: "dashboard" | "journ
     return null;
   }
 
-  function isInsideJournalEntrySwipeOrControls(el: Element | null): boolean {
+  function isInsideJournalDaySwipeExempt(el: Element | null): boolean {
     if (!el) return false;
     return Boolean(
       el.closest(
-        "button,a,input,textarea,select,[data-skip-journal-day-swipe],[data-journal-no-swipe],[data-journal-entry-swipe]"
+        "button,a,input,textarea,select,[data-skip-journal-day-swipe],[data-journal-no-swipe],[data-journal-row-menu]"
       )
     );
   }
@@ -769,7 +786,7 @@ export function HomeClient({ mode = "dashboard" }: { mode?: "dashboard" | "journ
       return;
     }
     const el = journalDaySwipeTouchTargetEl(e.target);
-    if (isInsideJournalEntrySwipeOrControls(el)) {
+    if (isInsideJournalDaySwipeExempt(el)) {
       journalDaySwipeTouchRef.current = null;
       return;
     }
@@ -788,7 +805,7 @@ export function HomeClient({ mode = "dashboard" }: { mode?: "dashboard" | "journ
     const t = e.changedTouches[0];
     /** מניעת התנגשות עם החלקת שורה / כפתורים — גם אם touchstart יצא מטעות (למשל target = Text) */
     const endEl = document.elementFromPoint(t.clientX, t.clientY);
-    if (isInsideJournalEntrySwipeOrControls(endEl)) return;
+    if (isInsideJournalDaySwipeExempt(endEl)) return;
 
     const dx = t.clientX - start.x;
     const dy = t.clientY - start.y;
@@ -1250,6 +1267,10 @@ export function HomeClient({ mode = "dashboard" }: { mode?: "dashboard" | "journ
   }, [viewDateKey]);
 
   useEffect(() => {
+    setJournalRowMenuOpenId(null);
+  }, [viewDateKey]);
+
+  useEffect(() => {
     const goalCalories = target;
     const currentCalories = total;
     if (!profile || goalCalories <= 0) return;
@@ -1288,26 +1309,6 @@ export function HomeClient({ mode = "dashboard" }: { mode?: "dashboard" | "journ
       return next;
     });
     emitEntryDeletedFeedback();
-  }
-
-  /** במחשב: לחיצה ימנית = «העבר אל…» */
-  function handleJournalCardContextMenu(
-    e: React.MouseEvent<HTMLLIElement>,
-    item: LogEntry
-  ) {
-    if (!isJournalMode || isDayClosed) return;
-    const t = e.target;
-    const el =
-      t instanceof Element
-        ? t
-        : t instanceof Text && t.parentElement
-          ? t.parentElement
-          : null;
-    if (!el) return;
-    if (el.closest("[data-journal-no-swipe]")) return;
-    e.preventDefault();
-    setJournalCardMoveOpen(true);
-    setJournalCardActionEntry(item);
   }
 
   function moveJournalEntryToSlot(id: string, slot: JournalMealSlot) {
@@ -2586,22 +2587,10 @@ export function HomeClient({ mode = "dashboard" }: { mode?: "dashboard" | "journ
                   animate={{ opacity: 1, x: 0 }}
                   transition={{ duration: 0.18 }}
                   className={`touch-manipulation list-none bg-transparent p-0 ${isDayClosed ? "opacity-85" : ""}`}
-                  onContextMenu={(e) => handleJournalCardContextMenu(e, item)}
                 >
-                  <JournalEntrySwipeRow
-                    disabled={!isJournalMode || isDayClosed}
-                    onMove={() => {
-                      setJournalCardActionEntry(item);
-                      setJournalCardMoveOpen(true);
-                    }}
-                    onDelete={() => {
-                      removeEntry(item.id);
-                      try {
-                        navigator.vibrate?.(12);
-                      } catch {
-                        /* ignore */
-                      }
-                    }}
+                  <div
+                    className="rounded-xl border-2 border-[var(--border-cherry-soft)] bg-white"
+                    style={{ boxShadow: "var(--list-row-shadow)" }}
                   >
                   <div className="flex min-w-0 flex-col gap-1 px-3 py-2.5">
                     <div className="flex min-w-0 flex-row items-start gap-3">
@@ -2757,21 +2746,83 @@ export function HomeClient({ mode = "dashboard" }: { mode?: "dashboard" | "journ
                         </p>
                       </div>
                       {!isDayClosed ? (
-                        <button
-                          type="button"
-                          data-journal-no-swipe
-                          className="shrink-0 rounded-md px-1 py-0 text-[1.15rem] font-extrabold leading-none tracking-[0.12em] text-[var(--stem)]/75 transition hover:bg-[var(--cherry-muted)]/45 hover:text-[var(--stem)]"
-                          title={gf(gender, "עריכת מוצר", "עריכת מוצר")}
-                          aria-label={gf(gender, "עריכת מוצר", "עריכת מוצר")}
-                          dir="ltr"
-                          onClick={(e) => {
-                            e.preventDefault();
-                            e.stopPropagation();
-                            openEdit(item);
-                          }}
-                        >
-                          <span aria-hidden>...</span>
-                        </button>
+                        <div className="relative shrink-0" data-journal-row-menu>
+                          <button
+                            type="button"
+                            data-journal-no-swipe
+                            className="rounded-md border border-[var(--border-cherry-soft)] bg-white p-1.5 text-[var(--cherry)] shadow-sm transition hover:bg-[var(--cherry-muted)]/45"
+                            aria-expanded={journalRowMenuOpenId === item.id}
+                            aria-haspopup="menu"
+                            aria-label={gf(
+                              gender,
+                              "תפריט פעולות על הפריט",
+                              "תפריט פעולות על הפריט"
+                            )}
+                            title={gf(gender, "עוד", "עוד")}
+                            onClick={(e) => {
+                              e.preventDefault();
+                              e.stopPropagation();
+                              setJournalRowMenuOpenId((x) =>
+                                x === item.id ? null : item.id
+                              );
+                            }}
+                          >
+                            <MoreVertical className="h-5 w-5" aria-hidden />
+                          </button>
+                          {journalRowMenuOpenId === item.id ? (
+                            <div
+                              role="menu"
+                              className="absolute end-0 top-[calc(100%+4px)] z-[60] min-w-[12.5rem] rounded-xl border-2 border-[var(--border-cherry-soft)] bg-white py-1 shadow-lg"
+                              dir="rtl"
+                            >
+                              <button
+                                type="button"
+                                role="menuitem"
+                                className="flex w-full px-3 py-2.5 text-start text-sm font-bold text-red-700 transition hover:bg-red-50"
+                                onClick={(e) => {
+                                  e.preventDefault();
+                                  e.stopPropagation();
+                                  setJournalRowMenuOpenId(null);
+                                  removeEntry(item.id);
+                                  try {
+                                    navigator.vibrate?.(12);
+                                  } catch {
+                                    /* ignore */
+                                  }
+                                }}
+                              >
+                                {gf(gender, "מחק פריט", "מחק פריט")}
+                              </button>
+                              <button
+                                type="button"
+                                role="menuitem"
+                                className="flex w-full px-3 py-2.5 text-start text-sm font-bold text-[var(--stem)] transition hover:bg-[var(--cherry-muted)]/45"
+                                onClick={(e) => {
+                                  e.preventDefault();
+                                  e.stopPropagation();
+                                  setJournalRowMenuOpenId(null);
+                                  setJournalCardActionEntry(item);
+                                  setJournalCardMoveOpen(true);
+                                }}
+                              >
+                                {gf(gender, "העבר אל…", "העבר אל…")}
+                              </button>
+                              <button
+                                type="button"
+                                role="menuitem"
+                                className="flex w-full px-3 py-2.5 text-start text-sm font-bold text-[var(--stem)] transition hover:bg-[var(--cherry-muted)]/45"
+                                onClick={(e) => {
+                                  e.preventDefault();
+                                  e.stopPropagation();
+                                  setJournalRowMenuOpenId(null);
+                                  openEdit(item);
+                                }}
+                              >
+                                {gf(gender, "עריכת פריט", "עריכת פריט")}
+                              </button>
+                            </div>
+                          ) : null}
+                        </div>
                       ) : (
                         <span className="shrink-0 w-[1.6rem]" aria-hidden />
                       )}
@@ -2946,7 +2997,7 @@ export function HomeClient({ mode = "dashboard" }: { mode?: "dashboard" | "journ
                         </div>
                       </motion.div>
                     )}
-                  </JournalEntrySwipeRow>
+                  </div>
                 </motion.li>
               );
                     })}
@@ -3024,19 +3075,6 @@ export function HomeClient({ mode = "dashboard" }: { mode?: "dashboard" | "journ
                     </li>
                   ))}
                 </ul>
-                <button
-                  type="button"
-                  className="mt-3 flex w-full items-center justify-center gap-2 rounded-xl border border-red-200 bg-red-50/50 px-3 py-3 text-sm font-bold text-red-800 transition hover:bg-red-50"
-                  onClick={() => {
-                    const id = journalCardActionEntry?.id;
-                    setJournalCardMoveOpen(false);
-                    setJournalCardActionEntry(null);
-                    if (id) removeEntry(id);
-                  }}
-                >
-                  <Trash2 className="size-5 shrink-0" strokeWidth={2} aria-hidden />
-                  מחק מוצר
-                </button>
                 <button
                   type="button"
                   className="mt-1 w-full rounded-xl py-2 text-sm font-semibold text-[var(--text)]/75 hover:bg-neutral-100"
