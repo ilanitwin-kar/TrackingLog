@@ -8,6 +8,15 @@ export type RecipeIngredient = {
   fatPer100g: number;
 };
 
+/** מנה בודדת שנבחרה בחישוב (גרם + מאקרו מחושבים) */
+export type SavedRecipePortion = {
+  grams: number;
+  calories: number;
+  protein: number;
+  carbs: number;
+  fat: number;
+};
+
 export type SavedRecipe = {
   id: string;
   title: string;
@@ -23,6 +32,8 @@ export type SavedRecipe = {
     fat: number;
   };
   ingredients: RecipeIngredient[];
+  /** מחשבון מנה — אם הוזן בשמירה */
+  portion?: SavedRecipePortion | null;
 };
 
 const KEY = "cj_recipes_v1";
@@ -80,7 +91,24 @@ function sanitizeRecipe(x: unknown): SavedRecipe | null {
 
   const id = String(o.id ?? "").trim() || makeId();
   const createdAt = String(o.createdAt ?? "").trim() || new Date().toISOString();
-  return { id, title, createdAt, servings, finalCookedWeightG, totals, ingredients };
+  let portion: SavedRecipePortion | null | undefined;
+  const pr = o.portion;
+  if (pr === null) portion = null;
+  else if (pr && typeof pr === "object") {
+    const p = pr as Record<string, unknown>;
+    const grams = clamp(Math.round(Number(p.grams) || 0), 1, 200000);
+    if (grams > 0) {
+      portion = {
+        grams,
+        calories: clamp(Math.round(Number(p.calories) || 0), 0, 200000),
+        protein: clamp(Number(p.protein) || 0, 0, 20000),
+        carbs: clamp(Number(p.carbs) || 0, 0, 20000),
+        fat: clamp(Number(p.fat) || 0, 0, 20000),
+      };
+    } else portion = null;
+  }
+
+  return { id, title, createdAt, servings, finalCookedWeightG, totals, ingredients, portion };
 }
 
 export function loadRecipes(): SavedRecipe[] {
@@ -108,6 +136,19 @@ export function addRecipe(recipe: Omit<SavedRecipe, "id" | "createdAt">): SavedR
   };
   const rest = loadRecipes();
   saveRecipes([row, ...rest]);
+  return row;
+}
+
+export function updateRecipe(
+  id: string,
+  recipe: Omit<SavedRecipe, "id" | "createdAt">
+): SavedRecipe | null {
+  const list = loadRecipes();
+  const idx = list.findIndex((r) => r.id === id);
+  if (idx < 0) return null;
+  const prev = list[idx];
+  const row: SavedRecipe = { ...recipe, id: prev.id, createdAt: prev.createdAt };
+  saveRecipes([...list.slice(0, idx), row, ...list.slice(idx + 1)]);
   return row;
 }
 

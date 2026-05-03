@@ -5,7 +5,7 @@ import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { rankedFuzzySearchByText } from "@/lib/rankedSearch";
 import { gf } from "@/lib/hebrewGenderUi";
-import { loadProfile } from "@/lib/storage";
+import { loadProfile, resolveJournalTargetDateKey } from "@/lib/storage";
 import { ADMIN_EMAIL } from "@/lib/adminConstants";
 import { getFirebaseCurrentUser } from "@/lib/firebaseUserAuth";
 
@@ -20,7 +20,15 @@ type SearchItem = {
 function buildSearchItems(): SearchItem[] {
   const base: SearchItem[] = [
     { id: "home", title: "בית", href: "/", keywords: "בית דשבורד מסך ראשי" },
-    { id: "journal", title: "היומן שלי", href: "/journal", keywords: "יומן אכילה ימים רשומות" },
+    {
+      id: "journal",
+      title: "היומן שלי",
+      href: (() => {
+        const dk = resolveJournalTargetDateKey({ allowFuture: false });
+        return `/journal?date=${encodeURIComponent(dk)}`;
+      })(),
+      keywords: "יומן אכילה ימים רשומות",
+    },
     { id: "add-food", title: "הוספת מזון", href: "/add-food", keywords: "הוספה מזון חיפוש רגיל" },
     { id: "add-food-ai", title: "AI ארוחה", href: "/add-food-ai", keywords: "ai ארוחה רישום חופשי קסם" },
     { id: "assistant", title: "עוזר", href: "/assistant", keywords: "עוזר ai שאלות" },
@@ -58,7 +66,7 @@ export function AppSearchPalette() {
       list.unshift({ id: "admin", title: "ניהול מערכת", href: "/admin", keywords: "אדמין admin ניהול מערכת" });
     }
     return list;
-  }, []);
+  }, [open]);
 
   const results = useMemo(() => {
     const query = q.trim();

@@ -152,6 +152,7 @@ const KEYS = {
   dayLogs: "cj_day_logs_v1",
   weights: "cj_weights_v1",
   /** היום הפעיל לעריכה/הוספה ביומן — נשמר כשבוחרים יום שאינו היום */
+  /** תאריך יעד ליומן/הוספות — session בלבד (עד סגירת הטאב / יציאה מהאפליקציה) */
   activeJournalDate: "cj_active_journal_date_v1",
   /** דילוג שקילה — מסתיר את ההצעה ליום אחד */
   weightSkipDay: "cj_weight_skip_day_v1",
@@ -176,7 +177,12 @@ export function setActiveJournalDateKey(dateKey: string): void {
   const v = (dateKey ?? "").trim();
   if (!/^\d{4}-\d{2}-\d{2}$/.test(v)) return;
   try {
-    localStorage.setItem(KEYS.activeJournalDate, v);
+    try {
+      localStorage.removeItem(KEYS.activeJournalDate);
+    } catch {
+      /* ניקוי מפתח ישן מ-localStorage — לא משתמשים בו יותר */
+    }
+    sessionStorage.setItem(KEYS.activeJournalDate, v);
     window.dispatchEvent(new Event("cj-active-journal-date-changed"));
   } catch {
     /* ignore */
@@ -186,9 +192,16 @@ export function setActiveJournalDateKey(dateKey: string): void {
 export function getActiveJournalDateKey(): string | null {
   if (typeof window === "undefined") return null;
   try {
-    const raw = localStorage.getItem(KEYS.activeJournalDate);
+    const raw = sessionStorage.getItem(KEYS.activeJournalDate);
     const v = (raw ?? "").trim();
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(v)) return null;
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(v)) {
+      try {
+        localStorage.removeItem(KEYS.activeJournalDate);
+      } catch {
+        /* ignore */
+      }
+      return null;
+    }
     return v;
   } catch {
     return null;
@@ -258,6 +271,11 @@ export function clearAllLocalAppData(): void {
       /* ignore */
     }
   }
+  try {
+    sessionStorage.removeItem(KEYS.activeJournalDate);
+  } catch {
+    /* ignore */
+  }
 
   // Broadcast: profile/auth-dependent UI should refresh
   try {
@@ -295,6 +313,11 @@ export function clearUserLocalData(): void {
     } catch {
       /* ignore */
     }
+  }
+  try {
+    sessionStorage.removeItem(KEYS.activeJournalDate);
+  } catch {
+    /* ignore */
   }
   try {
     window.dispatchEvent(new Event("cj-profile-updated"));

@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { MoreVertical } from "lucide-react";
 import { AnimatePresence, motion } from "framer-motion";
 import { useEffect, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
@@ -15,9 +16,10 @@ import {
   type LogEntry,
 } from "@/lib/storage";
 import { getTodayKey } from "@/lib/dateKey";
+import { formatRecipeMacroAbbrev } from "@/lib/recipeMacroFormat";
 import { loadRecipes, removeRecipe, type RecipeIngredient, type SavedRecipe } from "@/lib/recipeStorage";
 import { loadRecipesFromCloud } from "@/lib/recipeCloud";
-import { DictionarySwipeDeleteRow } from "@/components/DictionarySwipeDeleteRow";
+import { RecipeShelfNav } from "@/components/RecipeShelfNav";
 
 const fontFood =
   "font-[Calibri,'Segoe_UI','Helvetica_Neue',system-ui,sans-serif]";
@@ -96,6 +98,15 @@ function portionFromRecipe(r: SavedRecipe, grams: number) {
   };
 }
 
+function ingredientLineKcalFromIng(ing: RecipeIngredient): number {
+  const g = clamp(Number(ing.grams) || 0, 0, 500000);
+  const k100 = clamp(Number(ing.caloriesPer100g) || 0, 0, 2000);
+  return Math.round(k100 * (g / 100));
+}
+
+const recipeSectionTitleClass =
+  "mb-2 w-fit border-b-2 border-[var(--cherry)] pb-1 text-lg font-extrabold tracking-tight text-black sm:text-xl";
+
 function upsertRecipeToDictionary(recipe: SavedRecipe) {
   const per100 = per100FromRecipe(recipe);
   const src = `recipe:${recipe.id}`;
@@ -144,15 +155,19 @@ function makeShareText(recipe: SavedRecipe, portionGrams?: number) {
   const lines: string[] = [];
   lines.push(`מתכון: ${recipe.title}`);
   lines.push(`משקל סופי: ${finalW}g`);
-  lines.push(`סה״כ: ${totals.calories} קק״ל | ח ${totals.protein} | פח ${totals.carbs} | ש ${totals.fat}`);
-  lines.push(`ל־100ג׳: ${per100.calories} קק״ל | ח ${per100.protein} | פח ${per100.carbs} | ש ${per100.fat}`);
+  lines.push(`סה״כ: ${formatRecipeMacroAbbrev(totals.calories, totals.protein, totals.carbs, totals.fat)}`);
+  lines.push(`ל־100 ג׳: ${formatRecipeMacroAbbrev(per100.calories, per100.protein, per100.carbs, per100.fat)}`);
   if (portion) {
-    lines.push(`מנה (${portion.grams}g): ${portion.calories} קק״ל | ח ${portion.protein} | פח ${portion.carbs} | ש ${portion.fat}`);
+    lines.push(
+      `מנה (${portion.grams}g): ${formatRecipeMacroAbbrev(portion.calories, portion.protein, portion.carbs, portion.fat)}`
+    );
   }
   lines.push("");
   lines.push("מרכיבים:");
   for (const ing of recipe.ingredients) {
-    lines.push(`- ${ing.name} — ${Math.round(ing.grams)}g`);
+    const g = Math.round(ing.grams);
+    const k = ingredientLineKcalFromIng(ing);
+    lines.push(`- ${ing.name} — ${g} ג׳ - ${k} קל׳`);
   }
   return lines.join("\n");
 }
@@ -164,7 +179,25 @@ export default function MyRecipesPage() {
   const [openId, setOpenId] = useState<string | null>(null);
   const [portionById, setPortionById] = useState<Record<string, string>>({});
   const [shareId, setShareId] = useState<string | null>(null);
+  const [recipeRowMenuId, setRecipeRowMenuId] = useState<string | null>(null);
   const shareTextRef = useRef<HTMLTextAreaElement | null>(null);
+
+  useEffect(() => {
+    if (recipeRowMenuId == null) return;
+    const onDocPointer = (e: PointerEvent) => {
+      const raw = e.target;
+      if (!(raw instanceof Node)) return;
+      const el = raw instanceof Element ? raw : raw.parentElement;
+      if (el?.closest("[data-recipe-menu-wrap]")) return;
+      setRecipeRowMenuId(null);
+    };
+    document.addEventListener("pointerdown", onDocPointer);
+    return () => document.removeEventListener("pointerdown", onDocPointer);
+  }, [recipeRowMenuId]);
+
+  useEffect(() => {
+    setRecipeRowMenuId(null);
+  }, [openId]);
 
   useEffect(() => {
     setRecipes(loadRecipes());
@@ -188,18 +221,10 @@ export default function MyRecipesPage() {
   // back is handled globally by the fixed header
 
   return (
-    <div className={`mx-auto max-w-lg px-4 py-8 pb-28 md:py-12 ${fontFood}`} dir="rtl">
-      <div className="flex items-center justify-between gap-2">
-        <h1 className="panel-title-cherry text-lg">המתכונים שלי</h1>
-        <Link
-          href="/recipes"
-          className="rounded-xl border-2 border-[var(--border-cherry-soft)] bg-white px-3 py-2 text-sm font-semibold text-[var(--cherry)] shadow-sm transition hover:bg-[var(--cherry-muted)]"
-        >
-          מחשבון
-        </Link>
-      </div>
+    <div className={`mx-auto max-w-lg px-4 pt-2 pb-28 md:pt-3 md:pb-12 ${fontFood}`} dir="rtl">
+      <RecipeShelfNav active="library" />
 
-      <motion.section className="mt-4 glass-panel p-4" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}>
+      <motion.section className="pt-1" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}>
         {recipes.length === 0 ? (
           <div className="rounded-2xl border-2 border-[var(--border-cherry-soft)] bg-white p-3">
             <p className="text-sm font-semibold text-[var(--stem)]/75">אין עדיין מתכונים שמורים.</p>
@@ -216,14 +241,6 @@ export default function MyRecipesPage() {
               const isOpen = openId === r.id;
               return (
                 <li key={r.id}>
-                  <DictionarySwipeDeleteRow
-                    onDelete={() => {
-                      setRecipes((prev) => prev.filter((x) => x.id !== r.id));
-                      setOpenId((x) => (x === r.id ? null : x));
-                      setShareId((x) => (x === r.id ? null : x));
-                      removeRecipe(r.id);
-                    }}
-                  >
                   <div className="rounded-2xl border-2 border-[var(--border-cherry-soft)] bg-white p-3">
                   <div className="flex items-start justify-between gap-2">
                     <div
@@ -238,110 +255,183 @@ export default function MyRecipesPage() {
                         }
                       }}
                     >
-                      <p className="break-words text-base font-extrabold text-[var(--stem)]">{r.title}</p>
-                      <p className="mt-1 text-xs text-[var(--stem)]/65">
-                        מרכיבים: {r.ingredients.length} · משקל סופי: {finalW}g · ל־100ג׳ {per100.calories} קק״ל
+                      <p className="break-words text-lg font-extrabold leading-tight text-[var(--cherry)] sm:text-xl">
+                        {r.title}
+                      </p>
+                      <p className="mt-2 text-sm font-normal leading-snug text-black sm:text-base">
+                        ל־100 ג׳: {formatRecipeMacroAbbrev(per100.calories, per100.protein, per100.carbs, per100.fat)}
                       </p>
                     </div>
-                    <button
-                      type="button"
-                      data-dict-no-swipe
-                      className="shrink-0 rounded-lg px-2 py-1 text-xs font-bold text-[var(--stem)]/55"
-                      aria-expanded={isOpen}
-                      onClick={() => setOpenId((x) => (x === r.id ? null : r.id))}
-                    >
-                      {isOpen ? "▲" : "▼"}
-                    </button>
+                    <div className="flex shrink-0 items-start gap-0.5" data-recipe-menu-wrap={r.id}>
+                      <div className="relative">
+                        <button
+                          type="button"
+                          className="rounded-lg p-1.5 text-[var(--stem)] transition hover:bg-[var(--cherry-muted)]"
+                          aria-haspopup="menu"
+                          aria-expanded={recipeRowMenuId === r.id}
+                          aria-label="תפריט פעולות על המתכון"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setRecipeRowMenuId((x) => (x === r.id ? null : r.id));
+                          }}
+                        >
+                          <MoreVertical className="h-5 w-5" strokeWidth={2.2} />
+                        </button>
+                        {recipeRowMenuId === r.id ? (
+                          <div
+                            role="menu"
+                            className="absolute end-0 top-full z-30 mt-1 min-w-[11.5rem] rounded-xl border-2 border-[var(--border-cherry-soft)] bg-white py-1 shadow-lg"
+                            onClick={(e) => e.stopPropagation()}
+                          >
+                            <button
+                              type="button"
+                              role="menuitem"
+                              className="flex w-full px-3 py-2.5 text-start text-sm font-extrabold text-[var(--stem)] transition hover:bg-[var(--cherry-muted)]"
+                              onClick={() => {
+                                upsertRecipeToDictionary(r);
+                                window.alert(gf(gender, "נשמר במילון האישי.", "נשמר במילון האישי."));
+                                setRecipeRowMenuId(null);
+                              }}
+                            >
+                              שמור במילון
+                            </button>
+                            <button
+                              type="button"
+                              role="menuitem"
+                              className="flex w-full px-3 py-2.5 text-start text-sm font-extrabold text-[var(--cherry)] transition hover:bg-[var(--cherry-muted)]"
+                              onClick={() => {
+                                setShareId(r.id);
+                                setRecipeRowMenuId(null);
+                              }}
+                            >
+                              שתף מתכון (PDF/ווטסאפ/מייל)
+                            </button>
+                            <button
+                              type="button"
+                              role="menuitem"
+                              className="flex w-full px-3 py-2.5 text-start text-sm font-extrabold text-red-800 transition hover:bg-red-50"
+                              onClick={() => {
+                                setRecipes((prev) => prev.filter((x) => x.id !== r.id));
+                                setOpenId((x) => (x === r.id ? null : x));
+                                setShareId((x) => (x === r.id ? null : x));
+                                removeRecipe(r.id);
+                                setRecipeRowMenuId(null);
+                              }}
+                            >
+                              מחיקת מתכון
+                            </button>
+                          </div>
+                        ) : null}
+                      </div>
+                      <button
+                        type="button"
+                        className="shrink-0 rounded-lg px-2 py-1 text-xs font-bold text-[var(--stem)]/55"
+                        aria-expanded={isOpen}
+                        onClick={() => setOpenId((x) => (x === r.id ? null : r.id))}
+                      >
+                        {isOpen ? "▲" : "▼"}
+                      </button>
+                    </div>
                   </div>
 
                   <AnimatePresence>
                     {isOpen && (
                       <motion.div
-                        initial={{ opacity: 0, y: 6 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        exit={{ opacity: 0, y: 6 }}
-                        transition={{ duration: 0.15 }}
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        exit={{ opacity: 0 }}
+                        transition={{ duration: 0.15, ease: "easeOut" }}
                         className="mt-3 border-t border-[var(--border-cherry-soft)]/60 pt-3"
                       >
-                        <p className="text-sm font-semibold text-[var(--stem)]/85">
-                          סה״כ: <span className="font-extrabold text-[var(--cherry)]">{totals.calories}</span> קק״ל · ח {totals.protein} · פח {totals.carbs} · ש {totals.fat}
-                        </p>
-                        <p className="mt-1 text-xs font-semibold text-[var(--stem)]/60">
-                          ל־100ג׳: <span className="font-extrabold text-[var(--cherry)]">{per100.calories}</span> קק״ל · ח {per100.protein} · פח {per100.carbs} · ש {per100.fat}
-                        </p>
+                        <div className="rounded-xl border border-[var(--border-cherry-soft)] bg-[color-mix(in_srgb,var(--accent)_8%,white)] p-3">
+                          <p className={recipeSectionTitleClass}>מרכיבים:</p>
+                          <ul className="mt-2 space-y-1.5">
+                            {r.ingredients.map((ing) => {
+                              const lineK = ingredientLineKcalFromIng(ing);
+                              const g = Math.round(ing.grams);
+                              return (
+                                <li key={ing.id} className="text-base leading-relaxed">
+                                  <span className="font-semibold text-[var(--stem-deep)]">{ing.name}</span>
+                                  <span className="font-extrabold text-black">
+                                    {" "}
+                                    · {g} ג׳ - {lineK} קל׳
+                                  </span>
+                                </li>
+                              );
+                            })}
+                          </ul>
+                        </div>
 
-                        <div className="mt-3 rounded-2xl border border-[var(--border-cherry-soft)] bg-[var(--cherry-muted)]/40 p-3" data-dict-no-swipe>
-                          <p className="text-sm font-extrabold text-[var(--stem)]">מחשבון מנה</p>
-                          <label className="mt-2 block">
-                            <span className="mb-1 block text-xs font-semibold text-[var(--cherry)]">גרם למנה</span>
+                        <div className="mt-3 rounded-xl border border-[var(--border-cherry-soft)] bg-white p-3">
+                          <p className={recipeSectionTitleClass}>סה״כ ערכים לכל המנה:</p>
+                          <p className="mt-1 text-sm font-normal leading-snug text-black sm:text-base">
+                            {formatRecipeMacroAbbrev(totals.calories, totals.protein, totals.carbs, totals.fat)}
+                          </p>
+                          <div
+                            className="my-3 border-t-2 border-[var(--stem)]"
+                            aria-hidden
+                          />
+                          <p className="text-lg font-semibold leading-snug text-black sm:text-xl">
+                            משקל לחישוב: {finalW} ג׳ · {r.ingredients.length} מרכיבים
+                          </p>
+                        </div>
+
+                        <div className="mt-2 rounded-xl border border-[var(--border-cherry-soft)] bg-[color-mix(in_srgb,var(--accent)_12%,white)] p-2.5">
+                          <p className="mb-2 border-b-2 border-black pb-1 text-base font-extrabold text-black sm:text-lg">
+                            מחשבון מנה
+                          </p>
+                          <label className="block">
                             <input
                               value={portionById[r.id] ?? ""}
                               onChange={(e) => setPortionById((p) => ({ ...p, [r.id]: e.target.value }))}
-                              className="input-luxury-search w-full"
+                              className="input-luxury-search w-full py-2 text-sm"
                               inputMode="numeric"
-                              placeholder="למשל: 180"
+                              placeholder={gf(
+                                gender,
+                                "הזיני כמות בגרמים (למשל 180)",
+                                "הזן כמות בגרמים (למשל 180)"
+                              )}
+                              aria-label={gf(gender, "הזנת כמות בגרמים למנה", "הזנת כמות בגרמים למנה")}
                             />
                           </label>
-                          {openId === r.id && openPortionG > 0 && (
-                            <p className="mt-2 text-sm font-semibold text-[var(--stem)]/85">
-                              מנה ({Math.round(openPortionG)}g):{" "}
-                              <span className="font-extrabold text-[var(--cherry)]">{portionFromRecipe(r, openPortionG)?.calories ?? 0}</span> קק״ל
-                              {" · "}ח {portionFromRecipe(r, openPortionG)?.protein ?? 0}
-                              {" · "}פח {portionFromRecipe(r, openPortionG)?.carbs ?? 0}
-                              {" · "}ש {portionFromRecipe(r, openPortionG)?.fat ?? 0}
-                            </p>
-                          )}
+                          {openId === r.id && openPortionG > 0 ? (() => {
+                            const pt = portionFromRecipe(r, openPortionG);
+                            if (!pt) return null;
+                            return (
+                              <p className="mt-1.5 text-xs font-normal leading-snug text-black">
+                                מנה ({pt.grams} ג׳):{" "}
+                                {formatRecipeMacroAbbrev(pt.calories, pt.protein, pt.carbs, pt.fat)}
+                              </p>
+                            );
+                          })() : null}
                         </div>
 
-                        <div className="mt-3 grid grid-cols-2 gap-2" data-dict-no-swipe>
-                          <button
-                            type="button"
-                            className="rounded-xl bg-[var(--stem)] px-4 py-3 text-xs font-extrabold text-white disabled:opacity-50"
-                            disabled={!(portionById[r.id] && clamp(num(portionById[r.id] ?? ""), 0, 200000) > 0)}
-                            onClick={() => {
-                              const g = clamp(num(portionById[r.id] ?? ""), 0, 200000);
-                              const ok = addRecipePortionToToday(r, g);
-                              if (ok) window.alert(gf(gender, "נוסף ליומן היום.", "נוסף ליומן היום."));
-                            }}
-                          >
-                            הוסף ליומן
-                          </button>
-                          <button
-                            type="button"
-                            className="rounded-xl border-2 border-[var(--border-cherry-soft)] bg-white px-4 py-3 text-xs font-extrabold text-[var(--stem)] hover:bg-[var(--cherry-muted)]"
-                            onClick={() => {
-                              upsertRecipeToDictionary(r);
-                              window.alert(gf(gender, "נשמר במילון האישי.", "נשמר במילון האישי."));
-                            }}
-                          >
-                            שמור במילון
-                          </button>
-                          <button
-                            type="button"
-                            className="col-span-2 rounded-xl border-2 border-[var(--border-cherry-soft)] bg-white px-4 py-3 text-xs font-extrabold text-[var(--cherry)] hover:bg-[var(--cherry-muted)]"
-                            onClick={() => setShareId(r.id)}
-                          >
-                            שתף מתכון (PDF/ווטסאפ/מייל)
-                          </button>
-                        </div>
-
-                        <details className="mt-3 rounded-2xl border border-[var(--border-cherry-soft)] bg-white px-3 py-2" data-dict-no-swipe>
-                          <summary className="cursor-pointer text-sm font-extrabold text-[var(--stem)]">
-                            מרכיבים
-                          </summary>
-                          <ul className="mt-2 space-y-1">
-                            {r.ingredients.map((ing) => (
-                              <li key={ing.id} className="text-sm text-[var(--stem)]/80">
-                                <span className="font-semibold">{ing.name}</span> · {Math.round(ing.grams)}g
-                              </li>
-                            ))}
-                          </ul>
-                        </details>
+                        <button
+                          type="button"
+                          className="btn-add-journal mt-3 w-full rounded-2xl px-4 py-3.5 transition active:scale-[0.99] sm:text-xl sm:py-4"
+                          disabled={!(portionById[r.id] && clamp(num(portionById[r.id] ?? ""), 0, 200000) > 0)}
+                          onClick={() => {
+                            const g = clamp(num(portionById[r.id] ?? ""), 0, 200000);
+                            if (g <= 0) {
+                              window.alert(
+                                gf(
+                                  gender,
+                                  "יש להזין גרם למנה בשדה מחשבון המנה.",
+                                  "יש להזין גרם למנה בשדה מחשבון המנה."
+                                )
+                              );
+                              return;
+                            }
+                            const ok = addRecipePortionToToday(r, g);
+                            if (ok) window.alert(gf(gender, "נוסף ליומן היום.", "נוסף ליומן היום."));
+                          }}
+                        >
+                          הוסף ליומן
+                        </button>
                       </motion.div>
                     )}
                   </AnimatePresence>
                   </div>
-                  </DictionarySwipeDeleteRow>
                 </li>
               );
             })}
