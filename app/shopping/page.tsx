@@ -5,9 +5,9 @@ import { useCallback, useEffect, useState } from "react";
 import {
   IconEnvelope,
   IconPrinter,
-  IconTrash,
   IconWhatsApp,
 } from "@/components/Icons";
+import { DictionarySwipeDeleteRow } from "@/components/DictionarySwipeDeleteRow";
 import { ShoppingItemModal } from "@/components/ShoppingItemModal";
 import { ShoppingTopNav } from "@/components/ShoppingTopNav";
 import {
@@ -211,13 +211,18 @@ export default function ShoppingPage() {
                   <motion.li
                     key={it.id}
                     layout
-                    className={`flex flex-wrap items-center gap-2 rounded-xl border-2 border-[var(--border-cherry-soft)] bg-white px-3 py-3 ${
+                    className="list-none"
+                  >
+                    <DictionarySwipeDeleteRow onDelete={() => remove(it.id)}>
+                  <div
+                    className={`app-ui-no-select flex flex-wrap items-center gap-2 rounded-xl border-2 border-[var(--border-cherry-soft)] bg-white px-3 py-3 ${
                       it.checked ? "opacity-70" : ""
                     }`}
                     style={{ boxShadow: "var(--list-row-shadow)" }}
                   >
                     <label className="flex min-w-0 flex-1 cursor-pointer items-start gap-3">
                       <input
+                        data-dict-no-swipe
                         type="checkbox"
                         checked={it.checked}
                         onChange={() => toggle(it.id)}
@@ -254,7 +259,7 @@ export default function ShoppingPage() {
                         ) : null}
                       </span>
                     </label>
-                    <div className="flex shrink-0 gap-1.5">
+                    <div data-dict-no-swipe className="flex shrink-0 gap-1.5">
                       <button
                         type="button"
                         className="btn-icon-luxury flex min-w-[2.75rem] flex-col items-center gap-0.5 py-1"
@@ -269,19 +274,9 @@ export default function ShoppingPage() {
                           עריכה
                         </span>
                       </button>
-                      <button
-                        type="button"
-                        className="btn-icon-luxury btn-icon-luxury-danger flex min-w-[2.75rem] flex-col items-center gap-0.5 py-1"
-                        title="הסרה מרשימת הקניות"
-                        aria-label={`מחיקה — הסרת ${it.name} מהרשימה`}
-                        onClick={() => remove(it.id)}
-                      >
-                        <IconTrash className="h-5 w-5" />
-                        <span className="text-[9px] font-bold text-[var(--cherry)]">
-                          מחק
-                        </span>
-                      </button>
                     </div>
+                  </div>
+                    </DictionarySwipeDeleteRow>
                   </motion.li>
                 );
               })}
