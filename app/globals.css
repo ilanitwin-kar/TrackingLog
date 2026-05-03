@@ -236,6 +236,17 @@ input[type="checkbox"] {
   }
 
   /**
+   * מחשבון מתכונים — רק עומק צמוד לכרטיס (לא הילה רחבה «בחלל»).
+   * שכבה ורודה/מותגית חלשה מ־--accent, לא מוגזמת מ־--glass-glow-outer.
+   */
+  .glass-panel--recipe-glow {
+    box-shadow:
+      0 1px 2px color-mix(in srgb, var(--cherry) 8%, transparent),
+      0 3px 10px color-mix(in srgb, var(--accent) 24%, transparent),
+      0 0 0 1px var(--glass-glow-inner);
+  }
+
+  /**
    * Compact mode — ניסוי רק למסך היומן (`HomeClient mode="journal"`).
    * מצמצם padding/gaps כדי להכניס יותר תוכן בלי לשנות מסכים אחרים.
    */
@@ -299,6 +310,52 @@ input[type="checkbox"] {
     opacity: 0.5;
     cursor: not-allowed;
     filter: none;
+  }
+
+  /** הוספה ליומן — מסגרת ברורה, רקע ירוק בהיר (צבעים מלאים, תמיד נראה ככפתור) */
+  .btn-add-journal {
+    background-color: #dff6df;
+    color: #1e4a12;
+    border: 2px solid #5aad5a;
+    font-size: 1.125rem;
+    font-weight: 700;
+    box-shadow: 0 2px 10px rgba(74, 124, 35, 0.12);
+  }
+
+  .btn-add-journal:hover {
+    background-color: #cef0ce;
+    border-color: #4a9a4a;
+  }
+
+  .btn-add-journal:active {
+    box-shadow: 0 1px 5px rgba(74, 124, 35, 0.1);
+  }
+
+  .btn-add-journal:disabled {
+    opacity: 0.48;
+    cursor: not-allowed;
+    filter: none;
+    background-color: #eef8ee;
+    border-color: #a8d4a8;
+    color: #5a7a52;
+  }
+
+  html[data-app-theme="blueberry"] .btn-add-journal {
+    background-color: #e0f2f1;
+    color: #0d3d38;
+    border-color: #3d9b91;
+    box-shadow: 0 2px 10px rgba(13, 61, 56, 0.1);
+  }
+
+  html[data-app-theme="blueberry"] .btn-add-journal:hover {
+    background-color: #cceae8;
+    border-color: #2f857c;
+  }
+
+  html[data-app-theme="blueberry"] .btn-add-journal:disabled {
+    background-color: #eef8f7;
+    border-color: #9cc9c4;
+    color: #5a7572;
   }
 
   /* ביטול כפתור הניקוי המובנה של שדות type=search ב-WebKit */

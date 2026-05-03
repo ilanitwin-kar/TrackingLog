@@ -25,7 +25,7 @@ function titleForPathname(pathname: string): string {
   if (pathname === "/explorer") return "מגלה מזונות";
   if (pathname === "/shopping-list" || pathname === "/shopping") return "רשימת קניות";
   if (pathname === "/library") return "הספרייה שלי";
-  if (pathname === "/my-recipes") return "המתכונים שלי";
+  if (pathname === "/my-recipes") return "מתכונים";
   if (pathname === "/menus") return "התפריטים שלי";
   if (pathname === "/planner") return "בניית תפריט";
   if (pathname === "/recipes") return "מחשבון מתכונים";
@@ -266,7 +266,9 @@ export function AppBrandMark() {
   const titleSizeClass =
     pathname === "/journal" ||
     pathname === "/dictionary" ||
-    pathname === "/shopping"
+    pathname === "/shopping" ||
+    pathname === "/recipes" ||
+    pathname === "/my-recipes"
       ? "text-base sm:text-[1.05rem]"
       : "text-sm";
 
@@ -306,12 +308,18 @@ export function AppBrandMark() {
     pathname === "/shopping";
   const isDictionary = pathname === "/dictionary";
   const isShopping = pathname === "/shopping";
+  const isRecipes = pathname === "/recipes";
+  /** מחשבון + רשימת מתכונים — אותו הדר אטום בגלילה (לא cherry-muted שקוף) */
+  const isRecipesFlowOpaque = pathname === "/recipes" || pathname === "/my-recipes";
 
   return (
     <header
-      className={`pointer-events-none w-full shrink-0 bg-[var(--cherry-muted)]/45 ${
-        flowHeader ? "relative z-[1]" : "sticky top-0 z-[250]"
-      }`}
+      className={`pointer-events-none w-full shrink-0 ${
+        /* --cherry-muted הוא rgba בשקיפות ~0.14 — לא מסתיר גלילה; כאן תערובת אטומה */
+        isRecipesFlowOpaque
+          ? "bg-[color-mix(in_srgb,var(--cherry)_11%,var(--bg)_89%)]"
+          : "bg-[var(--cherry-muted)]/45"
+      } ${flowHeader ? "relative z-[1]" : "sticky top-0 z-[250]"}`}
     >
       <div
         className="pointer-events-auto relative mx-auto flex w-full max-w-lg flex-col px-3 pt-[env(safe-area-inset-top)]"
@@ -364,6 +372,22 @@ export function AppBrandMark() {
                 onClick={() => {
                   try {
                     window.dispatchEvent(new CustomEvent("cj-journal-help"));
+                  } catch {
+                    /* ignore */
+                  }
+                }}
+              >
+                ?
+              </button>
+            ) : isRecipes ? (
+              <button
+                type="button"
+                className="inline-flex h-8 w-8 items-center justify-center rounded-full border-2 border-[var(--border-cherry-soft)] bg-white text-sm font-extrabold text-[var(--cherry)] shadow-sm transition hover:bg-[var(--cherry-muted)]"
+                aria-label="הסבר על מחשבון המתכונים"
+                title="הסבר"
+                onClick={() => {
+                  try {
+                    window.dispatchEvent(new CustomEvent("cj-recipes-help"));
                   } catch {
                     /* ignore */
                   }

@@ -41,6 +41,7 @@ import {
   loadWeights,
   loadProfile,
   setActiveJournalDateKey,
+  resolveJournalTargetDateKey,
   saveWeightSkipDayKey,
   saveDayJournalClosedMap,
   saveDayLogEntries,
@@ -82,7 +83,6 @@ import {
   ChevronDown,
   ChevronLeft,
   ChevronRight,
-  MoreVertical,
   Pencil,
 } from "lucide-react";
 import { IconUtensilsMeal } from "./Icons";
@@ -1239,11 +1239,18 @@ export function HomeClient({ mode = "dashboard" }: { mode?: "dashboard" | "journ
 
   useEffect(() => {
     const raw = searchParams.get("date");
-    const dk =
-      raw && /^\d{4}-\d{2}-\d{2}$/.test(raw) ? raw : getTodayKey();
+    const today = getTodayKey();
+    let dk: string;
+    if (raw && /^\d{4}-\d{2}-\d{2}$/.test(raw)) {
+      dk = raw > today ? today : raw;
+    } else if (mode === "journal") {
+      dk = resolveJournalTargetDateKey({ allowFuture: false });
+    } else {
+      dk = today;
+    }
     setViewDateKey((prev) => (prev === dk ? prev : dk));
     setEntries(getEntriesForDate(dk));
-  }, [searchParams]);
+  }, [searchParams, mode]);
 
   useEffect(() => {
     setActiveJournalDateKey(viewDateKey);
@@ -2750,7 +2757,7 @@ export function HomeClient({ mode = "dashboard" }: { mode?: "dashboard" | "journ
                           <button
                             type="button"
                             data-journal-no-swipe
-                            className="rounded-md border border-[var(--border-cherry-soft)] bg-white p-1.5 text-[var(--cherry)] shadow-sm transition hover:bg-[var(--cherry-muted)]/45"
+                            className="shrink-0 rounded-md px-1 py-0 text-[1.15rem] font-extrabold leading-none tracking-[0.12em] text-[var(--stem)]/75 transition hover:bg-[var(--cherry-muted)]/45 hover:text-[var(--stem)]"
                             aria-expanded={journalRowMenuOpenId === item.id}
                             aria-haspopup="menu"
                             aria-label={gf(
@@ -2759,6 +2766,7 @@ export function HomeClient({ mode = "dashboard" }: { mode?: "dashboard" | "journ
                               "תפריט פעולות על הפריט"
                             )}
                             title={gf(gender, "עוד", "עוד")}
+                            dir="ltr"
                             onClick={(e) => {
                               e.preventDefault();
                               e.stopPropagation();
@@ -2767,7 +2775,7 @@ export function HomeClient({ mode = "dashboard" }: { mode?: "dashboard" | "journ
                               );
                             }}
                           >
-                            <MoreVertical className="h-5 w-5" aria-hidden />
+                            <span aria-hidden>...</span>
                           </button>
                           {journalRowMenuOpenId === item.id ? (
                             <div

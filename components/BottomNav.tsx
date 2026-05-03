@@ -17,6 +17,11 @@ import {
   loadProfile,
   saveDayJournalClosedMap,
 } from "@/lib/storage";
+
+function journalNavHref(): string {
+  const dk = resolveJournalTargetDateKey({ allowFuture: false });
+  return `/journal?date=${encodeURIComponent(dk)}`;
+}
 import { gf } from "@/lib/hebrewGenderUi";
 
 const navLinks = [
@@ -56,17 +61,29 @@ export function BottomNav() {
   );
 
   const [journalClosedTick, setJournalClosedTick] = useState(0);
+  const [journalNavTick, setJournalNavTick] = useState(0);
   useEffect(() => {
     const onClosed = () => setJournalClosedTick((n) => n + 1);
     window.addEventListener("cj-journal-closed-changed", onClosed);
     return () =>
       window.removeEventListener("cj-journal-closed-changed", onClosed);
   }, []);
+  useEffect(() => {
+    const onActive = () => setJournalNavTick((n) => n + 1);
+    window.addEventListener("cj-active-journal-date-changed", onActive);
+    return () =>
+      window.removeEventListener("cj-active-journal-date-changed", onActive);
+  }, []);
 
   const isAddFoodDateClosed = useMemo(() => {
     void journalClosedTick;
     return loadDayJournalClosedMap()[addFoodDateKey] === true;
   }, [addFoodDateKey, journalClosedTick]);
+
+  const journalTabHref = useMemo(() => {
+    void journalNavTick;
+    return journalNavHref();
+  }, [journalNavTick]);
 
   function goAddFood() {
     setSheetOpen(false);
@@ -122,11 +139,12 @@ export function BottomNav() {
       >
         <ul className="mx-auto grid max-w-md grid-cols-5 items-center gap-0.5 px-0.5 sm:gap-1 sm:px-1">
           {navLinks.slice(0, 2).map(({ href, label, Icon }) => {
+            const tabHref = href === "/journal" ? journalTabHref : href;
             const active = pathname === href;
             return (
               <li key={href} className="flex min-w-0 justify-center">
                 <Link
-                  href={href}
+                  href={tabHref}
                   className={`relative flex min-h-[2.75rem] min-w-0 max-w-full flex-row items-center justify-center gap-1 rounded-xl py-1 pe-1 ps-1 text-[11px] font-extrabold leading-tight tracking-tight transition-colors sm:min-h-0 sm:gap-1.5 sm:py-1.5 sm:text-[12px] ${
                     active
                       ? "text-[var(--cherry)]"
