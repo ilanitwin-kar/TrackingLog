@@ -10,7 +10,6 @@ import {
   useState,
   type Dispatch,
   type MouseEvent,
-  type PointerEvent,
   type ReactNode,
   type SetStateAction,
 } from "react";
@@ -28,7 +27,7 @@ import {
   toggleExplorerFoodInDictionary,
 } from "@/lib/storage";
 import { addToShopping, loadShoppingFoodIds } from "@/lib/explorerStorage";
-import { IconPlusCircle, IconVerified } from "@/components/Icons";
+import { IconVerified } from "@/components/Icons";
 import {
   dictionaryIntroBody,
   dictionarySavedFilterPlaceholder,
@@ -36,7 +35,14 @@ import {
 } from "@/lib/hebrewGenderUi";
 import { useDocumentScrollOnlyIfOverflowing } from "@/lib/useDocumentScrollOnlyIfOverflowing";
 import Link from "next/link";
-import { ChevronDown, Circle, Droplet, MoreVertical, Zap } from "lucide-react";
+import {
+  ChevronDown,
+  Circle,
+  Droplet,
+  MoreVertical,
+  Plus,
+  Zap,
+} from "lucide-react";
 import type { Gender } from "@/lib/tdee";
 import { rankedFuzzySearchByText, type MatchRange } from "@/lib/rankedSearch";
 import {
@@ -44,11 +50,7 @@ import {
   matchesAllQueryWords,
 } from "@/lib/foodSearchRules";
 import { truncateDisplayFoodLabel } from "@/lib/displayFoodLabel";
-import {
-  LONG_PRESS_DELETE_RIGHT_DX,
-  LONG_PRESS_MS,
-  shouldCancelLongPressForSwipeDelete,
-} from "@/lib/longPressSwipeDelete";
+import { DictionarySwipeDeleteRow } from "@/components/DictionarySwipeDeleteRow";
 
 const fontFood =
   "font-[Calibri,'Segoe_UI','Helvetica_Neue',system-ui,sans-serif]";
@@ -517,6 +519,42 @@ function DictDominantMacroGlyph({ kind }: { kind: DictDominantMacro }) {
   );
 }
 
+function DictionaryIntroMacroLegend() {
+  const row = "flex items-center gap-2.5 text-sm leading-snug text-[var(--stem)]/90";
+  const iconWrap = "inline-flex w-7 shrink-0 justify-center";
+  return (
+    <div className="mt-4 border-t border-[var(--border-cherry-soft)]/45 pt-3">
+      <p className="text-sm font-extrabold text-[var(--stem)]">מקרא — אייקוני מאקרו</p>
+      <ul className="mt-2 space-y-2">
+        <li className={row}>
+          <span className={iconWrap}>
+            <DictDominantMacroGlyph kind="protein" />
+          </span>
+          <span>חלבון</span>
+        </li>
+        <li className={row}>
+          <span className={iconWrap}>
+            <DictDominantMacroGlyph kind="carbs" />
+          </span>
+          <span>פחמימה</span>
+        </li>
+        <li className={row}>
+          <span className={iconWrap}>
+            <DictDominantMacroGlyph kind="fat" />
+          </span>
+          <span>שומן</span>
+        </li>
+        <li className={`${row} text-[var(--stem)]/70`}>
+          <span className={iconWrap}>
+            <DictDominantMacroGlyph kind="neutral" />
+          </span>
+          <span>ללא מאקרו דומיננטי ברור</span>
+        </li>
+      </ul>
+    </div>
+  );
+}
+
 function clampGramQty(q: number): number {
   if (!Number.isFinite(q)) return 100;
   return Math.min(5000, Math.max(1, Math.round(q)));
@@ -614,6 +652,44 @@ function fmtMacroG(n: number | undefined): string {
   return n.toFixed(1);
 }
 
+/** שלושת המאקרו בגרמים — אייקוני המילון (חלבון / פחמימה / שומן) במקום ח׳·פ׳·ש׳ */
+function DictMacroPcfIcons({
+  proteinG,
+  carbsG,
+  fatG,
+}: {
+  proteinG: number | undefined;
+  carbsG: number | undefined;
+  fatG: number | undefined;
+}) {
+  return (
+    <span
+      className="inline-flex shrink-0 flex-nowrap items-center justify-start gap-x-1.5 whitespace-nowrap"
+      dir="rtl"
+    >
+      <span className="inline-flex items-center gap-0.5">
+        <DictDominantMacroGlyph kind="protein" />
+        <span className="tabular-nums">{fmtMacroG(proteinG)}</span>
+      </span>
+      <span className="text-neutral-400 select-none" aria-hidden>
+        ·
+      </span>
+      <span className="inline-flex items-center gap-0.5">
+        <DictDominantMacroGlyph kind="carbs" />
+        <span className="tabular-nums">{fmtMacroG(carbsG)}</span>
+      </span>
+      <span className="text-neutral-400 select-none" aria-hidden>
+        ·
+      </span>
+      <span className="inline-flex items-center gap-0.5">
+        <DictDominantMacroGlyph kind="fat" />
+        <span className="tabular-nums">{fmtMacroG(fatG)}</span>
+      </span>
+      <span className="text-neutral-950"> ג׳</span>
+    </span>
+  );
+}
+
 function pointerEventTargetElement(
   e: { target: EventTarget | null }
 ): Element | null {
@@ -644,7 +720,7 @@ function dictionaryPortionRedundantWithPer100(d: DictionaryItem): boolean {
 }
 
 const DICT_COMPACT_PEEK_CLASS =
-  "text-base font-medium leading-relaxed text-neutral-950";
+  "w-full text-right text-base font-medium leading-relaxed text-neutral-950";
 
 /** שורת מאקרו קומפקטית ליד השם — דסקטופ: נראה ב־hover; מגע: תמיד */
 function DictRowCompactMacroPeek({
@@ -663,14 +739,22 @@ function DictRowCompactMacroPeek({
   if (isMeal && preset) {
     const s = sumPresetTotals(preset);
     return (
-      <p className={DICT_COMPACT_PEEK_CLASS}>
-        <span className="font-semibold">
-          סה״כ ארוחה: {Math.round(s.kcal)} קק״ל
-        </span>
-        {" · "}
-        ח׳ {s.protein.toFixed(1)} · פ׳ {s.carbs.toFixed(1)} · ש׳ {s.fat.toFixed(1)}{" "}
-        ג׳
-      </p>
+      <div
+        className={`${DICT_COMPACT_PEEK_CLASS} flex flex-col items-start gap-1.5`}
+      >
+        <div className="flex w-full min-w-0 flex-wrap items-center justify-start gap-x-2 gap-y-1">
+          <span className="min-w-0 font-semibold">
+            סה״כ ארוחה: {Math.round(s.kcal)} קק״ל
+          </span>
+          <span className="shrink-0">
+            <DictMacroPcfIcons
+              proteinG={s.protein}
+              carbsG={s.carbs}
+              fatG={s.fat}
+            />
+          </span>
+        </div>
+      </div>
     );
   }
 
@@ -689,32 +773,38 @@ function DictRowCompactMacroPeek({
   if (!showPer100 && !showPortionLine) return null;
 
   return (
-    <p className={DICT_COMPACT_PEEK_CLASS}>
+    <div
+      className={`${DICT_COMPACT_PEEK_CLASS} flex flex-col items-start gap-1.5`}
+    >
       {showPer100 ? (
-        <>
-          <span className="font-semibold">
-            ל־100 ג׳: {Math.round(d.caloriesPer100g!)} קק״ל
-          </span>
-          {d.proteinPer100g != null &&
-          d.carbsPer100g != null &&
-          d.fatPer100g != null ? (
-            <>
-              {" · "}
-              ח׳ {d.proteinPer100g.toFixed(1)} · פ׳ {d.carbsPer100g.toFixed(1)} ·
-              ש׳ {d.fatPer100g.toFixed(1)} ג׳
-            </>
+        <div className="flex w-full min-w-0 flex-col items-start gap-1">
+          <div className="flex w-full min-w-0 flex-wrap items-center justify-start gap-x-2 gap-y-1">
+            <span className="min-w-0 font-semibold">
+              ל־100 ג׳: {Math.round(d.caloriesPer100g!)} קק״ל
+            </span>
+            {d.proteinPer100g != null &&
+            d.carbsPer100g != null &&
+            d.fatPer100g != null ? (
+              <span className="shrink-0">
+                <DictMacroPcfIcons
+                  proteinG={d.proteinPer100g}
+                  carbsG={d.carbsPer100g}
+                  fatG={d.fatPer100g}
+                />
+              </span>
+            ) : null}
+          </div>
+          {d.barcode ? (
+            <span className="text-sm font-normal text-neutral-600">
+              ברקוד {d.barcode}
+            </span>
           ) : null}
-        </>
+        </div>
       ) : null}
-      {showPer100 && showPortionLine ? (
-        <span className="text-neutral-950" aria-hidden>
-          {" "}
-          ·{" "}
-        </span>
-      ) : null}
+
       {showPortionLine ? (
-        <>
-          <span className="font-semibold">
+        <div className="flex w-full min-w-0 flex-wrap items-center justify-start gap-x-2 gap-y-1">
+          <span className="min-w-0 font-semibold">
             {fromJournal ? "מנה" : "למנה"} (
             <span className="bidi-isolate-rtl inline-block">
               {d.quantity} {d.unit}
@@ -732,15 +822,17 @@ function DictRowCompactMacroPeek({
           {d.lastProteinG != null ||
           d.lastCarbsG != null ||
           d.lastFatG != null ? (
-            <>
-              {" · "}
-              ח׳ {fmtMacroG(d.lastProteinG)} · פ׳ {fmtMacroG(d.lastCarbsG)} · ש׳{" "}
-              {fmtMacroG(d.lastFatG)} ג׳
-            </>
+            <span className="shrink-0">
+              <DictMacroPcfIcons
+                proteinG={d.lastProteinG}
+                carbsG={d.lastCarbsG}
+                fatG={d.lastFatG}
+              />
+            </span>
           ) : null}
-        </>
+        </div>
       ) : null}
-    </p>
+    </div>
   );
 }
 
@@ -838,25 +930,6 @@ export default function DictionaryPage() {
   /** גלה מזונות / בחירה לייצוא / ייצוא — מקופלים מאחורי «עוד» */
   const [dictionaryMoreActionsOpen, setDictionaryMoreActionsOpen] =
     useState(false);
-  const dictLongPressRef = useRef<{
-    timer: number | null;
-    pointerId: number | null;
-    startX: number;
-    startY: number;
-    itemId: string | null;
-    pendingItem: DictionaryItem | null;
-    lastDx: number;
-    lastDy: number;
-  }>({
-    timer: null,
-    pointerId: null,
-    startX: 0,
-    startY: 0,
-    itemId: null,
-    pendingItem: null,
-    lastDx: 0,
-    lastDy: 0,
-  });
   const [dictionaryActionItem, setDictionaryActionItem] =
     useState<DictionaryItem | null>(null);
   const [dictRowMenuOpenId, setDictRowMenuOpenId] = useState<string | null>(
@@ -1294,12 +1367,6 @@ export default function DictionaryPage() {
   }, []);
 
   useEffect(() => {
-    return () => {
-      clearDictLongPressTimer();
-    };
-  }, []);
-
-  useEffect(() => {
     if (!dictRowMenuOpenId) return;
     function onDown(ev: Event) {
       const t = ev.target;
@@ -1330,86 +1397,6 @@ export default function DictionaryPage() {
     return short;
   }
 
-  function clearDictLongPressTimer() {
-    const t = dictLongPressRef.current.timer;
-    if (t != null) window.clearTimeout(t);
-    dictLongPressRef.current.timer = null;
-    dictLongPressRef.current.pointerId = null;
-    dictLongPressRef.current.itemId = null;
-    dictLongPressRef.current.pendingItem = null;
-  }
-
-  function handleDictRowPointerDown(
-    e: PointerEvent<HTMLLIElement>,
-    d: DictionaryItem
-  ) {
-    if (exportSelectMode) return;
-    if (e.pointerType === "mouse" && e.button !== 0) return;
-    const el = pointerEventTargetElement(e);
-    if (!el) return;
-    if (el.closest("[data-skip-dict-longpress]")) return;
-
-    clearDictLongPressTimer();
-    dictLongPressRef.current.pointerId = e.pointerId;
-    dictLongPressRef.current.startX = e.clientX;
-    dictLongPressRef.current.startY = e.clientY;
-    dictLongPressRef.current.itemId = d.id;
-    dictLongPressRef.current.pendingItem = d;
-    dictLongPressRef.current.lastDx = 0;
-    dictLongPressRef.current.lastDy = 0;
-    try {
-      e.currentTarget.setPointerCapture(e.pointerId);
-    } catch {
-      /* ignore */
-    }
-    dictLongPressRef.current.timer = window.setTimeout(() => {
-      const victim = dictLongPressRef.current.pendingItem;
-      const dx = dictLongPressRef.current.lastDx;
-      dictLongPressRef.current.timer = null;
-      dictLongPressRef.current.pointerId = null;
-      dictLongPressRef.current.itemId = null;
-      dictLongPressRef.current.pendingItem = null;
-      if (!victim) return;
-      setDictRowMenuOpenId(null);
-      if (dx >= LONG_PRESS_DELETE_RIGHT_DX) {
-        setSaved(removeDictionaryItem(victim.id));
-        setDictionaryActionItem(null);
-        setOpenSavedId((x) => (x === victim.id ? null : x));
-        try {
-          navigator.vibrate?.(18);
-        } catch {
-          /* ignore */
-        }
-      }
-    }, LONG_PRESS_MS);
-  }
-
-  function handleDictRowPointerMove(e: PointerEvent<HTMLLIElement>) {
-    if (dictLongPressRef.current.pointerId !== e.pointerId) return;
-    const dx = e.clientX - dictLongPressRef.current.startX;
-    const dy = e.clientY - dictLongPressRef.current.startY;
-    dictLongPressRef.current.lastDx = dx;
-    dictLongPressRef.current.lastDy = dy;
-    if (shouldCancelLongPressForSwipeDelete(dx, dy)) {
-      clearDictLongPressTimer();
-      try {
-        e.currentTarget.releasePointerCapture(e.pointerId);
-      } catch {
-        /* ignore */
-      }
-    }
-  }
-
-  function handleDictRowPointerEnd(e: PointerEvent<HTMLLIElement>) {
-    if (dictLongPressRef.current.pointerId !== e.pointerId) return;
-    clearDictLongPressTimer();
-    try {
-      e.currentTarget.releasePointerCapture(e.pointerId);
-    } catch {
-      /* ignore */
-    }
-  }
-
   function handleDictRowContextMenu(
     e: MouseEvent<HTMLLIElement>,
     d: DictionaryItem
@@ -1417,9 +1404,8 @@ export default function DictionaryPage() {
     if (exportSelectMode) return;
     const el = pointerEventTargetElement(e);
     if (!el) return;
-    if (el.closest("[data-skip-dict-longpress]")) return;
+    if (el.closest("[data-dict-no-swipe]")) return;
     e.preventDefault();
-    clearDictLongPressTimer();
     setDictRowMenuOpenId(null);
     setDictionaryActionItem(d);
   }
@@ -1664,6 +1650,7 @@ export default function DictionaryPage() {
               <p className="mt-2 text-base leading-relaxed text-[var(--stem)]/85">
                 {dictionaryIntroBody(gender)}
               </p>
+              <DictionaryIntroMacroLegend />
             </motion.div>
           </motion.div>
         )}
@@ -1755,33 +1742,35 @@ export default function DictionaryPage() {
                               <span className="font-semibold">שומן</span> {row.fat}
                             </p>
                           </div>
-                          <div className="flex shrink-0">
-                            <button
-                              type="button"
-                              className={`btn-icon-luxury min-w-[3.25rem] flex-col justify-center gap-0.5 py-2 transition-colors ${
-                                inDict || justAddedId === row.id
-                                  ? "bg-[var(--cherry-muted)] ring-2 ring-[var(--border-cherry-soft)]"
-                                  : ""
-                              }`}
-                              title={inDict ? "כבר במילון" : "הוספה למילון"}
-                              aria-label={inDict ? "כבר במילון" : "הוספה למילון"}
-                              aria-pressed={inDict || justAddedId === row.id}
-                              onClick={() => onExplorerDictionary(row)}
-                            >
-                              <span className="inline-flex flex-col items-center">
-                                {inDict || justAddedId === row.id ? (
-                                  <span
-                                    className="text-xl font-extrabold text-[var(--stem)]"
-                                    aria-hidden
-                                  >
-                                    ✓
-                                  </span>
-                                ) : (
-                                  <IconPlusCircle className="h-7 w-7 text-[var(--stem)]" />
-                                )}
+                          <button
+                            type="button"
+                            className={`flex h-10 min-w-10 shrink-0 items-center justify-center rounded-full transition active:scale-[0.94] ${
+                              inDict || justAddedId === row.id
+                                ? "text-[var(--stem)]"
+                                : "text-[var(--stem)] hover:bg-[var(--stem)]/12"
+                            }`}
+                            title={inDict ? "כבר במילון" : "הוספה למילון"}
+                            aria-label={inDict ? "כבר במילון" : "הוספה למילון"}
+                            aria-pressed={inDict || justAddedId === row.id}
+                            onClick={() => onExplorerDictionary(row)}
+                          >
+                            {inDict || justAddedId === row.id ? (
+                              <span
+                                className="text-xl font-extrabold leading-none"
+                                aria-hidden
+                              >
+                                ✓
                               </span>
-                            </button>
-                          </div>
+                            ) : (
+                              <Plus
+                                className="h-7 w-7 shrink-0"
+                                strokeWidth={2.6}
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                                aria-hidden
+                              />
+                            )}
+                          </button>
                         </li>
                       );
                     })}
@@ -1829,33 +1818,35 @@ export default function DictionaryPage() {
                               <span className="font-semibold">שומן</span> {row.fat}
                             </p>
                           </div>
-                          <div className="flex shrink-0">
-                            <button
-                              type="button"
-                              className={`btn-icon-luxury min-w-[3.25rem] flex-col justify-center gap-0.5 py-2 transition-colors ${
-                                inDict || justAddedId === row.id
-                                  ? "bg-[var(--cherry-muted)] ring-2 ring-[var(--border-cherry-soft)]"
-                                  : ""
-                              }`}
-                              title={inDict ? "כבר במילון" : "הוספה למילון"}
-                              aria-label={inDict ? "כבר במילון" : "הוספה למילון"}
-                              aria-pressed={inDict || justAddedId === row.id}
-                              onClick={() => onExplorerDictionary(row)}
-                            >
-                              <span className="inline-flex flex-col items-center">
-                                {inDict || justAddedId === row.id ? (
-                                  <span
-                                    className="text-xl font-extrabold text-[var(--stem)]"
-                                    aria-hidden
-                                  >
-                                    ✓
-                                  </span>
-                                ) : (
-                                  <IconPlusCircle className="h-7 w-7 text-[var(--stem)]" />
-                                )}
+                          <button
+                            type="button"
+                            className={`flex h-10 min-w-10 shrink-0 items-center justify-center rounded-full transition active:scale-[0.94] ${
+                              inDict || justAddedId === row.id
+                                ? "text-[var(--stem)]"
+                                : "text-[var(--stem)] hover:bg-[var(--stem)]/12"
+                            }`}
+                            title={inDict ? "כבר במילון" : "הוספה למילון"}
+                            aria-label={inDict ? "כבר במילון" : "הוספה למילון"}
+                            aria-pressed={inDict || justAddedId === row.id}
+                            onClick={() => onExplorerDictionary(row)}
+                          >
+                            {inDict || justAddedId === row.id ? (
+                              <span
+                                className="text-xl font-extrabold leading-none"
+                                aria-hidden
+                              >
+                                ✓
                               </span>
-                            </button>
-                          </div>
+                            ) : (
+                              <Plus
+                                className="h-7 w-7 shrink-0"
+                                strokeWidth={2.6}
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                                aria-hidden
+                              />
+                            )}
+                          </button>
                         </li>
                       );
                     })}
@@ -2202,19 +2193,32 @@ export default function DictionaryPage() {
               return (
                 <motion.li
                   key={d.id}
-                  layout
-                  className="notebook-row"
-                  onPointerDown={(e) => handleDictRowPointerDown(e, d)}
-                  onPointerMove={handleDictRowPointerMove}
-                  onPointerUp={handleDictRowPointerEnd}
-                  onPointerCancel={handleDictRowPointerEnd}
+                  className="list-none"
                   onContextMenu={(e) => handleDictRowContextMenu(e, d)}
                 >
+                  <DictionarySwipeDeleteRow
+                    disabled={exportSelectMode}
+                    onDelete={() => {
+                      setDictRowMenuOpenId(null);
+                      setSaved(removeDictionaryItem(d.id));
+                      setDictionaryActionItem(null);
+                      setOpenSavedId((x) => (x === d.id ? null : x));
+                      try {
+                        navigator.vibrate?.(12);
+                      } catch {
+                        /* ignore */
+                      }
+                    }}
+                  >
+                  <div
+                    className="app-ui-no-select rounded-xl border-2 border-[var(--border-cherry-soft)] bg-white/95 p-3 sm:px-4"
+                    style={{ boxShadow: "var(--list-row-shadow)" }}
+                  >
                   <div className="flex items-start justify-between gap-3">
                     {exportSelectMode ? (
                       <button
                         type="button"
-                        data-skip-dict-longpress
+                        data-dict-no-swipe
                         className="mt-1 shrink-0 rounded-md border-2 border-[var(--border-cherry-soft)] bg-white p-1 shadow-sm"
                         onPointerDown={(e) => {
                           e.preventDefault();
@@ -2250,28 +2254,50 @@ export default function DictionaryPage() {
                           <DictDominantMacroGlyph kind={dominantMacro} />
                         </span>
                         {!isOpen ? (
-                          <button
-                            type="button"
-                            data-skip-dict-longpress
-                            className="min-w-0 flex-1 text-right"
-                            onClick={() =>
-                              setOpenSavedId((x) => (x === d.id ? null : d.id))
-                            }
-                            aria-expanded={false}
-                            title={d.food}
-                          >
-                            <span className="flex min-w-0 items-center justify-end gap-1.5">
-                              <span className="min-w-0 flex-1 break-words text-base font-normal leading-snug text-[var(--cherry)]">
+                          <div className="flex min-w-0 flex-1 items-center gap-1">
+                            <div
+                              role="button"
+                              tabIndex={0}
+                              className="min-w-0 flex-1 cursor-pointer rounded-lg p-0 text-right outline-none ring-0 focus-visible:ring-2 focus-visible:ring-[var(--cherry)]/35"
+                              onClick={() =>
+                                setOpenSavedId((x) =>
+                                  x === d.id ? null : d.id
+                                )
+                              }
+                              onKeyDown={(e) => {
+                                if (e.key === "Enter" || e.key === " ") {
+                                  e.preventDefault();
+                                  setOpenSavedId((x) =>
+                                    x === d.id ? null : d.id
+                                  );
+                                }
+                              }}
+                              aria-expanded={false}
+                              title={d.food}
+                            >
+                              <span className="block min-w-0 break-words text-base font-normal leading-snug text-[var(--cherry)]">
                                 {renderDictListFoodTitle(d)}
                               </span>
-                              <span
-                                className="shrink-0 text-xs font-normal text-[var(--stem)]/55"
-                                aria-hidden
-                              >
-                                ▼
-                              </span>
-                            </span>
-                          </button>
+                            </div>
+                            <button
+                              type="button"
+                              data-dict-no-swipe
+                              className="shrink-0 rounded-md p-1 text-xs font-normal text-[var(--stem)]/55 transition hover:bg-[var(--cherry-muted)]/40"
+                              aria-expanded={false}
+                              aria-label={gf(
+                                gender,
+                                "פתיחת פרטי הפריט",
+                                "פתיחת פרטי הפריט"
+                              )}
+                              onClick={() =>
+                                setOpenSavedId((x) =>
+                                  x === d.id ? null : d.id
+                                )
+                              }
+                            >
+                              <span aria-hidden>▼</span>
+                            </button>
+                          </div>
                         ) : (
                           <div className="flex min-w-0 flex-1 items-center gap-1.5">
                             <span className="min-w-0 flex-1 break-words px-1 py-0.5 text-right text-base font-normal leading-snug text-[var(--cherry)]">
@@ -2279,7 +2305,7 @@ export default function DictionaryPage() {
                             </span>
                             <button
                               type="button"
-                              data-skip-dict-longpress
+                              data-dict-no-swipe
                               className="shrink-0 rounded-md p-1 text-xs font-normal text-[var(--stem)]/55 transition hover:bg-[var(--cherry-muted)]/40"
                               onClick={(e) => {
                                 e.preventDefault();
@@ -2306,13 +2332,16 @@ export default function DictionaryPage() {
                           </span>
                         )}
                       </div>
-                      <div className="empty:hidden hidden min-w-0 ps-10 text-end [@media(hover:hover)]:group-hover:block [@media(hover:none)]:block">
-                        <DictRowCompactMacroPeek
-                          d={d}
-                          preset={preset}
-                          isMeal={isMeal}
-                          isOpen={isOpen}
-                        />
+                      <div className="empty:hidden hidden min-w-0 items-start gap-2 [@media(hover:hover)]:group-hover:flex [@media(hover:none)]:flex">
+                        <div className="w-8 shrink-0" aria-hidden />
+                        <div className="min-w-0 flex-1 text-right">
+                          <DictRowCompactMacroPeek
+                            d={d}
+                            preset={preset}
+                            isMeal={isMeal}
+                            isOpen={isOpen}
+                          />
+                        </div>
                       </div>
                     </div>
 
@@ -2322,7 +2351,7 @@ export default function DictionaryPage() {
                         <div className="relative" data-dict-row-menu>
                           <button
                             type="button"
-                            data-skip-dict-longpress
+                            data-dict-no-swipe
                             className="rounded-md border border-[var(--border-cherry-soft)] bg-white p-1.5 text-[var(--cherry)] shadow-sm transition hover:bg-[var(--cherry-muted)]"
                             aria-expanded={dictRowMenuOpenId === d.id}
                             aria-haspopup="menu"
@@ -2393,16 +2422,18 @@ export default function DictionaryPage() {
                   <AnimatePresence>
                     {isOpen && (
                       <motion.div
-                        className="mt-3"
-                        data-skip-dict-longpress
+                        className="mt-3 min-w-0 w-full text-right"
+                        data-dict-no-swipe
                         initial={{ opacity: 0, y: -4 }}
                         animate={{ opacity: 1, y: 0 }}
                         exit={{ opacity: 0, y: -4 }}
                       >
-                        <div className="flex min-w-0 flex-col gap-2">
+                        <div className="flex items-start gap-2">
+                          <div className="w-8 shrink-0" aria-hidden />
+                          <div className="flex min-w-0 flex-1 flex-col items-start gap-2 text-right">
                           {isMeal && preset && (
                             <>
-                              <ul className="space-y-1 text-sm text-[var(--text)]/90">
+                              <ul className="w-full space-y-1 text-sm text-[var(--text)]/90">
                                 {preset.components.map((c, i) => (
                                   <li key={`${d.id}-c-${i}`} className="leading-snug">
                                     <div className="text-sm text-[var(--text)]/90">
@@ -2423,10 +2454,12 @@ export default function DictionaryPage() {
                                       </span>
                                       {")"}
                                     </div>
-                                    <div className="mt-0.5 text-base font-medium leading-relaxed text-neutral-950">
-                                      ח׳ {fmtMacroG(c.proteinG)} · פ׳{" "}
-                                      {fmtMacroG(c.carbsG)} · ש׳ {fmtMacroG(c.fatG)}{" "}
-                                      ג׳
+                                    <div className="mt-0.5 flex w-full flex-wrap items-center justify-start gap-x-2 text-base font-medium leading-relaxed text-neutral-950">
+                                      <DictMacroPcfIcons
+                                        proteinG={c.proteinG}
+                                        carbsG={c.carbsG}
+                                        fatG={c.fatG}
+                                      />
                                     </div>
                                   </li>
                                 ))}
@@ -2434,12 +2467,17 @@ export default function DictionaryPage() {
                               {(() => {
                                 const s = sumPresetTotals(preset);
                                 return (
-                                  <p className="text-base font-medium text-neutral-950">
-                                    <span className="font-semibold">סה״כ ארוחה:</span>{" "}
-                                    {Math.round(s.kcal)} קק״ל
-                                    {" · "}
-                                    ח׳ {s.protein.toFixed(1)} · פ׳ {s.carbs.toFixed(1)} ·
-                                    ש׳ {s.fat.toFixed(1)} ג׳
+                                  <p className="flex w-full flex-wrap items-center justify-start gap-x-2 text-base font-medium text-neutral-950">
+                                    <span className="font-semibold">סה״כ ארוחה:</span>
+                                    <span>{Math.round(s.kcal)} קק״ל</span>
+                                    <span className="text-neutral-400 select-none" aria-hidden>
+                                      ·
+                                    </span>
+                                    <DictMacroPcfIcons
+                                      proteinG={s.protein}
+                                      carbsG={s.carbs}
+                                      fatG={s.fat}
+                                    />
                                   </p>
                                 );
                               })()}
@@ -2464,40 +2502,36 @@ export default function DictionaryPage() {
                                 hasPortion && (fromJournal || !redundant);
 
                               return showPer100 || showPortionLine ? (
-                                <p className="text-base font-medium leading-relaxed text-neutral-950">
+                                <div className="w-full text-right text-base font-medium leading-relaxed text-neutral-950 flex flex-col items-start gap-1.5">
                                   {showPer100 ? (
-                                    <>
-                                      <span className="font-semibold">
-                                        ל־100 ג׳:{" "}
-                                        {Math.round(d.caloriesPer100g!)} קק״ל
-                                      </span>
-                                      {d.proteinPer100g != null &&
-                                        d.carbsPer100g != null &&
-                                        d.fatPer100g != null && (
-                                          <>
-                                            {" · "}
-                                            ח׳ {d.proteinPer100g.toFixed(1)} · פ׳{" "}
-                                            {d.carbsPer100g.toFixed(1)} · ש׳{" "}
-                                            {d.fatPer100g.toFixed(1)} ג׳
-                                          </>
-                                        )}
+                                    <div className="flex w-full min-w-0 flex-col items-start gap-1">
+                                      <div className="flex w-full min-w-0 flex-wrap items-center justify-start gap-x-2 gap-y-1">
+                                        <span className="min-w-0 font-semibold">
+                                          ל־100 ג׳:{" "}
+                                          {Math.round(d.caloriesPer100g!)} קק״ל
+                                        </span>
+                                        {d.proteinPer100g != null &&
+                                          d.carbsPer100g != null &&
+                                          d.fatPer100g != null && (
+                                            <span className="shrink-0">
+                                              <DictMacroPcfIcons
+                                                proteinG={d.proteinPer100g}
+                                                carbsG={d.carbsPer100g}
+                                                fatG={d.fatPer100g}
+                                              />
+                                            </span>
+                                          )}
+                                      </div>
                                       {d.barcode ? (
                                         <span className="text-sm font-normal text-neutral-600">
-                                          {" "}
-                                          · ברקוד {d.barcode}
+                                          ברקוד {d.barcode}
                                         </span>
                                       ) : null}
-                                    </>
-                                  ) : null}
-                                  {showPer100 && showPortionLine ? (
-                                    <span className="text-neutral-950" aria-hidden>
-                                      {" "}
-                                      ·{" "}
-                                    </span>
+                                    </div>
                                   ) : null}
                                   {showPortionLine ? (
-                                    <>
-                                      <span className="font-semibold">
+                                    <div className="flex w-full min-w-0 flex-wrap items-center justify-start gap-x-2 gap-y-1">
+                                      <span className="min-w-0 font-semibold">
                                         {fromJournal ? "מנה" : "למנה"} (
                                         <span className="bidi-isolate-rtl inline-block">
                                           {d.quantity} {d.unit}
@@ -2515,18 +2549,20 @@ export default function DictionaryPage() {
                                       {d.lastProteinG != null ||
                                       d.lastCarbsG != null ||
                                       d.lastFatG != null ? (
-                                        <>
-                                          {" · "}
-                                          ח׳ {fmtMacroG(d.lastProteinG)} · פ׳{" "}
-                                          {fmtMacroG(d.lastCarbsG)} · ש׳{" "}
-                                          {fmtMacroG(d.lastFatG)} ג׳
-                                        </>
+                                        <span className="shrink-0">
+                                          <DictMacroPcfIcons
+                                            proteinG={d.lastProteinG}
+                                            carbsG={d.lastCarbsG}
+                                            fatG={d.lastFatG}
+                                          />
+                                        </span>
                                       ) : null}
-                                    </>
+                                    </div>
                                   ) : null}
-                                </p>
+                                </div>
                               ) : null;
                             })()}
+                          </div>
                         </div>
                       </motion.div>
                     )}
@@ -2536,6 +2572,8 @@ export default function DictionaryPage() {
                       לא נמצאה ארוחה — ניתן להסיר את הרשומה.
                     </p>
                   )}
+                  </div>
+                  </DictionarySwipeDeleteRow>
                 </motion.li>
               );
                   })}
@@ -2614,8 +2652,8 @@ export default function DictionaryPage() {
               <p className="mt-3 text-center text-xs text-[var(--text)]/75">
                 {gf(
                   gender,
-                  "לחיצה ארוכה והחלקה ימינה — מחיקה מהמילון (לחיצה ימנית כאן לאישור).",
-                  "לחיצה ארוכה והחלקה ימינה — מחיקה מהמילון (לחיצה ימנית כאן לאישור)."
+                  "משיכה ימינה עד הסוף — מחיקה מהמילון (לחיצה ימנית כאן לאישור).",
+                  "משיכה ימינה עד הסוף — מחיקה מהמילון (לחיצה ימנית כאן לאישור)."
                 )}
               </p>
               <div className="mt-4 space-y-2">

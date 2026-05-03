@@ -485,6 +485,23 @@ input[type="checkbox"] {
     }
   }
 
+  /**
+   * רשימות ממשק — ללא בחירת טקסט (פחות «Touch to Search» בכרום אנדרואיד).
+   * שדות קלט נשארים עם user-select: text.
+   */
+  .notebook-row,
+  .app-ui-no-select {
+    -webkit-user-select: none;
+    user-select: none;
+    -webkit-touch-callout: none;
+  }
+
+  .notebook-row :where(input, textarea, [contenteditable="true"]),
+  .app-ui-no-select :where(input, textarea, [contenteditable="true"]) {
+    -webkit-user-select: text;
+    user-select: text;
+  }
+
   .handwriting-food-name {
     font-family:
       "Segoe Print",
