@@ -74,11 +74,16 @@ import {
   type JournalMealSlot,
 } from "@/lib/journalMeals";
 import { useDocumentScrollOnlyIfOverflowing } from "@/lib/useDocumentScrollOnlyIfOverflowing";
+import {
+  LONG_PRESS_DELETE_RIGHT_DX,
+  LONG_PRESS_MS,
+  shouldCancelLongPressForSwipeDelete,
+} from "@/lib/longPressSwipeDelete";
 import { CelebrationConfetti } from "./Fireworks";
 import { useAppVariant } from "./useAppVariant";
 import { QuickWeightModal } from "./QuickWeightModal";
 import { QuickStepsModal } from "./QuickStepsModal";
-import { ChevronDown, CornerUpRight, Pencil, Trash2 } from "lucide-react";
+import { ChevronDown, Pencil, Trash2 } from "lucide-react";
 import { IconUtensilsMeal } from "./Icons";
 import { LiveClock } from "./LiveClock";
 
@@ -515,9 +520,6 @@ const quickNavBtnClass =
 
 const journalToolbarIconClass = "h-[15px] w-[15px] shrink-0";
 
-const JOURNAL_LONG_PRESS_MS = 520;
-const JOURNAL_LONG_PRESS_CANCEL_DIST2 = 100;
-
 type WeatherClientState = {
   tempC: number;
   description: string;
@@ -575,12 +577,18 @@ export function HomeClient({ mode = "dashboard" }: { mode?: "dashboard" | "journ
     startX: number;
     startY: number;
     entryId: string | null;
+    pendingEntry: LogEntry | null;
+    lastDx: number;
+    lastDy: number;
   }>({
     timer: null,
     pointerId: null,
     startX: 0,
     startY: 0,
     entryId: null,
+    pendingEntry: null,
+    lastDx: 0,
+    lastDy: 0,
   });
 
   /** נקודת התחלה להחלקה אופקית על גוף היומן (נייד) — מגיעים לכאן עם האצבע, לא רק מכותרת התאריך */
@@ -1289,6 +1297,7 @@ export function HomeClient({ mode = "dashboard" }: { mode?: "dashboard" | "journ
     journalLongPressRef.current.timer = null;
     journalLongPressRef.current.pointerId = null;
     journalLongPressRef.current.entryId = null;
+    journalLongPressRef.current.pendingEntry = null;
   }
 
   function handleJournalCardPointerDown(
@@ -1306,30 +1315,48 @@ export function HomeClient({ mode = "dashboard" }: { mode?: "dashboard" | "journ
     journalLongPressRef.current.startX = e.clientX;
     journalLongPressRef.current.startY = e.clientY;
     journalLongPressRef.current.entryId = item.id;
+    journalLongPressRef.current.pendingEntry = item;
+    journalLongPressRef.current.lastDx = 0;
+    journalLongPressRef.current.lastDy = 0;
     try {
       e.currentTarget.setPointerCapture(e.pointerId);
     } catch {
       /* ignore */
     }
     journalLongPressRef.current.timer = window.setTimeout(() => {
+      const entry = journalLongPressRef.current.pendingEntry;
+      const dx = journalLongPressRef.current.lastDx;
       journalLongPressRef.current.timer = null;
       journalLongPressRef.current.pointerId = null;
       journalLongPressRef.current.entryId = null;
-      setJournalCardMoveOpen(false);
-      setJournalCardActionEntry(item);
-      try {
-        navigator.vibrate?.(12);
-      } catch {
-        /* ignore */
+      journalLongPressRef.current.pendingEntry = null;
+      if (!entry || isDayClosed) return;
+      if (dx >= LONG_PRESS_DELETE_RIGHT_DX) {
+        removeEntry(entry.id);
+        try {
+          navigator.vibrate?.(18);
+        } catch {
+          /* ignore */
+        }
+      } else {
+        setJournalCardMoveOpen(true);
+        setJournalCardActionEntry(entry);
+        try {
+          navigator.vibrate?.(12);
+        } catch {
+          /* ignore */
+        }
       }
-    }, JOURNAL_LONG_PRESS_MS);
+    }, LONG_PRESS_MS);
   }
 
   function handleJournalCardPointerMove(e: React.PointerEvent<HTMLLIElement>) {
     if (journalLongPressRef.current.pointerId !== e.pointerId) return;
     const dx = e.clientX - journalLongPressRef.current.startX;
     const dy = e.clientY - journalLongPressRef.current.startY;
-    if (dx * dx + dy * dy > JOURNAL_LONG_PRESS_CANCEL_DIST2) {
+    journalLongPressRef.current.lastDx = dx;
+    journalLongPressRef.current.lastDy = dy;
+    if (shouldCancelLongPressForSwipeDelete(dx, dy)) {
       clearJournalLongPressTimer();
       try {
         e.currentTarget.releasePointerCapture(e.pointerId);
@@ -1349,7 +1376,7 @@ export function HomeClient({ mode = "dashboard" }: { mode?: "dashboard" | "journ
     }
   }
 
-  /** במחשב: לחיצה ימנית = אותו תפריט כמו לחיצה ארוכה בנייד */
+  /** במחשב: לחיצה ימנית = פותח «העבר אל…» כמו לחיצה ארוכה בלי משיכה ימינה */
   function handleJournalCardContextMenu(
     e: React.MouseEvent<HTMLLIElement>,
     item: LogEntry
@@ -1360,7 +1387,7 @@ export function HomeClient({ mode = "dashboard" }: { mode?: "dashboard" | "journ
     if (el.closest("[data-skip-journal-longpress]")) return;
     e.preventDefault();
     clearJournalLongPressTimer();
-    setJournalCardMoveOpen(false);
+    setJournalCardMoveOpen(true);
     setJournalCardActionEntry(item);
   }
 
@@ -2244,7 +2271,7 @@ export function HomeClient({ mode = "dashboard" }: { mode?: "dashboard" | "journ
                 </div>
               </div>
 
-              {/* שורה 2 — יתרה יומית: מספר למעלה + תווית למטה (כמו יומן ניסיון); אותם צבעי מאקרו בלי רקעים/מסגרות פנימיים */}
+              {/* שורה 2 — יתרה יומית; קק״ל בצבע דובדבן, מאקרו בשחור־לבן (stem) */}
               <div className="border-t border-[var(--border-cherry-soft)]/30 px-2 py-2.5 sm:px-3 sm:py-3">
                 <div
                   className="mx-auto grid w-full max-w-xl grid-cols-4 gap-1 px-0.5 sm:gap-1.5"
@@ -2263,34 +2290,34 @@ export function HomeClient({ mode = "dashboard" }: { mode?: "dashboard" | "journ
                   </div>
                   <div className="flex min-w-0 flex-col items-center text-center">
                     <p
-                      className="text-[17px] font-bold leading-none tabular-nums text-[#CA8A04]"
+                      className="text-[17px] font-bold leading-none tabular-nums text-[var(--stem)]"
                       aria-label={`חלבון נותר ${formatJournalRemainingMacroG(remainingProteinG)}`}
                     >
                       {formatJournalRemainingMacroG(remainingProteinG)}
                     </p>
-                    <p className="mt-1.5 text-[11px] font-semibold leading-tight text-[#CA8A04]">
+                    <p className="mt-1.5 text-[11px] font-semibold leading-tight text-[var(--stem)]/75">
                       חלבון (ג׳)
                     </p>
                   </div>
                   <div className="flex min-w-0 flex-col items-center text-center">
                     <p
-                      className="text-[17px] font-bold leading-none tabular-nums text-[#2563EB]"
+                      className="text-[17px] font-bold leading-none tabular-nums text-[var(--stem)]"
                       aria-label={`פחמימה נותרה ${formatJournalRemainingMacroG(remainingCarbsG)}`}
                     >
                       {formatJournalRemainingMacroG(remainingCarbsG)}
                     </p>
-                    <p className="mt-1.5 text-[11px] font-semibold leading-tight text-[#2563EB]">
+                    <p className="mt-1.5 text-[11px] font-semibold leading-tight text-[var(--stem)]/75">
                       פחמימה (ג׳)
                     </p>
                   </div>
                   <div className="flex min-w-0 flex-col items-center text-center">
                     <p
-                      className="text-[17px] font-bold leading-none tabular-nums text-[#16A34A]"
+                      className="text-[17px] font-bold leading-none tabular-nums text-[var(--stem)]"
                       aria-label={`שומן נותר ${formatJournalRemainingMacroG(remainingFatG)}`}
                     >
                       {formatJournalRemainingMacroG(remainingFatG)}
                     </p>
-                    <p className="mt-1.5 text-[11px] font-semibold leading-tight text-[#16A34A]">
+                    <p className="mt-1.5 text-[11px] font-semibold leading-tight text-[var(--stem)]/75">
                       שומן (ג׳)
                     </p>
                   </div>
@@ -3004,75 +3031,6 @@ export function HomeClient({ mode = "dashboard" }: { mode?: "dashboard" | "journ
         </div>
 
         <AnimatePresence>
-          {journalCardActionEntry && !journalCardMoveOpen ? (
-            <motion.div
-              className="fixed inset-0 z-[500] flex items-center justify-center bg-black/35 p-4"
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              onClick={(ev) => {
-                if (ev.target === ev.currentTarget) setJournalCardActionEntry(null);
-              }}
-            >
-              <motion.div
-                role="dialog"
-                aria-modal
-                aria-labelledby="journal-entry-action-food"
-                className="w-full max-w-sm rounded-2xl border-2 border-[var(--border-cherry-soft)] bg-white p-4 shadow-xl"
-                initial={{ scale: 0.96, opacity: 0 }}
-                animate={{ scale: 1, opacity: 1 }}
-                exit={{ scale: 0.97, opacity: 0 }}
-                onClick={(e) => e.stopPropagation()}
-                dir="rtl"
-              >
-                <p
-                  id="journal-entry-action-food"
-                  className="line-clamp-3 text-center text-base font-semibold text-[var(--stem)]"
-                  title={journalCardActionEntry.food}
-                >
-                  {truncateJournalFoodDisplayLabel(
-                    journalCardActionEntry.food
-                  )}
-                </p>
-                <div className="mt-4 space-y-2">
-                  <button
-                    type="button"
-                    className="flex w-full items-center gap-3 rounded-xl border border-[var(--border-cherry-soft)] px-3 py-3 text-start text-sm font-bold text-[var(--stem)] transition hover:bg-[var(--cherry-muted)]/35"
-                    onClick={() => setJournalCardMoveOpen(true)}
-                  >
-                    <CornerUpRight
-                      className="size-5 shrink-0 text-[var(--cherry)]"
-                      strokeWidth={2}
-                      aria-hidden
-                    />
-                    העבר אל…
-                  </button>
-                  <button
-                    type="button"
-                    className="flex w-full items-center gap-3 rounded-xl border border-red-200 bg-red-50/50 px-3 py-3 text-start text-sm font-bold text-red-800 transition hover:bg-red-50"
-                    onClick={() => {
-                      const id = journalCardActionEntry.id;
-                      setJournalCardActionEntry(null);
-                      removeEntry(id);
-                    }}
-                  >
-                    <Trash2 className="size-5 shrink-0" strokeWidth={2} aria-hidden />
-                    מחק מוצר
-                  </button>
-                </div>
-                <button
-                  type="button"
-                  className="mt-3 w-full rounded-xl py-2 text-sm font-semibold text-[var(--text)]/75 hover:bg-neutral-100"
-                  onClick={() => setJournalCardActionEntry(null)}
-                >
-                  ביטול
-                </button>
-              </motion.div>
-            </motion.div>
-          ) : null}
-        </AnimatePresence>
-
-        <AnimatePresence>
           {journalCardActionEntry && journalCardMoveOpen ? (
             <motion.div
               className="fixed inset-0 z-[510] flex items-center justify-center bg-black/35 p-4"
@@ -3125,10 +3083,26 @@ export function HomeClient({ mode = "dashboard" }: { mode?: "dashboard" | "journ
                 </ul>
                 <button
                   type="button"
-                  className="mt-1 w-full rounded-xl py-2 text-sm font-semibold text-[var(--text)]/75 hover:bg-neutral-100"
-                  onClick={() => setJournalCardMoveOpen(false)}
+                  className="mt-3 flex w-full items-center justify-center gap-2 rounded-xl border border-red-200 bg-red-50/50 px-3 py-3 text-sm font-bold text-red-800 transition hover:bg-red-50"
+                  onClick={() => {
+                    const id = journalCardActionEntry?.id;
+                    setJournalCardMoveOpen(false);
+                    setJournalCardActionEntry(null);
+                    if (id) removeEntry(id);
+                  }}
                 >
-                  חזרה
+                  <Trash2 className="size-5 shrink-0" strokeWidth={2} aria-hidden />
+                  מחק מוצר
+                </button>
+                <button
+                  type="button"
+                  className="mt-1 w-full rounded-xl py-2 text-sm font-semibold text-[var(--text)]/75 hover:bg-neutral-100"
+                  onClick={() => {
+                    setJournalCardMoveOpen(false);
+                    setJournalCardActionEntry(null);
+                  }}
+                >
+                  סגירה
                 </button>
               </motion.div>
             </motion.div>
