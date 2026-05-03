@@ -1,5 +1,6 @@
 "use client";
 
+import { Trash2 } from "lucide-react";
 import {
   useCallback,
   useEffect,
@@ -159,24 +160,35 @@ export function JournalEntrySwipeRow({
   );
 
   return (
-    <div className="relative overflow-hidden rounded-xl app-ui-no-select">
+    <div
+      className="relative overflow-hidden rounded-xl app-ui-no-select"
+      data-journal-entry-swipe
+    >
       <div
-        className="absolute inset-y-0 left-0 z-0 flex h-full min-h-[3.25rem] overflow-hidden rounded-l-xl shadow-inner"
+        dir="ltr"
+        className="absolute inset-y-0 left-0 z-0 flex h-full min-h-[3.25rem] flex-row overflow-hidden rounded-l-xl border-r border-[var(--border-cherry-soft)]/50 bg-white/40 shadow-[inset_0_0_0_1px_rgba(255,255,255,0.35)]"
         style={{ width: MAX_DRAG_PX }}
       >
         <button
           type="button"
-          className="flex min-h-[3.25rem] flex-none items-center justify-center bg-[var(--cherry-muted)] px-2 text-xs font-extrabold text-[var(--cherry)] transition-colors hover:bg-[var(--cherry-muted)]/90"
+          className="flex min-h-[3.25rem] flex-none items-center justify-center border-r border-[var(--border-cherry-soft)]/35 bg-gradient-to-b from-white via-white to-[var(--cherry-muted)]/30 px-2 text-[11px] font-bold text-[var(--cherry)] shadow-[inset_0_-1px_0_rgba(0,0,0,0.04)] transition hover:to-[var(--cherry-muted)]/45 active:scale-[0.98]"
           style={{ width: SNAP_OPEN_PX }}
           onClick={handleMoveClick}
         >
-          העבר אל…
+          <span className="whitespace-nowrap">העבר אל…</span>
         </button>
         <div
-          className="flex min-h-[3.25rem] flex-1 items-center justify-center bg-red-600 px-2 text-center text-xs font-extrabold leading-snug text-white"
+          className="flex min-h-[3.25rem] min-w-0 flex-1 flex-row items-center justify-center gap-1 bg-gradient-to-b from-stone-100 to-stone-200/95 px-2"
           aria-hidden
         >
-          המשיכו למחיקה
+          <Trash2
+            className="h-4 w-4 shrink-0 text-stone-600/90"
+            strokeWidth={2}
+            aria-hidden
+          />
+          <span className="whitespace-nowrap text-[11px] font-bold text-stone-800/90">
+            מחק
+          </span>
         </div>
       </div>
       <div
