@@ -746,16 +746,30 @@ export function HomeClient({ mode = "dashboard" }: { mode?: "dashboard" | "journ
     applyJournalDayPanEnd(info.offset.x, info.offset.y, info.velocity.x);
   }
 
+  function journalDaySwipeTouchTargetEl(
+    t: EventTarget | null
+  ): Element | null {
+    if (t instanceof Element) return t;
+    if (t instanceof Text && t.parentElement) return t.parentElement;
+    return null;
+  }
+
+  function isInsideJournalEntrySwipeOrControls(el: Element | null): boolean {
+    if (!el) return false;
+    return Boolean(
+      el.closest(
+        "button,a,input,textarea,select,[data-skip-journal-day-swipe],[data-journal-no-swipe],[data-journal-entry-swipe]"
+      )
+    );
+  }
+
   function onJournalSectionTouchStart(e: ReactTouchEvent) {
     if (e.touches.length !== 1) {
       journalDaySwipeTouchRef.current = null;
       return;
     }
-    const raw = e.target;
-    if (
-      raw instanceof Element &&
-      raw.closest("button,a,input,textarea,select,[data-skip-journal-day-swipe]")
-    ) {
+    const el = journalDaySwipeTouchTargetEl(e.target);
+    if (isInsideJournalEntrySwipeOrControls(el)) {
       journalDaySwipeTouchRef.current = null;
       return;
     }
@@ -772,6 +786,10 @@ export function HomeClient({ mode = "dashboard" }: { mode?: "dashboard" | "journ
     journalDaySwipeTouchRef.current = null;
     if (!start || e.changedTouches.length !== 1) return;
     const t = e.changedTouches[0];
+    /** מניעת התנגשות עם החלקת שורה / כפתורים — גם אם touchstart יצא מטעות (למשל target = Text) */
+    const endEl = document.elementFromPoint(t.clientX, t.clientY);
+    if (isInsideJournalEntrySwipeOrControls(endEl)) return;
+
     const dx = t.clientX - start.x;
     const dy = t.clientY - start.y;
     const now =
@@ -873,7 +891,7 @@ export function HomeClient({ mode = "dashboard" }: { mode?: "dashboard" | "journ
       m[getEffectiveMealSlot(e) as JournalDaySectionSlot].push(e);
     }
     for (const slot of JOURNAL_DAY_SECTION_SLOTS) {
-      m[slot].sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+      m[slot].sort((a, b) => b.createdAt.localeCompare(a.createdAt));
     }
     return m;
   }, [entries]);

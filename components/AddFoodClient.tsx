@@ -106,7 +106,7 @@ function recentPickQtyAndKcal(row: HomeSuggestRow): { qtyLine: string; kcal: num
   return { qtyLine, kcal };
 }
 
-/** עד 5 המילים הראשונות מתוך שם המוצר — רשימת ההיסטוריה */
+/** עד N המילים הראשונות מתוך שם המוצר — היסטוריה (ברירת מחדל 5); תוצאות מאגר 6 */
 function foodProductFirstWords(name: string, maxWords = 5): string {
   const t = name.normalize("NFC").trim();
   if (!t) return "…";
@@ -250,6 +250,9 @@ function formatDateKeyHe(dateKey: string): string {
   });
 }
 
+/** תצוגה בשורות חיפוש (מאגרים / תוצאות נבחרות) — לא במודאל עריכה */
+const ADD_FOOD_CATALOG_LIST_NAME_WORDS = 6;
+
 function addFoodSourceBadge(src: HomeSuggestRow["source"]) {
   const s = src ?? "local";
   if (s === "local") {
@@ -318,27 +321,28 @@ function AddFoodSearchResultRow({
     <li dir="rtl" className="flex items-stretch gap-1.5">
       <button
         type="button"
-        className="suggestion-item flex min-w-0 flex-1 flex-col items-stretch gap-0.5 rounded-lg px-3 py-2.5 text-right transition hover:bg-[var(--cherry-muted)]"
+        className="suggestion-item flex min-w-0 flex-1 flex-col items-stretch gap-1 rounded-lg px-3 py-2.5 text-right transition hover:bg-[var(--cherry-muted)]"
         dir="rtl"
+        title={row.name}
         onClick={(e) => onOpenPick(row, e)}
       >
-        <span className="flex w-full flex-wrap items-center justify-start gap-x-2 gap-y-1 font-semibold text-[var(--stem)]">
-          <span className="min-w-0 flex-1 text-right leading-snug">{row.name}</span>
-          <span
-            className={`inline-flex shrink-0 items-center gap-1 rounded-md border px-2 py-0.5 ${badge.border} ${badge.bg}`}
-            title={badge.label}
-          >
-            {badge.verified ? (
-              <>
-                <span className="text-sm font-bold leading-none text-[#d4a017]" aria-hidden>
-                  ✓
-                </span>
-                <IconVerified className="h-3.5 w-3.5 shrink-0 text-[#16a34a]" />
-              </>
-            ) : null}
-            <span className={`text-[10px] font-extrabold tracking-wide ${badge.text}`}>
-              {badge.label}
-            </span>
+        <span className="line-clamp-2 min-w-0 break-words text-base font-semibold leading-snug text-[var(--stem)]">
+          {foodProductFirstWords(row.name, ADD_FOOD_CATALOG_LIST_NAME_WORDS)}
+        </span>
+        <span
+          className={`inline-flex w-fit max-w-full shrink-0 items-center gap-1 self-end rounded-md border px-2 py-0.5 ${badge.border} ${badge.bg}`}
+          title={badge.label}
+        >
+          {badge.verified ? (
+            <>
+              <span className="text-sm font-bold leading-none text-[#d4a017]" aria-hidden>
+                ✓
+              </span>
+              <IconVerified className="h-3.5 w-3.5 shrink-0 text-[#16a34a]" />
+            </>
+          ) : null}
+          <span className={`text-[10px] font-extrabold tracking-wide ${badge.text}`}>
+            {badge.label}
           </span>
         </span>
         {row.category != null ? (
