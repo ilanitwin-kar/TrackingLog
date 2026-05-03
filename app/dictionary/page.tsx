@@ -2253,79 +2253,50 @@ export default function DictionaryPage() {
                         >
                           <DictDominantMacroGlyph kind={dominantMacro} />
                         </span>
-                        {!isOpen ? (
-                          <div className="flex min-w-0 flex-1 items-center gap-1">
-                            <div
-                              role="button"
-                              tabIndex={0}
-                              className="min-w-0 flex-1 cursor-pointer rounded-lg p-0 text-right outline-none ring-0 focus-visible:ring-2 focus-visible:ring-[var(--cherry)]/35"
-                              onClick={() =>
-                                setOpenSavedId((x) =>
-                                  x === d.id ? null : d.id
+                        <div
+                          role="button"
+                          tabIndex={0}
+                          className="flex min-w-0 flex-1 cursor-pointer items-center gap-1.5 rounded-lg px-1 py-0.5 text-right outline-none ring-0 focus-visible:ring-2 focus-visible:ring-[var(--cherry)]/35"
+                          onClick={() =>
+                            setOpenSavedId((x) =>
+                              x === d.id ? null : d.id
+                            )
+                          }
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter" || e.key === " ") {
+                              e.preventDefault();
+                              setOpenSavedId((x) =>
+                                x === d.id ? null : d.id
+                              );
+                            }
+                          }}
+                          aria-expanded={isOpen}
+                          aria-label={
+                            isOpen
+                              ? gf(
+                                  gender,
+                                  "סגירת פרטי הפריט",
+                                  "סגירת פרטי הפריט"
                                 )
-                              }
-                              onKeyDown={(e) => {
-                                if (e.key === "Enter" || e.key === " ") {
-                                  e.preventDefault();
-                                  setOpenSavedId((x) =>
-                                    x === d.id ? null : d.id
-                                  );
-                                }
-                              }}
-                              aria-expanded={false}
-                              title={d.food}
-                            >
-                              <span className="block min-w-0 break-words text-base font-normal leading-snug text-[var(--cherry)]">
-                                {renderDictListFoodTitle(d)}
-                              </span>
-                            </div>
-                            <button
-                              type="button"
-                              data-dict-no-swipe
-                              className="shrink-0 rounded-md p-1 text-xs font-normal text-[var(--stem)]/55 transition hover:bg-[var(--cherry-muted)]/40"
-                              aria-expanded={false}
-                              aria-label={gf(
-                                gender,
-                                "פתיחת פרטי הפריט",
-                                "פתיחת פרטי הפריט"
-                              )}
-                              onClick={() =>
-                                setOpenSavedId((x) =>
-                                  x === d.id ? null : d.id
+                              : gf(
+                                  gender,
+                                  "פתיחת פרטי הפריט",
+                                  "פתיחת פרטי הפריט"
                                 )
-                              }
-                            >
-                              <span aria-hidden>▼</span>
-                            </button>
-                          </div>
-                        ) : (
-                          <div className="flex min-w-0 flex-1 items-center gap-1.5">
-                            <span className="min-w-0 flex-1 break-words px-1 py-0.5 text-right text-base font-normal leading-snug text-[var(--cherry)]">
-                              {renderDictListFoodTitle(d)}
-                            </span>
-                            <button
-                              type="button"
-                              data-dict-no-swipe
-                              className="shrink-0 rounded-md p-1 text-xs font-normal text-[var(--stem)]/55 transition hover:bg-[var(--cherry-muted)]/40"
-                              onClick={(e) => {
-                                e.preventDefault();
-                                e.stopPropagation();
-                                setOpenSavedId((x) =>
-                                  x === d.id ? null : x
-                                );
-                              }}
-                              aria-expanded={true}
-                              aria-label={gf(
-                                gender,
-                                "סגירת פרטי הפריט",
-                                "סגירת פרטי הפריט"
-                              )}
-                              title={gf(gender, "סגירה", "סגירה")}
-                            >
-                              <span aria-hidden>▲</span>
-                            </button>
-                          </div>
-                        )}
+                          }
+                          title={d.food}
+                        >
+                          <span className="block min-w-0 flex-1 break-words text-base font-normal leading-snug text-[var(--cherry)]">
+                            {renderDictListFoodTitle(d)}
+                          </span>
+                          <ChevronDown
+                            className={`h-4 w-4 shrink-0 text-[var(--stem)]/45 transition-transform duration-200 ease-out ${
+                              isOpen ? "rotate-180" : ""
+                            }`}
+                            strokeWidth={2.25}
+                            aria-hidden
+                          />
+                        </div>
                         {isMeal && (
                           <span className="shrink-0 rounded-md bg-[var(--cherry-muted)] px-2 py-0.5 text-xs font-normal text-[var(--cherry)]">
                             ארוחה

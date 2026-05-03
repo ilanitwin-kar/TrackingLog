@@ -39,12 +39,14 @@ export function DictionarySwipeDeleteRow({
     startClientY: number;
     baseOffset: number;
     cancelled: boolean;
+    maxDxMag: number;
   }>({
     pointerId: null,
     startClientX: 0,
     startClientY: 0,
     baseOffset: 0,
     cancelled: false,
+    maxDxMag: 0,
   });
 
   useEffect(() => {
@@ -62,6 +64,7 @@ export function DictionarySwipeDeleteRow({
         startClientY: e.clientY,
         baseOffset: offset,
         cancelled: false,
+        maxDxMag: 0,
       };
       setIsDragging(true);
       try {
@@ -80,8 +83,8 @@ export function DictionarySwipeDeleteRow({
     const dy = e.clientY - dragRef.current.startClientY;
     if (
       !dragRef.current.cancelled &&
-      Math.abs(dy) > 18 &&
-      Math.abs(dy) > dxMag * 1.2
+      Math.abs(dy) > 28 &&
+      Math.abs(dy) > dxMag * 1.25
     ) {
       dragRef.current.cancelled = true;
       offsetRef.current = dragRef.current.baseOffset;
@@ -90,6 +93,7 @@ export function DictionarySwipeDeleteRow({
     }
     if (dragRef.current.cancelled) return;
 
+    dragRef.current.maxDxMag = Math.max(dragRef.current.maxDxMag, dxMag);
     /** תמיד מתחילים מ־0 — משיכה ימינה או שמאלה (עכבר / RTL) חושפת את הרצועה */
     const next = Math.min(MAX_DRAG_PX, dxMag);
     offsetRef.current = next;
@@ -112,9 +116,11 @@ export function DictionarySwipeDeleteRow({
       if (cancelled) return;
 
       const ox = offsetRef.current;
+      const maxDx = dragRef.current.maxDxMag;
       offsetRef.current = 0;
       setOffset(0);
-      if (ox >= DELETE_AT_PX) {
+      const minDragForDelete = 36;
+      if (ox >= DELETE_AT_PX && maxDx >= minDragForDelete) {
         onDelete();
       }
     },
@@ -135,7 +141,7 @@ export function DictionarySwipeDeleteRow({
         }`}
         style={{
           transform: `translateX(${offset}px)`,
-          touchAction: "pan-x pan-y",
+          touchAction: "pan-y",
         }}
         onPointerDownCapture={onPointerDownCapture}
         onPointerMove={onPointerMove}

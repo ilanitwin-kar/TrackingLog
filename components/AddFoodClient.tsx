@@ -121,6 +121,12 @@ function pickRandom<T>(arr: readonly T[]): T {
   return arr[Math.floor(Math.random() * arr.length)]!;
 }
 
+/** מפתח יציב להדגשת ✓ בהוספה מהירה — כולל שם כדי לא להתנגש כש־id זהה בין מאגרים */
+function rowQuickAddKey(r: HomeSuggestRow): string {
+  const src = r.source ?? "local";
+  return `${src}\u001f${String(r.id ?? "").trim()}\u001f${r.name.trim()}`;
+}
+
 function SearchSourceSection({
   title,
   subtitle,
@@ -186,7 +192,7 @@ function SearchSourceSection({
         <ul className="space-y-1">
           {rows.map((s) => (
             <AddFoodSearchResultRow
-              key={`${s.source ?? "local"}-${s.id}`}
+              key={rowQuickAddKey(s)}
               row={s}
               gender={gender}
               quickAddId={quickAddId}
@@ -306,7 +312,7 @@ function AddFoodSearchResultRow({
 }) {
   const src = row.source ?? "local";
   const badge = addFoodSourceBadge(src);
-  const qk = `${src}-${row.id}`;
+  const qk = rowQuickAddKey(row);
 
   return (
     <li dir="rtl" className="flex items-stretch gap-1.5">
@@ -463,6 +469,7 @@ export function AddFoodClient({
     text: string;
   } | null>(null);
   const pickFlashTimerRef = useRef<number | null>(null);
+  const quickAddUiTimerRef = useRef<number | null>(null);
   const pickTitleId = useId();
   const searchInputRef = useRef<HTMLInputElement>(null);
   const aiSectionRef = useRef<HTMLDivElement>(null);
@@ -860,14 +867,26 @@ export function AddFoodClient({
         if (resI.ok) {
           const data = (await resI.json()) as { items?: HomeSuggestRow[] };
           for (const row of data.items ?? []) {
-            if (row?.id && row.name) moh.push(row);
+            if (row?.id && row.name) {
+              moh.push({
+                ...row,
+                verified: row.verified === true,
+                source: "israelMoH",
+              });
+            }
           }
         }
 
         if (resU.ok) {
           const data = (await resU.json()) as { items?: HomeSuggestRow[] };
           for (const row of data.items ?? []) {
-            if (row?.id && row.name) usda.push(row);
+            if (row?.id && row.name) {
+              usda.push({
+                ...row,
+                verified: row.verified === true,
+                source: "usda",
+              });
+            }
           }
         }
 
@@ -966,6 +985,9 @@ export function AddFoodClient({
     return () => {
       if (pickFlashTimerRef.current != null) {
         window.clearTimeout(pickFlashTimerRef.current);
+      }
+      if (quickAddUiTimerRef.current != null) {
+        window.clearTimeout(quickAddUiTimerRef.current);
       }
     };
   }, []);
@@ -1395,25 +1417,13 @@ export function AddFoodClient({
   }
 
   const tabsQuery = `date=${encodeURIComponent(dateKey)}&from=${encodeURIComponent(from || "journal")}`;
-  const [quickAddToast, setQuickAddToast] = useState<string | null>(null);
   const [quickAddId, setQuickAddId] = useState<string | null>(null);
-  const quickAddTimerRef = useRef<number | null>(null);
   const [expandedIntel, setExpandedIntel] = useState(false);
   const [expandedMoh, setExpandedMoh] = useState(false);
   const [expandedUsda, setExpandedUsda] = useState(false);
   const [expandedWorld, setExpandedWorld] = useState(false);
 
-  function showQuickAddToast(msg: string) {
-    setQuickAddToast(msg);
-    if (quickAddTimerRef.current != null) window.clearTimeout(quickAddTimerRef.current);
-    quickAddTimerRef.current = window.setTimeout(() => setQuickAddToast(null), 1100);
-  }
-
   function quickAddRowToJournal(row: HomeSuggestRow): void {
-    setExpandedIntel(false);
-    setExpandedMoh(false);
-    setExpandedUsda(false);
-    setExpandedWorld(false);
     const per100 = row.calories ?? 0;
     const mem = getFoodMemory(row.name.trim());
     const unit = mem?.unit ?? ("גרם" as const);
@@ -1460,11 +1470,16 @@ export function AddFoodClient({
     const existing = getEntriesForDate(dateKey);
     saveDayLogEntries(dateKey, [entry, ...existing]);
     rememberFoodPick(row);
-    setRecentPicks(loadRecentFoodPicks());
-    setQuickAddId(`${row.source ?? "local"}-${row.id}`);
-    window.setTimeout(() => setQuickAddId(null), 900);
-    showQuickAddToast(`«${row.name.trim()}» נרשם ביומן`);
-    emitMealLoggedFeedback(gf(gender, "נוסף ליומן.", "נוסף ליומן."));
+    const k = rowQuickAddKey(row);
+    setQuickAddId(k);
+    if (quickAddUiTimerRef.current != null) {
+      window.clearTimeout(quickAddUiTimerRef.current);
+    }
+    quickAddUiTimerRef.current = window.setTimeout(() => {
+      quickAddUiTimerRef.current = null;
+      setQuickAddId(null);
+      setRecentPicks(loadRecentFoodPicks());
+    }, 900);
   }
 
   const pickPreview = useMemo(() => {
@@ -1605,16 +1620,8 @@ export function AddFoodClient({
               </div>
             </div>
 
-            {(quickAddToast || dictFeedback || food.trim().length >= 1) && (
+            {(dictFeedback || food.trim().length >= 1) && (
             <div className="mt-3 scroll-mt-[11rem] rounded-xl border border-[var(--border-cherry-soft)] bg-white/90 p-2 shadow-sm">
-              {quickAddToast && (
-                <p
-                  className="mb-2 rounded-lg border border-[var(--border-cherry-soft)] bg-[#ecfdf5] px-2 py-2 text-center text-xs font-semibold text-[var(--stem)]"
-                  role="status"
-                >
-                  {quickAddToast}
-                </p>
-              )}
               {dictFeedback && (
                 <p
                   className={`rounded-lg border border-[var(--border-cherry-soft)] bg-[#fff9e6] px-2 py-2 text-center text-xs font-semibold text-[var(--stem)]${food.trim().length >= 1 ? " mb-3" : ""}`}
@@ -1635,17 +1642,18 @@ export function AddFoodClient({
                     <ul className="divide-y divide-[var(--cherry)]/25 overflow-hidden rounded-xl border border-[var(--border-cherry-soft)]/70 bg-white/85">
                       {historySearchMatches.map((r) => {
                         const { qtyLine, kcal } = recentPickQtyAndKcal(r);
-                        const qk = `${r.source ?? "local"}-${r.id}`;
+                        const qk = rowQuickAddKey(r);
                         return (
                           <li
-                            key={`hist-${qk}-${r.name}`}
+                            key={`hist-${qk}`}
+                            dir="rtl"
                             className="flex flex-col bg-white"
                           >
-                            <div className="flex items-center gap-2">
+                            <div className="flex items-stretch gap-1.5">
                               <button
                                 type="button"
                                 title={r.name}
-                                className="flex min-w-0 flex-1 flex-col gap-0.5 px-3 py-2.5 text-start transition hover:bg-[var(--cherry-muted)]/25"
+                                className="flex min-w-0 flex-1 flex-col gap-0.5 rounded-lg px-3 py-2.5 text-right transition hover:bg-[var(--cherry-muted)]/25"
                                 onClick={() => openPickModalFromRow(r)}
                               >
                                 <span className="line-clamp-2 text-base font-semibold leading-snug text-[var(--cherry)]">
@@ -1657,7 +1665,13 @@ export function AddFoodClient({
                               </button>
                               <button
                                 type="button"
-                                className="me-2 flex min-h-10 min-w-[2.25rem] shrink-0 items-center justify-center rounded-xl px-1 text-[1.5rem] font-extrabold leading-none text-[var(--cherry)] transition hover:bg-[var(--cherry-muted)]/35 active:scale-[0.96]"
+                                className={`flex h-10 min-w-10 shrink-0 items-center justify-center rounded-full transition active:scale-[0.94] ${
+                                  quickAddId === qk
+                                    ? "text-[var(--stem)]"
+                                    : gender === "male"
+                                      ? "text-[#1e3a5f] hover:bg-[#1e3a5f]/12"
+                                      : "text-[var(--cherry)] hover:bg-[var(--cherry-muted)]/35"
+                                }`}
                                 title={gf(gender, "הוספה מהירה ליומן", "הוספה מהירה ליומן")}
                                 aria-label={gf(gender, "הוספה מהירה ליומן", "הוספה מהירה ליומן")}
                                 onClick={(e) => {
@@ -1666,28 +1680,36 @@ export function AddFoodClient({
                                 }}
                               >
                                 {quickAddId === qk ? (
-                                  <span className="text-xl font-extrabold text-[var(--cherry)]" aria-hidden>
+                                  <span className="text-xl font-extrabold leading-none" aria-hidden>
                                     ✓
                                   </span>
                                 ) : (
-                                  <span aria-hidden>+</span>
+                                  <Plus
+                                    className="h-7 w-7 shrink-0"
+                                    strokeWidth={2.6}
+                                    strokeLinecap="round"
+                                    strokeLinejoin="round"
+                                    aria-hidden
+                                  />
                                 )}
                               </button>
                             </div>
-                            <button
-                              type="button"
-                              disabled={food.trim().length < 2}
-                              className="flex w-full items-center justify-center gap-2 border-t border-[var(--border-cherry-soft)]/45 bg-[var(--cherry-muted)]/12 px-3 py-2 text-xs font-extrabold text-[var(--stem)] transition hover:bg-[var(--cherry-muted)]/28 disabled:pointer-events-none disabled:opacity-40"
-                              onClick={() => armAllCatalogsSearch()}
-                            >
-                              <IconSearch className="h-4 w-4 shrink-0 opacity-80" />
-                              חפש בכל המאגרים
-                            </button>
                           </li>
                         );
                       })}
                     </ul>
                   )}
+                  {historySearchMatches.length > 0 ? (
+                    <button
+                      type="button"
+                      disabled={food.trim().length < 2}
+                      className="mt-2 flex w-full items-center justify-center gap-2 rounded-xl border border-[var(--border-cherry-soft)] bg-[var(--cherry-muted)]/15 px-3 py-2.5 text-sm font-extrabold text-[var(--stem)] transition hover:bg-[var(--cherry-muted)]/35 disabled:pointer-events-none disabled:opacity-40"
+                      onClick={() => armAllCatalogsSearch()}
+                    >
+                      <IconSearch className="h-5 w-5 shrink-0 opacity-80" />
+                      חפש בכל המאגרים
+                    </button>
+                  ) : null}
                   {historySearchMatches.length === 0 ? (
                     <button
                       type="button"
@@ -1739,7 +1761,7 @@ export function AddFoodClient({
                       <ul className="space-y-1">
                         {selectedTopRows.map((s) => (
                           <AddFoodSearchResultRow
-                            key={`sel-${s.source ?? "local"}-${s.id}`}
+                            key={`sel-${rowQuickAddKey(s)}`}
                             row={s}
                             gender={gender}
                             quickAddId={quickAddId}
@@ -1830,16 +1852,17 @@ export function AddFoodClient({
                 <ul className="divide-y divide-[var(--cherry)]/35">
                   {recentPicks.map((r) => {
                     const { qtyLine, kcal } = recentPickQtyAndKcal(r);
-                    const qk = `${r.source ?? "local"}-${r.id}`;
+                    const qk = rowQuickAddKey(r);
                     return (
                       <li
-                        key={`${r.id}-${r.name}`}
-                        className="flex items-center gap-2 bg-white"
+                        key={`rp-${qk}`}
+                        dir="rtl"
+                        className="flex items-stretch gap-1.5 bg-white"
                       >
                         <button
                           type="button"
                           title={r.name}
-                          className="flex min-w-0 flex-1 flex-col gap-0.5 px-3 py-2.5 text-start transition hover:bg-[var(--cherry-muted)]/25"
+                          className="flex min-w-0 flex-1 flex-col gap-0.5 px-3 py-2.5 text-right transition hover:bg-[var(--cherry-muted)]/25"
                           onClick={() => openPickModalFromRow(r)}
                         >
                           <span className="line-clamp-2 text-base font-semibold leading-snug text-[var(--cherry)]">
@@ -1851,7 +1874,13 @@ export function AddFoodClient({
                         </button>
                         <button
                           type="button"
-                          className="me-2 flex min-h-10 min-w-[2.25rem] shrink-0 items-center justify-center rounded-xl px-1 text-[1.5rem] font-extrabold leading-none text-[var(--cherry)] transition hover:bg-[var(--cherry-muted)]/35 active:scale-[0.96]"
+                          className={`flex h-10 min-w-10 shrink-0 items-center justify-center rounded-full transition active:scale-[0.94] ${
+                            quickAddId === qk
+                              ? "text-[var(--stem)]"
+                              : gender === "male"
+                                ? "text-[#1e3a5f] hover:bg-[#1e3a5f]/12"
+                                : "text-[var(--cherry)] hover:bg-[var(--cherry-muted)]/35"
+                          }`}
                           title={gf(gender, "הוספה מהירה ליומן", "הוספה מהירה ליומן")}
                           aria-label={gf(gender, "הוספה מהירה ליומן", "הוספה מהירה ליומן")}
                           onClick={(e) => {
@@ -1860,11 +1889,17 @@ export function AddFoodClient({
                           }}
                         >
                           {quickAddId === qk ? (
-                            <span className="text-xl font-extrabold text-[var(--cherry)]" aria-hidden>
+                            <span className="text-xl font-extrabold leading-none" aria-hidden>
                               ✓
                             </span>
                           ) : (
-                            <span aria-hidden>+</span>
+                            <Plus
+                              className="h-7 w-7 shrink-0"
+                              strokeWidth={2.6}
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                              aria-hidden
+                            />
                           )}
                         </button>
                       </li>
