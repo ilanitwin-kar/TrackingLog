@@ -1,6 +1,12 @@
 "use client";
 
-import { useCallback, useRef, useState, type PointerEvent } from "react";
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  type PointerEvent,
+} from "react";
 
 const MAX_DRAG_PX = 120;
 const DELETE_AT_PX = 72;
@@ -14,7 +20,7 @@ function eventTargetElement(
   return null;
 }
 
-/** מילון: החלקה ימינה — גילוי «מחק», שחרור מעל הסף מוחק */
+/** מילון / רשימות: החלקה — גילוי «מחק», שחרור מעל הסף מוחק */
 export function DictionarySwipeDeleteRow({
   children,
   disabled,
@@ -25,6 +31,7 @@ export function DictionarySwipeDeleteRow({
   onDelete: () => void;
 }) {
   const [offset, setOffset] = useState(0);
+  const offsetRef = useRef(0);
   const [isDragging, setIsDragging] = useState(false);
   const dragRef = useRef<{
     pointerId: number | null;
@@ -40,7 +47,11 @@ export function DictionarySwipeDeleteRow({
     cancelled: false,
   });
 
-  const onPointerDown = useCallback(
+  useEffect(() => {
+    offsetRef.current = offset;
+  }, [offset]);
+
+  const onPointerDownCapture = useCallback(
     (e: PointerEvent<HTMLDivElement>) => {
       if (disabled) return;
       const el = eventTargetElement(e);
@@ -64,23 +75,24 @@ export function DictionarySwipeDeleteRow({
 
   const onPointerMove = useCallback((e: PointerEvent<HTMLDivElement>) => {
     if (dragRef.current.pointerId !== e.pointerId) return;
-    const dx = e.clientX - dragRef.current.startClientX;
+    const rawDx = e.clientX - dragRef.current.startClientX;
+    const dxMag = Math.abs(rawDx);
     const dy = e.clientY - dragRef.current.startClientY;
     if (
       !dragRef.current.cancelled &&
       Math.abs(dy) > 18 &&
-      Math.abs(dy) > Math.abs(dx) * 1.2
+      Math.abs(dy) > dxMag * 1.2
     ) {
       dragRef.current.cancelled = true;
+      offsetRef.current = dragRef.current.baseOffset;
       setOffset(dragRef.current.baseOffset);
       return;
     }
     if (dragRef.current.cancelled) return;
-    if (dx <= 0) {
-      setOffset(0);
-      return;
-    }
-    const next = Math.min(MAX_DRAG_PX, dragRef.current.baseOffset + dx);
+
+    /** תמיד מתחילים מ־0 — משיכה ימינה או שמאלה (עכבר / RTL) חושפת את הרצועה */
+    const next = Math.min(MAX_DRAG_PX, dxMag);
+    offsetRef.current = next;
     setOffset(next);
   }, []);
 
@@ -99,13 +111,12 @@ export function DictionarySwipeDeleteRow({
 
       if (cancelled) return;
 
-      setOffset((ox) => {
-        if (ox >= DELETE_AT_PX) {
-          onDelete();
-          return 0;
-        }
-        return 0;
-      });
+      const ox = offsetRef.current;
+      offsetRef.current = 0;
+      setOffset(0);
+      if (ox >= DELETE_AT_PX) {
+        onDelete();
+      }
     },
     [onDelete]
   );
@@ -113,20 +124,20 @@ export function DictionarySwipeDeleteRow({
   return (
     <div className="relative overflow-hidden rounded-xl">
       <div
-        className="absolute inset-y-0 left-0 z-0 flex h-full min-h-[3rem] items-center justify-center bg-red-600 px-3 text-sm font-extrabold text-white"
+        className="absolute inset-y-0 left-0 z-0 flex h-full min-h-[3rem] items-center justify-center rounded-l-xl bg-red-600 px-3 text-sm font-extrabold text-white shadow-inner"
         style={{ width: MAX_DRAG_PX }}
       >
         מחק
       </div>
       <div
-        className={`relative z-10 rounded-xl bg-white ${
+        className={`relative z-10 min-h-[3rem] w-full rounded-xl bg-white ${
           isDragging ? "" : "transition-transform duration-200 ease-out"
         }`}
         style={{
           transform: `translateX(${offset}px)`,
-          touchAction: "pan-y",
+          touchAction: "pan-x pan-y",
         }}
-        onPointerDown={onPointerDown}
+        onPointerDownCapture={onPointerDownCapture}
         onPointerMove={onPointerMove}
         onPointerUp={finishPointer}
         onPointerCancel={finishPointer}

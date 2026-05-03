@@ -1263,7 +1263,12 @@ export function HomeClient({ mode = "dashboard" }: { mode?: "dashboard" | "journ
 
   function removeEntry(id: string) {
     if (isDayClosed) return;
-    persistEntries(entries.filter((x) => x.id !== id));
+    /** עדכון פונקציונלי — לא להסתמך על `entries` מהסגירה (מחיקת כל היום אם המערך stale/ריק) */
+    setEntries((prev) => {
+      const next = prev.filter((x) => x.id !== id);
+      saveDayLogEntries(viewDateKey, next);
+      return next;
+    });
     emitEntryDeletedFeedback();
   }
 

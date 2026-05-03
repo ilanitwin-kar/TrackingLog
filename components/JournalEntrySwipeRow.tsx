@@ -1,15 +1,21 @@
 "use client";
 
-import { useCallback, useRef, useState, type PointerEvent } from "react";
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  type PointerEvent,
+} from "react";
 
 /** רוחב מלא של הרצועה שנחשפת בהחלקה ימינה */
 const MAX_DRAG_PX = 168;
 /** נעילה פתוחה — רואים את «העבר אל» */
 const SNAP_OPEN_PX = 84;
-/** מעבר לסף — מחיקה בשחרור */
-const DELETE_AT_PX = 130;
-/** מתחת לכך נסגר */
-const CLOSE_BELOW_PX = 28;
+/** מעבר לסף — מחיקה בשחרור (גבוה יותר = פחות מחיקות מקריות בטעות) */
+const DELETE_AT_PX = 142;
+/** מתחת לכך נסגר לגמרי */
+const CLOSE_BELOW_PX = 36;
 
 function eventTargetElement(
   e: Pick<PointerEvent<Element>, "target">
@@ -32,6 +38,8 @@ export function JournalEntrySwipeRow({
   onDelete: () => void;
 }) {
   const [offset, setOffset] = useState(0);
+  /** סנכרון לערך האחרון בעת שחרור — לא להסתמך על state/async בסף המחיקה */
+  const offsetRef = useRef(0);
   const [isDragging, setIsDragging] = useState(false);
   const dragRef = useRef<{
     pointerId: number | null;
@@ -46,6 +54,10 @@ export function JournalEntrySwipeRow({
     baseOffset: 0,
     cancelled: false,
   });
+
+  useEffect(() => {
+    offsetRef.current = offset;
+  }, [offset]);
 
   const onPointerDownCapture = useCallback(
     (e: PointerEvent<HTMLDivElement>) => {
@@ -71,23 +83,28 @@ export function JournalEntrySwipeRow({
 
   const onPointerMove = useCallback((e: PointerEvent<HTMLDivElement>) => {
     if (dragRef.current.pointerId !== e.pointerId) return;
-    const dx = e.clientX - dragRef.current.startClientX;
+    const rawDx = e.clientX - dragRef.current.startClientX;
+    const dxMag = Math.abs(rawDx);
     const dy = e.clientY - dragRef.current.startClientY;
     if (
       !dragRef.current.cancelled &&
       Math.abs(dy) > 18 &&
-      Math.abs(dy) > Math.abs(dx) * 1.2
+      Math.abs(dy) > dxMag * 1.2
     ) {
       dragRef.current.cancelled = true;
+      offsetRef.current = dragRef.current.baseOffset;
       setOffset(dragRef.current.baseOffset);
       return;
     }
     if (dragRef.current.cancelled) return;
-    if (dx <= 0) {
-      setOffset(0);
-      return;
-    }
-    const next = Math.min(MAX_DRAG_PX, dragRef.current.baseOffset + dx);
+
+    const base = dragRef.current.baseOffset;
+    /** סגור: משיכה בכל כיוון אופקי; פתוח נעול («העבר אל»): תזוזה חתומה לסגירה / המשך */
+    const next =
+      base === 0
+        ? Math.min(MAX_DRAG_PX, dxMag)
+        : Math.min(MAX_DRAG_PX, Math.max(0, base + rawDx));
+    offsetRef.current = next;
     setOffset(next);
   }, []);
 
@@ -106,14 +123,20 @@ export function JournalEntrySwipeRow({
 
       if (cancelled) return;
 
-      setOffset((ox) => {
-        if (ox >= DELETE_AT_PX) {
-          onDelete();
-          return 0;
-        }
-        if (ox >= CLOSE_BELOW_PX) return SNAP_OPEN_PX;
-        return 0;
-      });
+      const ox = offsetRef.current;
+      if (ox >= DELETE_AT_PX) {
+        offsetRef.current = 0;
+        setOffset(0);
+        onDelete();
+        return;
+      }
+      if (ox >= CLOSE_BELOW_PX) {
+        offsetRef.current = SNAP_OPEN_PX;
+        setOffset(SNAP_OPEN_PX);
+        return;
+      }
+      offsetRef.current = 0;
+      setOffset(0);
     },
     [onDelete]
   );
@@ -122,6 +145,7 @@ export function JournalEntrySwipeRow({
     (ev: React.MouseEvent) => {
       ev.stopPropagation();
       onMove();
+      offsetRef.current = 0;
       setOffset(0);
     },
     [onMove]
@@ -154,7 +178,7 @@ export function JournalEntrySwipeRow({
         }`}
         style={{
           transform: `translateX(${offset}px)`,
-          touchAction: "pan-y",
+          touchAction: "pan-x pan-y",
           boxShadow: "var(--list-row-shadow)",
         }}
         onPointerDownCapture={onPointerDownCapture}
