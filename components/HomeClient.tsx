@@ -74,16 +74,18 @@ import {
   type JournalMealSlot,
 } from "@/lib/journalMeals";
 import { useDocumentScrollOnlyIfOverflowing } from "@/lib/useDocumentScrollOnlyIfOverflowing";
-import {
-  LONG_PRESS_DELETE_RIGHT_DX,
-  LONG_PRESS_MS,
-  shouldCancelLongPressForSwipeDelete,
-} from "@/lib/longPressSwipeDelete";
+import { JournalEntrySwipeRow } from "./JournalEntrySwipeRow";
 import { CelebrationConfetti } from "./Fireworks";
 import { useAppVariant } from "./useAppVariant";
 import { QuickWeightModal } from "./QuickWeightModal";
 import { QuickStepsModal } from "./QuickStepsModal";
-import { ChevronDown, Pencil, Trash2 } from "lucide-react";
+import {
+  ChevronDown,
+  ChevronLeft,
+  ChevronRight,
+  Pencil,
+  Trash2,
+} from "lucide-react";
 import { IconUtensilsMeal } from "./Icons";
 import { LiveClock } from "./LiveClock";
 
@@ -571,25 +573,6 @@ export function HomeClient({ mode = "dashboard" }: { mode?: "dashboard" | "journ
   const [mealNameDuplicateError, setMealNameDuplicateError] = useState(false);
   const [mealCtaEntryId, setMealCtaEntryId] = useState<string | null>(null);
   const [journalInfoOpen, setJournalInfoOpen] = useState(false);
-  const journalLongPressRef = useRef<{
-    timer: number | null;
-    pointerId: number | null;
-    startX: number;
-    startY: number;
-    entryId: string | null;
-    pendingEntry: LogEntry | null;
-    lastDx: number;
-    lastDy: number;
-  }>({
-    timer: null,
-    pointerId: null,
-    startX: 0,
-    startY: 0,
-    entryId: null,
-    pendingEntry: null,
-    lastDx: 0,
-    lastDy: 0,
-  });
 
   /** נקודת התחלה להחלקה אופקית על גוף היומן (נייד) — מגיעים לכאן עם האצבע, לא רק מכותרת התאריך */
   const journalDaySwipeTouchRef = useRef<{
@@ -1249,13 +1232,6 @@ export function HomeClient({ mode = "dashboard" }: { mode?: "dashboard" | "journ
   }, [viewDateKey]);
 
   useEffect(() => {
-    return () => {
-      const t = journalLongPressRef.current.timer;
-      if (t != null) window.clearTimeout(t);
-    };
-  }, []);
-
-  useEffect(() => {
     const goalCalories = target;
     const currentCalories = total;
     if (!profile || goalCalories <= 0) return;
@@ -1291,102 +1267,22 @@ export function HomeClient({ mode = "dashboard" }: { mode?: "dashboard" | "journ
     emitEntryDeletedFeedback();
   }
 
-  function clearJournalLongPressTimer() {
-    const t = journalLongPressRef.current.timer;
-    if (t != null) window.clearTimeout(t);
-    journalLongPressRef.current.timer = null;
-    journalLongPressRef.current.pointerId = null;
-    journalLongPressRef.current.entryId = null;
-    journalLongPressRef.current.pendingEntry = null;
-  }
-
-  function handleJournalCardPointerDown(
-    e: React.PointerEvent<HTMLLIElement>,
-    item: LogEntry
-  ) {
-    if (!isJournalMode || isDayClosed) return;
-    if (e.pointerType === "mouse" && e.button !== 0) return;
-    const el = e.target;
-    if (!(el instanceof Element)) return;
-    if (el.closest("[data-skip-journal-longpress]")) return;
-
-    clearJournalLongPressTimer();
-    journalLongPressRef.current.pointerId = e.pointerId;
-    journalLongPressRef.current.startX = e.clientX;
-    journalLongPressRef.current.startY = e.clientY;
-    journalLongPressRef.current.entryId = item.id;
-    journalLongPressRef.current.pendingEntry = item;
-    journalLongPressRef.current.lastDx = 0;
-    journalLongPressRef.current.lastDy = 0;
-    try {
-      e.currentTarget.setPointerCapture(e.pointerId);
-    } catch {
-      /* ignore */
-    }
-    journalLongPressRef.current.timer = window.setTimeout(() => {
-      const entry = journalLongPressRef.current.pendingEntry;
-      const dx = journalLongPressRef.current.lastDx;
-      journalLongPressRef.current.timer = null;
-      journalLongPressRef.current.pointerId = null;
-      journalLongPressRef.current.entryId = null;
-      journalLongPressRef.current.pendingEntry = null;
-      if (!entry || isDayClosed) return;
-      if (dx >= LONG_PRESS_DELETE_RIGHT_DX) {
-        removeEntry(entry.id);
-        try {
-          navigator.vibrate?.(18);
-        } catch {
-          /* ignore */
-        }
-      } else {
-        setJournalCardMoveOpen(true);
-        setJournalCardActionEntry(entry);
-        try {
-          navigator.vibrate?.(12);
-        } catch {
-          /* ignore */
-        }
-      }
-    }, LONG_PRESS_MS);
-  }
-
-  function handleJournalCardPointerMove(e: React.PointerEvent<HTMLLIElement>) {
-    if (journalLongPressRef.current.pointerId !== e.pointerId) return;
-    const dx = e.clientX - journalLongPressRef.current.startX;
-    const dy = e.clientY - journalLongPressRef.current.startY;
-    journalLongPressRef.current.lastDx = dx;
-    journalLongPressRef.current.lastDy = dy;
-    if (shouldCancelLongPressForSwipeDelete(dx, dy)) {
-      clearJournalLongPressTimer();
-      try {
-        e.currentTarget.releasePointerCapture(e.pointerId);
-      } catch {
-        /* ignore */
-      }
-    }
-  }
-
-  function handleJournalCardPointerEnd(e: React.PointerEvent<HTMLLIElement>) {
-    if (journalLongPressRef.current.pointerId !== e.pointerId) return;
-    clearJournalLongPressTimer();
-    try {
-      e.currentTarget.releasePointerCapture(e.pointerId);
-    } catch {
-      /* ignore */
-    }
-  }
-
-  /** במחשב: לחיצה ימנית = פותח «העבר אל…» כמו לחיצה ארוכה בלי משיכה ימינה */
+  /** במחשב: לחיצה ימנית = «העבר אל…» */
   function handleJournalCardContextMenu(
     e: React.MouseEvent<HTMLLIElement>,
     item: LogEntry
   ) {
     if (!isJournalMode || isDayClosed) return;
-    const el = e.target;
-    if (!(el instanceof Element)) return;
-    if (el.closest("[data-skip-journal-longpress]")) return;
+    const t = e.target;
+    const el =
+      t instanceof Element
+        ? t
+        : t instanceof Text && t.parentElement
+          ? t.parentElement
+          : null;
+    if (!el) return;
+    if (el.closest("[data-journal-no-swipe]")) return;
     e.preventDefault();
-    clearJournalLongPressTimer();
     setJournalCardMoveOpen(true);
     setJournalCardActionEntry(item);
   }
@@ -2191,7 +2087,7 @@ export function HomeClient({ mode = "dashboard" }: { mode?: "dashboard" | "journ
         <>
           <div className="sticky top-0 z-[55] isolate -mx-3 mb-3 sm:-mx-4 sm:mb-4">
             <div className="overflow-hidden rounded-xl border border-[var(--border-cherry-soft)]/40 bg-white shadow-[0_1px_8px_rgba(0,0,0,0.06)]">
-              {/* החלקה בין ימים רק כאן — לא על רשימת הפריטים (פחות התנגשות עם גלילה / כרטיסים / לחיצה ארוכה) */}
+              {/* החלקה בין ימים רק כאן — לא על רשימת הפריטים (פחות התנגשות עם גלילה / משיכה למחיקה) */}
               <motion.div
                 drag="x"
                 dragDirectionLock
@@ -2219,15 +2115,21 @@ export function HomeClient({ mode = "dashboard" }: { mode?: "dashboard" | "journ
                   ) : null}
                   <button
                     type="button"
-                    className="flex h-9 w-10 shrink-0 items-center justify-center rounded-lg text-lg leading-none text-[var(--stem)]/70 transition hover:bg-[var(--cherry-muted)]/35 active:bg-[var(--cherry-muted)]/45 disabled:pointer-events-none disabled:opacity-35 sm:h-10 sm:w-11 sm:text-xl"
+                    className="flex h-9 w-10 shrink-0 items-center justify-center rounded-lg text-[var(--stem)] transition hover:bg-[var(--stem)]/12 active:bg-[var(--stem)]/18 disabled:pointer-events-none disabled:opacity-35 sm:h-10 sm:w-11"
                     onClick={() =>
                       canGoNextDay &&
                       navigateToDate(addDaysToDateKey(viewDateKey, 1))
                     }
                     disabled={!canGoNextDay}
                     aria-label="יום הבא — עתיד"
+                    title="יום הבא"
                   >
-                    ‹
+                    <span className="inline-flex" dir="ltr" aria-hidden>
+                      <ChevronLeft
+                        className="h-7 w-7 shrink-0 drop-shadow-[0_1px_0_rgba(74,124,35,0.35)] sm:h-8 sm:w-8"
+                        strokeWidth={2.75}
+                      />
+                    </span>
                   </button>
                 </div>
                 <div className="absolute right-1 top-1/2 z-10 flex -translate-y-1/2 items-center gap-1 sm:right-1.5 sm:gap-1.5">
@@ -2241,13 +2143,19 @@ export function HomeClient({ mode = "dashboard" }: { mode?: "dashboard" | "journ
                   </Link>
                   <button
                     type="button"
-                    className="flex h-9 w-10 shrink-0 items-center justify-center rounded-lg text-lg leading-none text-[var(--stem)]/70 transition hover:bg-[var(--cherry-muted)]/35 active:bg-[var(--cherry-muted)]/45 sm:h-10 sm:w-11 sm:text-xl"
+                    className="flex h-9 w-10 shrink-0 items-center justify-center rounded-lg text-[var(--stem)] transition hover:bg-[var(--stem)]/12 active:bg-[var(--stem)]/18 sm:h-10 sm:w-11"
                     onClick={() =>
                       navigateToDate(addDaysToDateKey(viewDateKey, -1))
                     }
                     aria-label="יום קודם — עבר"
+                    title="יום קודם"
                   >
-                    ›
+                    <span className="inline-flex" dir="ltr" aria-hidden>
+                      <ChevronRight
+                        className="h-7 w-7 shrink-0 drop-shadow-[0_1px_0_rgba(74,124,35,0.35)] sm:h-8 sm:w-8"
+                        strokeWidth={2.75}
+                      />
+                    </span>
                   </button>
                 </div>
                 <div
@@ -2654,13 +2562,24 @@ export function HomeClient({ mode = "dashboard" }: { mode?: "dashboard" | "journ
                   initial={{ opacity: 0, x: 12 }}
                   animate={{ opacity: 1, x: 0 }}
                   transition={{ duration: 0.18 }}
-                  className={`touch-manipulation bg-white ${isDayClosed ? "opacity-85" : ""}`}
-                  onPointerDown={(e) => handleJournalCardPointerDown(e, item)}
-                  onPointerMove={handleJournalCardPointerMove}
-                  onPointerUp={handleJournalCardPointerEnd}
-                  onPointerCancel={handleJournalCardPointerEnd}
+                  className={`touch-manipulation list-none bg-transparent p-0 ${isDayClosed ? "opacity-85" : ""}`}
                   onContextMenu={(e) => handleJournalCardContextMenu(e, item)}
                 >
+                  <JournalEntrySwipeRow
+                    disabled={!isJournalMode || isDayClosed}
+                    onMove={() => {
+                      setJournalCardActionEntry(item);
+                      setJournalCardMoveOpen(true);
+                    }}
+                    onDelete={() => {
+                      removeEntry(item.id);
+                      try {
+                        navigator.vibrate?.(12);
+                      } catch {
+                        /* ignore */
+                      }
+                    }}
+                  >
                   <div className="flex min-w-0 flex-col gap-1 px-3 py-2.5">
                     <div className="flex min-w-0 flex-row items-start gap-3">
                       <div
@@ -2693,7 +2612,7 @@ export function HomeClient({ mode = "dashboard" }: { mode?: "dashboard" | "journ
                         {journalMealPreset || !isDayClosed ? (
                           <div
                             className="flex min-w-0 shrink-0 flex-row flex-wrap items-center justify-end gap-2 pt-0.5"
-                            data-skip-journal-longpress
+                            data-journal-no-swipe
                             role="group"
                             aria-label={
                               journalMealPreset
@@ -2817,7 +2736,7 @@ export function HomeClient({ mode = "dashboard" }: { mode?: "dashboard" | "journ
                       {!isDayClosed ? (
                         <button
                           type="button"
-                          data-skip-journal-longpress
+                          data-journal-no-swipe
                           className="shrink-0 rounded-md px-1 py-0 text-[1.15rem] font-extrabold leading-none tracking-[0.12em] text-[var(--stem)]/75 transition hover:bg-[var(--cherry-muted)]/45 hover:text-[var(--stem)]"
                           title={gf(gender, "עריכת מוצר", "עריכת מוצר")}
                           aria-label={gf(gender, "עריכת מוצר", "עריכת מוצר")}
@@ -2842,7 +2761,7 @@ export function HomeClient({ mode = "dashboard" }: { mode?: "dashboard" | "journ
                             <motion.div
                               key={`meal-preset-${item.id}`}
                               className="mt-1 w-full rounded-lg border border-[var(--border-cherry-soft)]/70 bg-white px-2.5 py-2"
-                              data-skip-journal-longpress
+                              data-journal-no-swipe
                               initial={{ opacity: 0, y: -4 }}
                               animate={{ opacity: 1, y: 0 }}
                               exit={{ opacity: 0, y: -4 }}
@@ -2908,7 +2827,7 @@ export function HomeClient({ mode = "dashboard" }: { mode?: "dashboard" | "journ
                         {isAiMeal && (
                           <motion.div
                             className="mt-1 w-full"
-                            data-skip-journal-longpress
+                            data-journal-no-swipe
                             initial={{ opacity: 0, y: -4 }}
                             animate={{ opacity: 1, y: 0 }}
                             exit={{ opacity: 0, y: -4 }}
@@ -2975,7 +2894,7 @@ export function HomeClient({ mode = "dashboard" }: { mode?: "dashboard" | "journ
                     mealCtaEntryId === item.id && (
                       <motion.div
                         className="mt-1.5 flex w-full justify-center px-3 pb-0.5"
-                        data-skip-journal-longpress
+                        data-journal-no-swipe
                         initial={{ opacity: 0, y: 4 }}
                         animate={{ opacity: 1, y: 0 }}
                       >
@@ -3004,6 +2923,7 @@ export function HomeClient({ mode = "dashboard" }: { mode?: "dashboard" | "journ
                         </div>
                       </motion.div>
                     )}
+                  </JournalEntrySwipeRow>
                 </motion.li>
               );
                     })}
