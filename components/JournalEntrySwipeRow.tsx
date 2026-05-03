@@ -10,11 +10,11 @@ import {
 } from "react";
 
 /** רוחב מלא של הרצועה שנחשפת בהחלקה ימינה */
-const MAX_DRAG_PX = 168;
-/** נעילה פתוחה — רואים את «העבר אל» */
-const SNAP_OPEN_PX = 84;
+const MAX_DRAG_PX = 212;
+/** נעילה פתוחה — רואים את «העבר אל» (רוחב מספיק לטקסט מודגש בלי חיתוך) */
+const SNAP_OPEN_PX = 118;
 /** מעבר לסף — מחיקה בשחרור (גבוה יותר = פחות מחיקות מקריות בטעות) */
-const DELETE_AT_PX = 142;
+const DELETE_AT_PX = 178;
 /** מתחת לכך נסגר לגמרי */
 const CLOSE_BELOW_PX = 36;
 
@@ -166,27 +166,29 @@ export function JournalEntrySwipeRow({
     >
       <div
         dir="ltr"
-        className="absolute inset-y-0 left-0 z-0 flex h-full min-h-[3.25rem] flex-row overflow-hidden rounded-l-xl border-r border-[var(--border-cherry-soft)]/50 bg-white/40 shadow-[inset_0_0_0_1px_rgba(255,255,255,0.35)]"
+        className="absolute inset-y-0 left-0 z-0 flex h-full min-h-[3.25rem] flex-row overflow-hidden rounded-l-xl border-r border-[var(--border-cherry-soft)]/55 bg-white/50 shadow-[inset_0_0_0_1px_rgba(255,255,255,0.4)]"
         style={{ width: MAX_DRAG_PX }}
       >
         <button
           type="button"
-          className="flex min-h-[3.25rem] flex-none items-center justify-center border-r border-[var(--border-cherry-soft)]/35 bg-gradient-to-b from-white via-white to-[var(--cherry-muted)]/30 px-2 text-[11px] font-bold text-[var(--cherry)] shadow-[inset_0_-1px_0_rgba(0,0,0,0.04)] transition hover:to-[var(--cherry-muted)]/45 active:scale-[0.98]"
-          style={{ width: SNAP_OPEN_PX }}
+          className="flex min-h-[3.25rem] flex-none items-center justify-center border-r border-[var(--border-cherry-soft)]/40 bg-gradient-to-b from-white to-[var(--cherry-muted)]/35 px-3 text-sm font-extrabold leading-tight tracking-tight text-[var(--cherry)] shadow-[inset_0_-1px_0_rgba(0,0,0,0.05)] transition hover:to-[var(--cherry-muted)]/55 active:scale-[0.98]"
+          style={{ width: SNAP_OPEN_PX, minWidth: SNAP_OPEN_PX }}
           onClick={handleMoveClick}
         >
-          <span className="whitespace-nowrap">העבר אל…</span>
+          <span className="block max-w-full whitespace-nowrap text-center">
+            העבר אל…
+          </span>
         </button>
         <div
-          className="flex min-h-[3.25rem] min-w-0 flex-1 flex-row items-center justify-center gap-1 bg-gradient-to-b from-stone-100 to-stone-200/95 px-2"
+          className="flex min-h-[3.25rem] min-w-0 flex-1 flex-row items-center justify-center gap-1.5 bg-gradient-to-b from-red-500 to-red-600 px-2 shadow-inner"
           aria-hidden
         >
           <Trash2
-            className="h-4 w-4 shrink-0 text-stone-600/90"
-            strokeWidth={2}
+            className="h-5 w-5 shrink-0 text-white"
+            strokeWidth={2.25}
             aria-hidden
           />
-          <span className="whitespace-nowrap text-[11px] font-bold text-stone-800/90">
+          <span className="whitespace-nowrap text-sm font-extrabold tracking-tight text-white">
             מחק
           </span>
         </div>
