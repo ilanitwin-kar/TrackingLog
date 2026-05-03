@@ -11,6 +11,7 @@ import {
   useState,
   type KeyboardEvent,
   type ReactNode,
+  type TouchEvent as ReactTouchEvent,
 } from "react";
 import { resolveHomeInsightBubbleText } from "@/lib/assistantInsight";
 import { emitEntryDeletedFeedback } from "@/lib/feedbackEvents";
@@ -582,6 +583,13 @@ export function HomeClient({ mode = "dashboard" }: { mode?: "dashboard" | "journ
     entryId: null,
   });
 
+  /** נקודת התחלה להחלקה אופקית על גוף היומן (נייד) — מגיעים לכאן עם האצבע, לא רק מכותרת התאריך */
+  const journalDaySwipeTouchRef = useRef<{
+    x: number;
+    y: number;
+    time: number;
+  } | null>(null);
+
   const [journalCardActionEntry, setJournalCardActionEntry] =
     useState<LogEntry | null>(null);
   const [journalCardMoveOpen, setJournalCardMoveOpen] = useState(false);
@@ -722,23 +730,64 @@ export function HomeClient({ mode = "dashboard" }: { mode?: "dashboard" | "journ
     [calendarMonthY.y, calendarMonthY.m0]
   );
 
+  /** החלקה ימינה = יום קדימה, שמאלה = יום אחורה (אותה לוגיקה לכותרת Framer ולמגע על הרשימה) */
+  function applyJournalDayPanEnd(
+    offsetX: number,
+    offsetY: number,
+    velocityX: number
+  ) {
+    if (Math.abs(offsetY) > Math.abs(offsetX) * 1.6) return;
+    const threshold = 40;
+    const vThresh = 320;
+    if (offsetX > threshold || velocityX > vThresh) {
+      if (canGoNextDay) navigateToDate(addDaysToDateKey(viewDateKey, 1));
+      return;
+    }
+    if (offsetX < -threshold || velocityX < -vThresh) {
+      navigateToDate(addDaysToDateKey(viewDateKey, -1));
+    }
+  }
+
   function onJournalDayDragEnd(
     _e: MouseEvent | TouchEvent | PointerEvent,
     info: PanInfo
   ) {
-    const { offset, velocity } = info;
-    if (Math.abs(offset.y) > Math.abs(offset.x) * 1.25) return;
-    const threshold = 48;
-    const vThresh = 380;
-    // קבוע לפי המשתמשת: החלקה ימינה = עתיד (+יום), החלקה שמאלה = עבר (−יום).
-    // ב-framer: offset.x חיובי = תזוזה ימינה, שלילי = שמאלה.
-    if (offset.x > threshold || velocity.x > vThresh) {
-      if (canGoNextDay) navigateToDate(addDaysToDateKey(viewDateKey, 1));
+    applyJournalDayPanEnd(info.offset.x, info.offset.y, info.velocity.x);
+  }
+
+  function onJournalSectionTouchStart(e: ReactTouchEvent) {
+    if (e.touches.length !== 1) {
+      journalDaySwipeTouchRef.current = null;
       return;
     }
-    if (offset.x < -threshold || velocity.x < -vThresh) {
-      navigateToDate(addDaysToDateKey(viewDateKey, -1));
+    const raw = e.target;
+    if (
+      raw instanceof Element &&
+      raw.closest("button,a,input,textarea,select,[data-skip-journal-day-swipe]")
+    ) {
+      journalDaySwipeTouchRef.current = null;
+      return;
     }
+    const t = e.touches[0];
+    journalDaySwipeTouchRef.current = {
+      x: t.clientX,
+      y: t.clientY,
+      time: typeof performance !== "undefined" ? performance.now() : Date.now(),
+    };
+  }
+
+  function onJournalSectionTouchEnd(e: ReactTouchEvent) {
+    const start = journalDaySwipeTouchRef.current;
+    journalDaySwipeTouchRef.current = null;
+    if (!start || e.changedTouches.length !== 1) return;
+    const t = e.changedTouches[0];
+    const dx = t.clientX - start.x;
+    const dy = t.clientY - start.y;
+    const now =
+      typeof performance !== "undefined" ? performance.now() : Date.now();
+    const dt = Math.max(16, now - start.time);
+    const vx = (dx / dt) * 1000;
+    applyJournalDayPanEnd(dx, dy, vx);
   }
 
   // Date picker kept for future; not used in journal header UX right now.
@@ -2119,11 +2168,12 @@ export function HomeClient({ mode = "dashboard" }: { mode?: "dashboard" | "journ
               <motion.div
                 drag="x"
                 dragDirectionLock
-                dragConstraints={{ left: 0, right: 0 }}
-                dragElastic={0.1}
+                dragConstraints={{ left: -220, right: 220 }}
+                dragElastic={0.22}
                 dragMomentum={false}
+                dragSnapToOrigin
                 onDragEnd={onJournalDayDragEnd}
-                className="touch-manipulation"
+                className="touch-pan-x"
               >
               {/* שורה 1 — תאריך וניווט ימים בלבד */}
               <div className="relative px-2 py-1.5 sm:px-2.5 sm:py-2">
@@ -2486,6 +2536,8 @@ export function HomeClient({ mode = "dashboard" }: { mode?: "dashboard" | "journ
           <section
             key={viewDateKey}
             className="touch-manipulation max-w-full overflow-x-hidden bg-transparent px-0 pb-28 pt-1"
+            onTouchStart={onJournalSectionTouchStart}
+            onTouchEnd={onJournalSectionTouchEnd}
           >
         {isDayClosed && (
           <div
