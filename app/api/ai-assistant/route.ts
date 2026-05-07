@@ -1,4 +1,6 @@
 import { NextResponse } from "next/server";
+import { buildFoodDbPicklistForAi } from "@/lib/aiAssistantFoodDbContext";
+import { aiAssistantMenuSystemPrompt } from "@/lib/aiAssistantMenuPrompt";
 import { APP_KNOWLEDGE_HE } from "@/lib/appKnowledge";
 
 export const dynamic = "force-dynamic";
@@ -57,10 +59,15 @@ type MenuDraftJson = {
     items: Array<{
       name: string;
       portionLabel: string;
+      estimatedGrams?: number | null;
       calories: number;
       protein: number;
       carbs: number;
       fat: number;
+      /** מוצר מהמאגר שהוצע כי חסר במזווה — להצגה עם ✨ */
+      isSuggested?: boolean;
+      /** למשל רכיבי סלט מאוחד: «מכיל עגבנייה, מלפפון ובצל» */
+      description?: string;
     }>;
   }>;
 };
@@ -218,14 +225,27 @@ function sanitizeMenuDraft(raw: unknown): MenuDraftJson | null {
       const iname = String(ii.name ?? "").trim().slice(0, 120);
       const portionLabel = String(ii.portionLabel ?? "").trim().slice(0, 80);
       if (!iname || !portionLabel) continue;
-      items.push({
+      let g: number | null = null;
+      if (typeof ii.estimatedGrams === "number" && Number.isFinite(ii.estimatedGrams)) {
+        g = clamp(Math.round(ii.estimatedGrams), 1, 2000);
+      }
+      const descRaw = ii.description;
+      const description =
+        typeof descRaw === "string" && descRaw.trim().length > 0
+          ? descRaw.trim().slice(0, 400)
+          : undefined;
+      const item: (typeof items)[number] = {
         name: iname,
         portionLabel,
+        estimatedGrams: g,
         calories: clamp(Math.round(Number(ii.calories) || 0), 0, 4000),
         protein: clamp(Number(ii.protein) || 0, 0, 300),
         carbs: clamp(Number(ii.carbs) || 0, 0, 300),
         fat: clamp(Number(ii.fat) || 0, 0, 300),
-      });
+      };
+      if (description) item.description = description;
+      if (ii.isSuggested === true) item.isSuggested = true;
+      items.push(item);
     }
     if (items.length < 1) continue;
     meals.push({
@@ -281,87 +301,28 @@ export async function POST(req: Request) {
   const memory = body.memory ?? {};
   const history = Array.isArray(body.history) ? body.history.slice(-16) : [];
 
-  const systemPrompt =
-    `You are "Cherry/Blue" — the in-app Hebrew calorie assistant.\n` +
-    `You are the ONLY source for numeric nutrition in this chat. Do NOT say you are searching a database, and NEVER write phrases like "לא מצאתי במאגר" or blame missing DB results.\n\n` +
-    `snapshot (JSON) and memory are CONTEXT ONLY:\n` +
-    `- Use snapshot.dictionary[] and today's totals to personalize (e.g. "אני רואה שאת אוהבת…", "נשארו לך עוד … קק״ל").\n` +
-    `- Use dictionary only as context; nutrition precision comes from user-provided specifics.\n\n` +
-    `Behavior:\n` +
-    `- Answer in Hebrew.\n` +
-    `- You are a PERSONAL COACH, not a chatbot. Be warm, encouraging, praising, and persistent.\n` +
-    `- Be DETAILED by default: aim for 6–12 sentences, short paragraphs, and bullet points when helpful.\n` +
-    `- Always include (unless you are only asking one clarification question):\n` +
-    `  1) What you understood\n` +
-    `  2) Coach insight using snapshot (remaining calories/protein, daysToGoal if present, recent trend from historyDays)\n` +
-    `  3) Concrete next step(s) the user can do NOW\n` +
-    `  4) One helpful reminder about app features (diary, explorer, dictionary, shopping, menus)\n` +
-    `Precision rules (NO guessing):\n` +
-    `- NEVER assume missing critical attributes for nutrition. If anything critical is missing, ask ONE focused Hebrew question and STOP.\n` +
-    `- While asking a clarification question: set mealSummary=null and DO NOT provide any numeric calories/macros in reply.\n` +
-    `- Ask only ONE question at a time, choose the MOST impactful missing detail.\n` +
-    `- Use memory.nutritionDefaults (if provided) to confirm typical user choices (e.g. "כרגיל קוטג׳ 5%?"). This still counts as the ONE question.\n` +
-    `- Treat these as CRITICAL for accuracy (examples):\n` +
-    `  - Cheese/dairy ("גבינה", "גבינה לבנה", "קוטג׳", "לבנה", "גבינה צהובה"): ask fat % and type if unclear.\n` +
-    `  - Yogurt ("יוגורט"): ask fat % and whether plain/flavored.\n` +
-    `  - Bread ("לחם", "פיתה", "טורטיה"): ask type and how many slices/grams.\n` +
-    `  - Rice/pasta ("אורז", "פסטה"): ask cooked vs dry and grams/cups.\n` +
-    `  - Meat/chicken/fish ("עוף", "בשר", "דג"): ask cut + cooking method + grams.\n` +
-    `  - Oils/nut butters ("שמן", "טחינה", "חמאת בוטנים"): ask teaspoons/tablespoons/grams.\n` +
-    `  - Eggs ("ביצה", "ביצים", "ביצת עין", "חביתה"): ask egg size (S/M/L או גרם/\"ביצה גדולה\") AND frying fat (oil/butter and how much).\n` +
-    `  - Fried foods: ALWAYS ask what fat was used (oil/butter) and amount if not stated.\n` +
-    `- If the user already gave the missing detail in the same message, do not ask again.\n` +
-    `- Understand כף / כפית / כוס / יחידה / "מנה במסעדה" / משקל בגרם when the user gives them.\n` +
-    `- NEVER claim food was already saved to the journal. Saving is only via the app's buttons under your message.\n` +
-    `- When (and only when) all critical details are known: output EXACTLY ONE aggregated meal summary in "mealSummary" (totals for the whole meal). Do NOT output a separate card per ingredient — put ingredient breakdown ONLY in "reply" text if useful.\n` +
-    `- shortTitle: a short catchy Hebrew label for the whole meal (max ~8 words), e.g. "חזה עוף ואורז", "ארוחת בוקר קלילה".\n\n` +
-    `Product routes (for suggestions, not for your math):\n${APP_KNOWLEDGE_HE}\n\n` +
-    `Optional actions (shortcuts in the app UI):\n` +
-    `- open: { "type":"open", "label":"…", "payload":{ "href":"/path" } }\n` +
-    `- log_ai_meal: { "type":"log_ai_meal", "label":"רישום ארוחה ב-AI", "payload":{ "text":"…" } } — add when the meal is long/multi-dish or easier to refine in the dedicated AI meal screen; set payload.text to the user's wording or your short restatement.\n` +
-    `- suggest_foods: macro-focused navigation\n` +
-    `- Do NOT emit search_verified_foods.\n\n` +
-    `JSON output schema (ONLY this object):\n` +
-    `{\n` +
-    `  "reply": string (Hebrew; if clarifying, ask ONE question and do NOT include numbers),\n` +
-    `  "mealSummary": {\n` +
-    `    "shortTitle": string (short Hebrew title for the WHOLE meal),\n` +
-    `    "totalCalories": number (kcal total for entire meal),\n` +
-    `    "totalProtein": number (grams protein total),\n` +
-    `    "totalCarbs": number (grams carbs total),\n` +
-    `    "totalFat": number (grams fat total),\n` +
-    `    "portionLabel": string optional (e.g. "מנה אחת", "ארוחת ערב"),\n` +
-    `    "estimatedGrams": number optional (total grams of food if you can estimate)\n` +
-    `  } | null,\n` +
-    `  "menuDraft": {\n` +
-    `    "title": string,\n` +
-    `    "totalCalories": number,\n` +
-    `    "totalProtein": number,\n` +
-    `    "totalCarbs": number,\n` +
-    `    "totalFat": number,\n` +
-    `    "meals": [\n` +
-    `      {\n` +
-    `        "name": string,\n` +
-    `        "calories": number,\n` +
-    `        "protein": number,\n` +
-    `        "carbs": number,\n` +
-    `        "fat": number,\n` +
-    `        "items": [ { \"name\": string, \"portionLabel\": string, \"calories\": number, \"protein\": number, \"carbs\": number, \"fat\": number } ]\n` +
-    `      }\n` +
-    `    ]\n` +
-    `  } | null,\n` +
-    `  "actions": []\n` +
-    `}\n` +
-    `- mealSummary MUST be null while asking a question / when missing details.\n` +
-    `- If the user asks for "תפריט", "תפריטים", "מה לאכול היום", or meal planning: set menuDraft to a 1-day menu that fits their remaining calories and a high-protein bias, using foods similar to snapshot.dictionary[] preferences.\n` +
-    `- If a dietary restriction is unknown (vegetarian/vegan/kosher) or number of meals matters, ask ONE question and set menuDraft=null.\n` +
-    `- When menuDraft is provided, mealSummary should usually be null.\n` +
-    `- The app shows ONE summary card and logs ONE journal line: "ארוחת AI: " + shortTitle.\n`;
+  const systemPrompt = aiAssistantMenuSystemPrompt(APP_KNOWLEDGE_HE);
 
+  const snapRec =
+    snapshot && typeof snapshot === "object" && !Array.isArray(snapshot)
+      ? (snapshot as Record<string, unknown>)
+      : {};
+  const calorieTargetN = Number(snapRec.calorieTarget);
+  const calorieLine =
+    Number.isFinite(calorieTargetN) && calorieTargetN > 0
+      ? `יעד קלורי יומי מה-snapshot (להתקרב אליו, ±10% לפי ההנחיות במערכת): בערך ${Math.round(calorieTargetN)} קל׳.\n`
+      : `התאימי את סך הקלוריות ל-snapshot.calorieTarget של המשתמש (לא מספר קבוע גלובלי).\n`;
+  const selectiveUsageHint =
+    `[בחירה מושכלת] snapshot.dictionary הוא מאגר מותר בלבד — אין חובה להשתמש בכל פריט. אם יש עומס חלבונים/מוצרים, בחרי תת־קבוצה קולינרית שנכנסת במסגרת הקלוריות; פריטים שלא בתפריט נשארים במזווה.\n` +
+    calorieLine;
+
+  const foodDbPicklist = buildFoodDbPicklistForAi(10500);
   const contextPrompt =
-    `snapshot:\n${JSON.stringify(snapshot).slice(0, 14000)}\n\n` +
-    `memory:\n${JSON.stringify(memory).slice(0, 6000)}\n`;
-
+    `snapshot:\n${JSON.stringify(snapshot).slice(0, 13000)}\n\n` +
+    selectiveUsageHint +
+    `\n` +
+    `memory:\n${JSON.stringify(memory).slice(0, 6000)}\n\n` +
+    `foodDbPicklist (מאגר CSV — רק לבחירת עד 2 פריטים מוצעים עם isSuggested; שם מדויק מהשורה):\n${foodDbPicklist.slice(0, 10500)}\n`;
   try {
     const res = await fetch("https://api.openai.com/v1/chat/completions", {
       method: "POST",
@@ -371,7 +332,7 @@ export async function POST(req: Request) {
       },
       body: JSON.stringify({
         model: process.env.OPENAI_ASSISTANT_MODEL?.trim() || "gpt-4.1-mini",
-        temperature: 0.55,
+        temperature: 0.48,
         response_format: { type: "json_object" },
         messages: [
           { role: "system", content: systemPrompt },

@@ -1296,6 +1296,45 @@ export function isExplorerFoodInDictionary(explorerFoodId: string): boolean {
  * הוספה / הסרה של פריט ממגלה המזונות במילון (לפי ערכי 100 ג׳).
  * @returns true אם נוסף, false אם הוסר
  */
+/** הוספת פריט ממגלה המזונות למילון אם חסר — מחזיר את הרשומה במילון (קיימת או חדשה) */
+export function addExplorerFoodToDictionaryIfAbsent(item: {
+  id: string;
+  name: string;
+  calories: number;
+  protein: number;
+  fat: number;
+  carbs: number;
+  category?: string;
+  brand?: string;
+}): DictionaryItem {
+  const src = explorerFoodSourceKey(item.id);
+  const items = loadDictionary();
+  const found = items.find((d) => d.source === src);
+  if (found) return found;
+  const kcal = Math.max(0, Math.round(Number(item.calories) || 0));
+  const p = Number.isFinite(item.protein) ? Math.max(0, item.protein) : 0;
+  const c = Number.isFinite(item.carbs) ? Math.max(0, item.carbs) : 0;
+  const f = Number.isFinite(item.fat) ? Math.max(0, item.fat) : 0;
+  const cat = item.category?.trim();
+  const br = item.brand?.trim();
+  const row: DictionaryItem = {
+    id: makeId(),
+    food: item.name.trim(),
+    quantity: 100,
+    unit: "גרם",
+    lastCalories: kcal,
+    caloriesPer100g: kcal,
+    proteinPer100g: p,
+    carbsPer100g: c,
+    fatPer100g: f,
+    source: src,
+    ...(cat ? { foodCategory: cat } : {}),
+    ...(br ? { brand: br } : {}),
+  };
+  saveDictionary([row, ...items]);
+  return row;
+}
+
 export function toggleExplorerFoodInDictionary(item: {
   id: string;
   name: string;

@@ -146,3 +146,54 @@ export function matchesAllQueryWords(name: string, query: string): boolean {
   return true;
 }
 
+/**
+ * חיפוש במזווה בונה התפריט: קודם מילים שמתחילות בטקסט החיפוש (מילה שלמה),
+ * ואחר כך גם אם המחרוזת מופיעה בתוך השם (בלי סינון מחמיר של layeredSearchScore).
+ */
+export function pantryExplorerSearchScore(name: string, rawQuery: string): number {
+  const qNorm = collapseCommonHebrewTypos(normalizeForQueryMatch(rawQuery)).trim();
+  if (qNorm.length < 2) return -1;
+
+  const qWords = qNorm.split(/\s+/).filter(Boolean);
+  if (qWords.length >= 2) {
+    return matchesAllQueryWords(name, rawQuery) ? 450_000 : -1;
+  }
+
+  const qw = qWords[0]!;
+  let best = -1;
+
+  const n = collapseCommonHebrewTypos(normalizeForQueryMatch(name));
+  const segments = n.split(/\s*,\s*/).map((x) => x.trim()).filter(Boolean);
+
+  for (let si = 0; si < segments.length; si++) {
+    const seg = segments[si]!;
+    const tokens = seg.split(/[\s]+/).filter(Boolean);
+    for (let ti = 0; ti < tokens.length; ti++) {
+      const tok = tokens[ti]!;
+      for (const v of tokenVariants(qw)) {
+        if (!v) continue;
+        if (tok.startsWith(v)) {
+          const rank =
+            280_000 -
+            ti * 400 -
+            si * 3_000 -
+            Math.min(800, Math.abs(tok.length - v.length) * 40);
+          best = Math.max(best, rank);
+        }
+      }
+    }
+  }
+
+  const ns = stripForQueryMatch(name);
+  const qstrip = stripForQueryMatch(qw);
+  if (qstrip.length >= 2 && ns.includes(qstrip)) {
+    const idx = ns.indexOf(qstrip);
+    best = Math.max(best, 120_000 - Math.min(idx, 10_000));
+  } else if (n.includes(qw)) {
+    const idx = n.indexOf(qw);
+    best = Math.max(best, 95_000 - Math.min(idx, 10_000));
+  }
+
+  return best;
+}
+
