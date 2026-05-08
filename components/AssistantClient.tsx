@@ -82,6 +82,7 @@ type AssistantResult = {
 };
 
 const JOURNAL_AI_PREFIX = "ארוחת AI:";
+type AssistantProvider = "openai" | "gemini";
 
 /** כרטיס מהעוזרת — סיכום ארוחה מאוחד או (תאימות לאחור) ערכי 100 גרם */
 type FoodSuggestionCard = {
@@ -534,6 +535,7 @@ export function AssistantClient() {
   const [actions, setActions] = useState<AssistantAction[]>([]);
   const [toast, setToast] = useState<string | null>(null);
   const [exerciseRev, setExerciseRev] = useState(0);
+  const [provider, setProvider] = useState<AssistantProvider>("openai");
   const lastMsgRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
@@ -568,6 +570,23 @@ export function AssistantClient() {
     const t = window.setTimeout(() => setToast(null), 2200);
     return () => window.clearTimeout(t);
   }, [toast]);
+
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem("cj_assistant_provider_v1");
+      if (raw === "gemini" || raw === "openai") setProvider(raw);
+    } catch {
+      // ignore
+    }
+  }, []);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem("cj_assistant_provider_v1", provider);
+    } catch {
+      // ignore
+    }
+  }, [provider]);
 
   useEffect(() => {
     // Restore chat history locally (so it doesn't disappear on refresh).
@@ -834,6 +853,7 @@ export function AssistantClient() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
+          provider,
           message: text,
           history,
           snapshot,
@@ -1133,6 +1153,17 @@ export function AssistantClient() {
         )}
 
         <div className="mt-4 flex gap-2">
+          <select
+            value={provider}
+            onChange={(e) => setProvider(e.target.value === "gemini" ? "gemini" : "openai")}
+            className="h-[46px] rounded-xl border-2 border-[var(--border-cherry-soft)] bg-white px-3 text-xs font-extrabold text-[var(--stem)] shadow-sm"
+            aria-label="ספק AI"
+            title="ספק AI"
+            disabled={busy}
+          >
+            <option value="openai">GPT</option>
+            <option value="gemini">Gemini</option>
+          </select>
           <input
             value={input}
             onChange={(e) => setInput(e.target.value)}

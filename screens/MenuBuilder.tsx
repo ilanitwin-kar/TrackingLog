@@ -118,6 +118,8 @@ type AiMenuDraft = {
   }>;
 } | null;
 
+type AiMenuProvider = "openai" | "gemini";
+
 const PANTRY_GROUP_ORDER: DictDominantMacro[] = [
   "protein",
   "carbs",
@@ -1742,6 +1744,7 @@ export default function MenuBuilder() {
 
   const [meals, setMeals] = useState<MealPlan[] | null>(null);
   const [aiMenuDraft, setAiMenuDraft] = useState<AiMenuDraft>(null);
+  const [aiProvider, setAiProvider] = useState<AiMenuProvider>("openai");
   const [calorieGapDismissed, setCalorieGapDismissed] = useState(false);
   const [calorieGapPickerOpen, setCalorieGapPickerOpen] = useState(false);
   const [calorieGapSearch, setCalorieGapSearch] = useState("");
@@ -1775,6 +1778,23 @@ export default function MenuBuilder() {
     }
     celebrationModeRef.current = celebrationMode;
   }, [celebrationMode, defaultCelebrationReserve]);
+
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem("cj_menu_builder_ai_provider_v1");
+      if (raw === "gemini" || raw === "openai") setAiProvider(raw);
+    } catch {
+      // ignore
+    }
+  }, []);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem("cj_menu_builder_ai_provider_v1", aiProvider);
+    } catch {
+      // ignore
+    }
+  }, [aiProvider]);
 
   useEffect(() => {
     if (treatWanted !== true || !treatFood) return;
@@ -2178,6 +2198,7 @@ export default function MenuBuilder() {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
+              provider: aiProvider,
               message,
               history: [],
               snapshot,
@@ -2232,6 +2253,7 @@ export default function MenuBuilder() {
     presetMap,
     magicPoolFull,
     selectionResolved,
+    aiProvider,
   ]);
 
   const swapLine = useCallback(
@@ -3241,6 +3263,22 @@ export default function MenuBuilder() {
                   "בחר אם להפתיע אותך מתפריט מושלם מהמזווה, או לסמן בעצמך מה זמין לך היום.",
                 )}
               </p>
+              <div className="flex flex-wrap items-center justify-between gap-2 rounded-2xl border-2 bg-white/90 p-3 shadow-sm" style={{ borderColor: colors.borderCherrySoft }}>
+                <p className="m-0 text-xs font-extrabold" style={{ color: colors.stemDeep }}>
+                  מי יחולל את התפריט?
+                </p>
+                <select
+                  value={aiProvider}
+                  onChange={(e) => setAiProvider(e.target.value === "gemini" ? "gemini" : "openai")}
+                  className="h-10 rounded-xl border-2 bg-white px-3 text-xs font-extrabold shadow-sm"
+                  style={{ borderColor: colors.borderCherrySoft, color: colors.stemDeep }}
+                  aria-label="ספק AI לתפריט"
+                  title="ספק AI לתפריט"
+                >
+                  <option value="openai">GPT</option>
+                  <option value="gemini">Gemini</option>
+                </select>
+              </div>
               <button
                 type="button"
                 className={`w-full rounded-2xl border-2 px-4 py-5 text-center shadow-sm transition active:scale-[0.99] ${typography.buttonLabel}`}
