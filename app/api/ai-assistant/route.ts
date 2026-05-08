@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { GoogleGenerativeAI } from "@google/generative-ai";
 import { buildFoodDbPicklistForAi } from "@/lib/aiAssistantFoodDbContext";
 import { aiAssistantMenuSystemPrompt } from "@/lib/aiAssistantMenuPrompt";
 import { APP_KNOWLEDGE_HE } from "@/lib/appKnowledge";
@@ -7,6 +8,7 @@ export const dynamic = "force-dynamic";
 export const maxDuration = 60;
 
 const UNAVAILABLE_HE = "שירות העוזר זמנית לא זמין";
+const GEMINI_UNAVAILABLE_HE = "שירות Gemini זמנית לא זמין";
 
 type AssistantAction =
   | { type: "open"; label: string; payload: { href: string } }
@@ -90,6 +92,31 @@ function safeJson<T>(raw: string): T | null {
     return JSON.parse(raw) as T;
   } catch {
     return null;
+  }
+}
+
+/** Strip fences and parse; extract first JSON object if full parse fails. */
+function parseGeminiResponseText(raw: string): unknown {
+  let t = raw.trim();
+  t = t.replace(/^```(?:json)?\s*/i, "").replace(/\s*```\s*$/i, "").trim();
+  const tryParse = (s: string): unknown => {
+    const x = s.trim();
+    if (x === "" || /^null$/i.test(x)) return null;
+    return JSON.parse(x) as unknown;
+  };
+  try {
+    return tryParse(t);
+  } catch {
+    const start = t.indexOf("{");
+    const end = t.lastIndexOf("}");
+    if (start >= 0 && end > start) {
+      try {
+        return tryParse(t.slice(start, end + 1));
+      } catch {
+        /* fall through */
+      }
+    }
+    throw new Error(`Could not parse JSON from Gemini. Snippet: ${t.slice(0, 200)}`);
   }
 }
 
@@ -270,12 +297,8 @@ function sanitizeMenuDraft(raw: unknown): MenuDraftJson | null {
 }
 
 export async function POST(req: Request) {
-  const openAiKey = process.env.OPENAI_API_KEY?.trim() ?? "";
-  if (!openAiKey) {
-    return NextResponse.json({ error: UNAVAILABLE_HE }, { status: 503 });
-  }
-
   let body: {
+    provider?: "openai" | "gemini";
     message?: string;
     history?: ChatTurn[];
     snapshot?: unknown;
@@ -283,6 +306,7 @@ export async function POST(req: Request) {
   };
   try {
     body = (await req.json()) as {
+      provider?: "openai" | "gemini";
       message?: string;
       history?: ChatTurn[];
       snapshot?: unknown;
@@ -291,6 +315,8 @@ export async function POST(req: Request) {
   } catch {
     return NextResponse.json({ error: "Invalid JSON" }, { status: 400 });
   }
+
+  const provider = body.provider === "gemini" ? "gemini" : "openai";
 
   const message = String(body.message ?? "").trim();
   if (message.length < 1) {
@@ -324,37 +350,73 @@ export async function POST(req: Request) {
     `memory:\n${JSON.stringify(memory).slice(0, 6000)}\n\n` +
     `foodDbPicklist (מאגר CSV — רק לבחירת עד 2 פריטים מוצעים עם isSuggested; שם מדויק מהשורה):\n${foodDbPicklist.slice(0, 10500)}\n`;
   try {
-    const res = await fetch("https://api.openai.com/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${openAiKey}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        model: process.env.OPENAI_ASSISTANT_MODEL?.trim() || "gpt-4.1-mini",
-        temperature: 0.48,
-        response_format: { type: "json_object" },
-        messages: [
-          { role: "system", content: systemPrompt },
-          { role: "user", content: contextPrompt },
-          ...history.map((t) => ({
-            role: t.role,
-            content: String(t.text ?? "").slice(0, 2000),
-          })),
-          { role: "user", content: message },
-        ],
-      }),
-    });
+    let parsed: AssistantResponse | null = null;
+    if (provider === "gemini") {
+      const apiKey = process.env.GOOGLE_GENERATIVE_AI_API_KEY?.trim() ?? "";
+      if (!apiKey) {
+        return NextResponse.json({ error: GEMINI_UNAVAILABLE_HE }, { status: 503 });
+      }
+      const genAI = new GoogleGenerativeAI(apiKey);
+      const model = genAI.getGenerativeModel({
+        model: process.env.GEMINI_ASSISTANT_MODEL?.trim() || "gemini-1.5-flash",
+        generationConfig: {
+          temperature: 0.48,
+          responseMimeType: "application/json",
+        },
+      });
+      const historyBlock =
+        history.length > 0
+          ? `history:\n${history
+              .map((t) => `${t.role.toUpperCase()}: ${String(t.text ?? "").slice(0, 1000)}`)
+              .join("\n")}\n\n`
+          : "";
+      const prompt =
+        `${systemPrompt}\n\n` +
+        `${contextPrompt}\n\n` +
+        `${historyBlock}` +
+        `user:\n${message}\n`;
+      const result = await model.generateContent(prompt);
+      const text = result.response.text();
+      const normalized = parseGeminiResponseText(text);
+      parsed = normalized && typeof normalized === "object" ? (normalized as AssistantResponse) : null;
+    } else {
+      const openAiKey = process.env.OPENAI_API_KEY?.trim() ?? "";
+      if (!openAiKey) {
+        return NextResponse.json({ error: UNAVAILABLE_HE }, { status: 503 });
+      }
+      const res = await fetch("https://api.openai.com/v1/chat/completions", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${openAiKey}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          model: process.env.OPENAI_ASSISTANT_MODEL?.trim() || "gpt-4.1-mini",
+          temperature: 0.48,
+          response_format: { type: "json_object" },
+          messages: [
+            { role: "system", content: systemPrompt },
+            { role: "user", content: contextPrompt },
+            ...history.map((t) => ({
+              role: t.role,
+              content: String(t.text ?? "").slice(0, 2000),
+            })),
+            { role: "user", content: message },
+          ],
+        }),
+      });
 
-    if (!res.ok) {
-      const txt = await res.text().catch(() => "");
-      console.error("[ai-assistant] OpenAI error", res.status, txt.slice(0, 400));
-      return NextResponse.json({ error: UNAVAILABLE_HE }, { status: 503 });
+      if (!res.ok) {
+        const txt = await res.text().catch(() => "");
+        console.error("[ai-assistant] OpenAI error", res.status, txt.slice(0, 400));
+        return NextResponse.json({ error: UNAVAILABLE_HE }, { status: 503 });
+      }
+
+      const data = (await res.json()) as { choices?: Array<{ message?: { content?: string } }> };
+      const content = data.choices?.[0]?.message?.content ?? "";
+      parsed = safeJson<AssistantResponse>(content);
     }
 
-    const data = (await res.json()) as { choices?: Array<{ message?: { content?: string } }> };
-    const content = data.choices?.[0]?.message?.content ?? "";
-    const parsed = safeJson<AssistantResponse>(content);
     if (!parsed || typeof parsed.reply !== "string") {
       return NextResponse.json({ error: UNAVAILABLE_HE }, { status: 503 });
     }
