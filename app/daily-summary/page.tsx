@@ -105,7 +105,11 @@ export default function DailySummaryPage() {
   const weekKeys = useMemo(() => getCalendarWeekDateKeys(dateKey), [dateKey]);
   const monthRange = useMemo(() => getMonthRangeKeys(dateKey), [dateKey]);
   const monthKeys = monthRange.keys;
-  const journeyStartKey = useMemo(() => getJourneyStartDateKey(), [rev]);
+  const journeyStartKey = useMemo(
+    () => getJourneyStartDateKey(),
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- rev מסנכרן נתיב מ-localStorage
+    [rev],
+  );
 
   const consumedKcal = useMemo(
     () => entries.reduce((s, e) => s + e.calories, 0),
@@ -251,7 +255,7 @@ export default function DailySummaryPage() {
       carbs: { val: c, goal: goals.carbsG },
       fat: { val: f, goal: goals.fatG },
     };
-  }, [scope, scoped, dayLogs, macroGoals]);
+  }, [scope, scoped, dayLogs, macroGoals, dateKey]);
 
   const proteinTop = useMemo(() => {
     return [...entries]

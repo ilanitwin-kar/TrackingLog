@@ -171,7 +171,7 @@ export default function MenuBuilderPantry() {
     setDebouncedQ("");
     setItems([]);
     setLoading(false);
-  }, [current?.id]);
+  }, [current]);
 
   useEffect(() => {
     const t = q.trim();
@@ -240,12 +240,9 @@ export default function MenuBuilderPantry() {
     bumpPantryEvent();
   }, []);
 
-  const explorerList = (id: PantryAtomicStepId): string[] =>
-    state.explorerIdsByStep[id] ?? [];
-
   const addExplorerToStep = useCallback(
     (stepId: PantryAtomicStepId, row: FoodItem) => {
-      const list = explorerList(stepId);
+      const list = state.explorerIdsByStep[stepId] ?? [];
       if (list.includes(row.id)) return;
       const dictItem = addExplorerFoodToDictionaryIfAbsent({
         id: row.id,
@@ -277,7 +274,9 @@ export default function MenuBuilderPantry() {
       const list = (state.explorerIdsByStep[stepId] ?? []).filter(
         (x) => x !== explorerId,
       );
-      const { [explorerId]: _t, ...restTreat } = state.treatMealByExplorerId;
+      const restTreat = Object.fromEntries(
+        Object.entries(state.treatMealByExplorerId).filter(([k]) => k !== explorerId),
+      );
       const next: MenuBuilderPantryPersistedV1 = {
         ...state,
         explorerIdsByStep: { ...state.explorerIdsByStep, [stepId]: list },
@@ -334,14 +333,7 @@ export default function MenuBuilderPantry() {
       }
     }
     setStepIndex((i) => Math.min(i + 1, steps.length - 1));
-  }, [
-    canAdvanceStep,
-    current,
-    guidedFixIds,
-    state,
-    steps,
-    steps.length,
-  ]);
+  }, [canAdvanceStep, current, guidedFixIds, state, steps]);
 
   const handleFinish = useCallback(() => {
     const issues = pantryValidationIssues(state);

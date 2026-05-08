@@ -186,7 +186,10 @@ export function ExperimentHomeClient() {
       weightDue,
       emoji: slot.emoji,
     };
-  }, [rev]);
+  }, 
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- rev מסנכרן אחרי storage/profile
+    [rev],
+  );
 
   const paragraphs: string[] = [];
   if (sessionN >= 1) {

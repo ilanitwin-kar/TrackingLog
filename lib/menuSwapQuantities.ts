@@ -214,7 +214,7 @@ export function redistributeMealCalorieDeficit(
   presetMap: Map<string, MealPreset>,
 ): DraftMealItem[] {
   if (deficitCalories <= 5) return items.map((x) => ({ ...x }));
-  let next = items.map((x) => ({ ...x }));
+  const next = items.map((x) => ({ ...x }));
   let remaining = deficitCalories;
 
   for (let iter = 0; iter < 14 && remaining > 5; iter++) {

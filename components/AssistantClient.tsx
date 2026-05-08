@@ -732,17 +732,7 @@ export function AssistantClient() {
         fatPer100g: d.fatPer100g,
       })),
     };
-  }, [
-    profile.firstName,
-    profile.gender,
-    profile.weightKg,
-    profile.goalWeightKg,
-    profile.heightCm,
-    profile.age,
-    profile.deficit,
-    profile.activity,
-    exerciseRev,
-  ]);
+  }, [profile, exerciseRev]);
 
   function getLastMealCardForQuickAdd(): FoodSuggestionCard | null {
     for (let i = messages.length - 1; i >= 0; i -= 1) {

@@ -1181,7 +1181,7 @@ function enforceMenuTotalKcal(
   const rest = total - treatK;
   const allowedRest = Math.max(150, maxTotalKcal - treatK);
   if (rest <= 0 || allowedRest <= 0) return;
-  let factor = allowedRest / rest;
+  const factor = allowedRest / rest;
   if (factor >= 0.999) return;
   for (let mi = 0; mi < plans.length; mi++) {
     const meal = plans[mi]!;
@@ -1244,7 +1244,7 @@ function legacyCalorieFillMeals(
   const perSlotTarget = remainingKcal / mealCount;
   let poolIdx = 0;
   for (let m = 0; m < mealCount; m++) {
-    let used = plans[m]!.lines.reduce((s, l) => s + l.calories, 0);
+    const used = plans[m]!.lines.reduce((s, l) => s + l.calories, 0);
     let slotLeft = Math.max(0, perSlotTarget - used);
     let guard = 0;
     while (slotLeft > 70 && guard < 14) {
@@ -1672,7 +1672,10 @@ export default function MenuBuilder() {
   const fullDictionary = useMemo(() => {
     void pantryRev;
     return loadDictionary();
-  }, [pantryRev]);
+  }, 
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- pantryRev מסנכרן אחרי עדכון מזווה
+    [pantryRev],
+  );
 
   const dictionary = useMemo(() => {
     void pantryRev;
@@ -1681,10 +1684,14 @@ export default function MenuBuilder() {
     if (ids.length === 0) return all;
     const s = new Set(ids);
     return all.filter((d) => s.has(d.id));
-  }, [pantryRev]);
+  }, 
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- pantryRev מסנכרן אחרי עדכון מזווה
+    [pantryRev],
+  );
 
   const pantryGate = useMemo(
     () => validatePantryState(loadMenuBuilderPantryState()),
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- pantryRev מסנכרן אחרי עדכון מזווה
     [pantryRev],
   );
 
@@ -1856,7 +1863,7 @@ export default function MenuBuilder() {
 
   const treatMealDialogLabels = useMemo(
     () => mealWizardLabels(mealCount ?? readStoredMenuMealCount() ?? 5),
-    [mealCount, treatMealDialogFood],
+    [mealCount],
   );
 
   const missingDominantMacroForWarn = useMemo(() => {

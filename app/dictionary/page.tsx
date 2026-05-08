@@ -26,10 +26,7 @@ import {
   removeDictionaryItem,
   toggleExplorerFoodInDictionary,
 } from "@/lib/storage";
-import {
-  dominantDictMacro,
-  type DictDominantMacro,
-} from "@/lib/dictionaryDominantMacro";
+import { dominantDictMacro } from "@/lib/dictionaryDominantMacro";
 import { addToShopping, loadShoppingFoodIds } from "@/lib/explorerStorage";
 import { IconVerified } from "@/components/Icons";
 import {

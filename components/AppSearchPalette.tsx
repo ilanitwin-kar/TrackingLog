@@ -66,7 +66,7 @@ export function AppSearchPalette() {
       list.unshift({ id: "admin", title: "ניהול מערכת", href: "/admin", keywords: "אדמין admin ניהול מערכת" });
     }
     return list;
-  }, [open]);
+  }, []);
 
   const results = useMemo(() => {
     const query = q.trim();
