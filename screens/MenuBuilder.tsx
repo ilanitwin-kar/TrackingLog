@@ -119,6 +119,7 @@ type AiMenuDraft = {
 } | null;
 
 type AiMenuProvider = "openai" | "gemini";
+type MenuBuiltBy = AiMenuProvider | "local" | null;
 
 const PANTRY_GROUP_ORDER: DictDominantMacro[] = [
   "protein",
@@ -1757,6 +1758,7 @@ export default function MenuBuilder() {
   const [aiMenuDraft, setAiMenuDraft] = useState<AiMenuDraft>(null);
   const [aiProvider, setAiProvider] = useState<AiMenuProvider>("openai");
   const [toast, setToast] = useState<string | null>(null);
+  const [builtBy, setBuiltBy] = useState<MenuBuiltBy>(null);
   const [calorieGapDismissed, setCalorieGapDismissed] = useState(false);
   const [calorieGapPickerOpen, setCalorieGapPickerOpen] = useState(false);
   const [calorieGapSearch, setCalorieGapSearch] = useState("");
@@ -2233,11 +2235,13 @@ export default function MenuBuilder() {
             setMeals(null);
             setAllocationWarnings([]);
             setPhase("result");
+            setBuiltBy(aiProvider);
             setToast(aiProvider === "gemini" ? "התפריט נבנה עם Gemini" : "התפריט נבנה עם GPT");
             return;
           }
 
           const msg = json?.error?.trim();
+          setBuiltBy("local");
           setToast(
             msg
               ? `⚠️ ${msg} — עברתי לאלגוריתם המקומי`
@@ -2260,6 +2264,7 @@ export default function MenuBuilder() {
         );
         setMeals(plan);
         setAllocationWarnings(warnings);
+        setBuiltBy("local");
         setPhase("result");
       })();
     }, 1000);
@@ -2434,9 +2439,22 @@ export default function MenuBuilder() {
 
   if (phase === "result" && aiMenuDraft) {
     const menuTotalKcal = Math.round(Number(aiMenuDraft.totalCalories) || 0);
+    const builtByLabel =
+      builtBy === "gemini"
+        ? "Gemini"
+        : builtBy === "openai"
+          ? "GPT"
+          : builtBy === "local"
+            ? "Local"
+            : null;
     return (
       <>
       <div className={`mx-auto max-w-lg px-4 pb-28 pt-4 ${rootFont}`} dir="rtl">
+        {builtByLabel ? (
+          <p className="mb-3 mt-0 text-xs font-extrabold" style={{ color: colors.stemDeep }}>
+            נבנה ע״י: <span style={{ color: colors.cherry }}>{builtByLabel}</span>
+          </p>
+        ) : null}
         <div
           className={`mb-4 flex flex-row items-center justify-between gap-2 ${typography.stepTitle}`}
           style={{ color: colors.cherry }}
@@ -2906,6 +2924,7 @@ export default function MenuBuilder() {
           </div>
         </div>
       ) : null}
+      {toast ? <ToastBanner text={toast} /> : null}
     </>
     );
   }
@@ -2915,8 +2934,21 @@ export default function MenuBuilder() {
       (t, m) => t + m.lines.reduce((s, l) => s + l.calories, 0),
       0,
     );
+    const builtByLabel =
+      builtBy === "gemini"
+        ? "Gemini"
+        : builtBy === "openai"
+          ? "GPT"
+          : builtBy === "local"
+            ? "Local"
+            : null;
     return (
       <div className={`mx-auto max-w-lg px-4 pb-28 pt-4 ${rootFont}`} dir="rtl">
+        {builtByLabel ? (
+          <p className="mb-3 mt-0 text-xs font-extrabold" style={{ color: colors.stemDeep }}>
+            נבנה ע״י: <span style={{ color: colors.cherry }}>{builtByLabel}</span>
+          </p>
+        ) : null}
         <div
           className={`mb-4 flex flex-row items-center justify-between gap-2 ${typography.stepTitle}`}
           style={{ color: colors.cherry }}
