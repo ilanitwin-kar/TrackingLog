@@ -127,6 +127,17 @@ const PANTRY_GROUP_ORDER: DictDominantMacro[] = [
   "neutral",
 ];
 
+function ToastBanner({ text }: { text: string }) {
+  return (
+    <div
+      className="fixed inset-x-4 bottom-[max(1rem,env(safe-area-inset-bottom))] z-[400] mx-auto max-w-lg rounded-2xl border-2 border-[var(--border-cherry-soft)] bg-[var(--stem)] px-4 py-3 text-center text-sm font-bold text-white shadow-2xl"
+      role="status"
+    >
+      {text}
+    </div>
+  );
+}
+
 const PANTRY_GROUP_META: Record<DictDominantMacro, { label: string }> = {
   protein: { label: "חלבון" },
   carbs: { label: "פחמימה" },
@@ -1745,6 +1756,7 @@ export default function MenuBuilder() {
   const [meals, setMeals] = useState<MealPlan[] | null>(null);
   const [aiMenuDraft, setAiMenuDraft] = useState<AiMenuDraft>(null);
   const [aiProvider, setAiProvider] = useState<AiMenuProvider>("openai");
+  const [toast, setToast] = useState<string | null>(null);
   const [calorieGapDismissed, setCalorieGapDismissed] = useState(false);
   const [calorieGapPickerOpen, setCalorieGapPickerOpen] = useState(false);
   const [calorieGapSearch, setCalorieGapSearch] = useState("");
@@ -1795,6 +1807,12 @@ export default function MenuBuilder() {
       // ignore
     }
   }, [aiProvider]);
+
+  useEffect(() => {
+    if (toast == null) return;
+    const t = window.setTimeout(() => setToast(null), 2400);
+    return () => window.clearTimeout(t);
+  }, [toast]);
 
   useEffect(() => {
     if (treatWanted !== true || !treatFood) return;
@@ -2205,21 +2223,26 @@ export default function MenuBuilder() {
               memory: {},
             }),
           });
-          if (res.ok) {
-            const json = (await res.json()) as {
-              result?: { menuDraft?: AiMenuDraft };
-              error?: string;
-            };
-            const md = json?.result?.menuDraft ?? null;
-            if (md && typeof md.title === "string" && Array.isArray(md.meals) && md.meals.length > 0) {
-              setAiMenuDraft(md);
-              setCalorieGapDismissed(false);
-              setMeals(null);
-              setAllocationWarnings([]);
-              setPhase("result");
-              return;
-            }
+          const json = (await res.json().catch(() => null)) as
+            | { result?: { menuDraft?: AiMenuDraft }; error?: string }
+            | null;
+          const md = json?.result?.menuDraft ?? null;
+          if (res.ok && md && typeof md.title === "string" && Array.isArray(md.meals) && md.meals.length > 0) {
+            setAiMenuDraft(md);
+            setCalorieGapDismissed(false);
+            setMeals(null);
+            setAllocationWarnings([]);
+            setPhase("result");
+            setToast(aiProvider === "gemini" ? "התפריט נבנה עם Gemini" : "התפריט נבנה עם GPT");
+            return;
           }
+
+          const msg = json?.error?.trim();
+          setToast(
+            msg
+              ? `⚠️ ${msg} — עברתי לאלגוריתם המקומי`
+              : `⚠️ ${aiProvider === "gemini" ? "Gemini" : "GPT"} לא החזיר תפריט — עברתי לאלגוריתם המקומי`,
+          );
         } catch {
           // fall through to local allocator
         }
@@ -2404,6 +2427,7 @@ export default function MenuBuilder() {
         <p className="mt-4 text-base font-semibold" style={{ color: colors.stemDeep }}>
           מחוללים קסם קלורי…
         </p>
+        {toast ? <ToastBanner text={toast} /> : null}
       </div>
     );
   }
@@ -2997,6 +3021,7 @@ export default function MenuBuilder() {
             העבר ליומן
           </button>
         </div>
+        {toast ? <ToastBanner text={toast} /> : null}
       </div>
     );
   }
