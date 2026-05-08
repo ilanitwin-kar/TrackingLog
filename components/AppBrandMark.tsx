@@ -27,6 +27,8 @@ function titleForPathname(pathname: string): string {
   if (pathname === "/library") return "הספרייה שלי";
   if (pathname === "/my-recipes") return "מתכונים";
   if (pathname === "/menus") return "התפריטים שלי";
+  if (pathname === "/menu-builder/pantry") return "מזווה לתפריט";
+  if (pathname === "/menu-builder") return "בונה תפריט";
   if (pathname === "/planner") return "בניית תפריט";
   if (pathname === "/recipes") return "מחשבון מתכונים";
   if (pathname === "/weight") return "מעקב משקל";
@@ -273,6 +275,12 @@ export function AppBrandMark() {
       : "text-sm";
 
   function onBack() {
+    if (pathname === "/menu-builder" && typeof window !== "undefined") {
+      const ok = window.dispatchEvent(
+        new CustomEvent("cj-menu-builder-back", { cancelable: true }),
+      );
+      if (!ok) return;
+    }
     try {
       if (typeof window !== "undefined" && window.history.length > 1) {
         router.back();
@@ -308,6 +316,8 @@ export function AppBrandMark() {
     pathname === "/shopping";
   const isDictionary = pathname === "/dictionary";
   const isShopping = pathname === "/shopping";
+  const isMenuBuilderMain = pathname === "/menu-builder";
+  const isMenuBuilderPantry = pathname === "/menu-builder/pantry";
   const isRecipes = pathname === "/recipes";
   /** מחשבון + רשימת מתכונים — אותו הדר אטום בגלילה (לא cherry-muted שקוף) */
   const isRecipesFlowOpaque = pathname === "/recipes" || pathname === "/my-recipes";
@@ -395,6 +405,20 @@ export function AppBrandMark() {
               >
                 ?
               </button>
+            ) : isMenuBuilderMain ? (
+              <Link
+                href="/menu-builder/pantry"
+                className="pointer-events-auto whitespace-nowrap rounded-full border-2 border-[var(--border-cherry-soft)] bg-white px-2.5 py-1 text-[11px] font-extrabold text-[var(--cherry)] shadow-sm transition hover:bg-[var(--cherry-muted)]"
+              >
+                מזווה
+              </Link>
+            ) : isMenuBuilderPantry ? (
+              <Link
+                href="/menu-builder"
+                className="pointer-events-auto whitespace-nowrap rounded-full border-2 border-[var(--border-cherry-soft)] bg-white px-2.5 py-1 text-[11px] font-extrabold text-[var(--cherry)] shadow-sm transition hover:bg-[var(--cherry-muted)]"
+              >
+                לתפריט
+              </Link>
             ) : undefined
           }
           onBack={onBack}

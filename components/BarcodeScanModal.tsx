@@ -129,7 +129,7 @@ export function BarcodeScanModal({
         }
       }
     };
-  }, [open, phase]);
+  }, [open, phase, gender]);
 
   return (
     <AnimatePresence>

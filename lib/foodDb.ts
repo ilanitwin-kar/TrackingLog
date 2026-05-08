@@ -2,10 +2,17 @@ import fs from "fs";
 import path from "path";
 import iconv from "iconv-lite";
 import { parse } from "csv-parse/sync";
+import { pantryExplorerSearchScore } from "./foodSearchRules";
 import {
   normalizeSearchText,
   stripPunctuationForSearch,
 } from "./foodSearchRank";
+import { isFoodDbCategoryExcludedFromPantry } from "./foodDbPantryExclude";
+
+export {
+  FOOD_DB_PANTRY_EXCLUDED_CATEGORY,
+  isFoodDbCategoryExcludedFromPantry,
+} from "./foodDbPantryExclude";
 import {
   type FoodUnitGramOverrides,
   totalGramsForServing,
@@ -381,7 +388,7 @@ export function getCategories(): string[] {
 /** חיפוש במאגר CSV (~6K פריטים) — דירוג מילולי קשיח */
 export function searchFoodDb(
   query: string,
-  opts?: { category?: string; limit?: number }
+  opts?: { category?: string; limit?: number; pantry?: boolean },
 ): FoodDbRow[] {
   const db = loadFoodDb();
   const limit = opts?.limit ?? 200;
@@ -393,13 +400,22 @@ export function searchFoodDb(
   if (cat && cat !== "הכל") {
     list = list.filter((r) => r.category === cat);
   }
+  if (opts?.pantry) {
+    list = list.filter(
+      (r) => !isFoodDbCategoryExcludedFromPantry(r.category ?? ""),
+    );
+  }
+
+  const scoreRow = opts?.pantry
+    ? pantryExplorerSearchScore
+    : layeredSearchScore;
 
   const scored: { r: FoodDbRow; score: number }[] = [];
   const seen = new Set<string>();
 
   for (const r of list) {
     if (seen.has(r.id)) continue;
-    const score = layeredSearchScore(r.name, q);
+    const score = scoreRow(r.name, q);
     if (score < 0) continue;
     seen.add(r.id);
     scored.push({ r, score });

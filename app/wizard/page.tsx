@@ -494,7 +494,11 @@ export default function WizardPage() {
     () => dailyMacroTargetsGramsForProfile(targetKcal, p.weightKg, p.gender),
     [targetKcal, p.weightKg, p.gender]
   );
-  const daysToGoal = useMemo(() => getDaysRemainingToGoal(), [p.weightKg, p.goalWeightKg, p.deficit, p.customDeficitEnabled, p.nutritionGoal, p.activity]);
+  const daysToGoal = useMemo(
+    () => getDaysRemainingToGoal(),
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- getDaysRemainingToGoal קורא מ-storage; p מסמן שינוי טופס
+    [p],
+  );
   const monthsToGoal = useMemo(() => {
     if (daysToGoal == null) return null;
     return Math.max(1, Math.round((daysToGoal / 30) * 10) / 10);

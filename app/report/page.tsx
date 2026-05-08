@@ -56,7 +56,11 @@ export default function ReportPage() {
     };
   }, []);
 
-  const accumulation = useMemo(() => buildCalorieAccumulationTable(), [rev]);
+  const accumulation = useMemo(
+    () => buildCalorieAccumulationTable(),
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- rev מסנכרן קריאה מ-localStorage
+    [rev],
+  );
 
   const metrics = useMemo(() => {
     const profile = loadProfile();
@@ -89,7 +93,10 @@ export default function ReportPage() {
       totalKgToLose,
       weightProgressPct,
     };
-  }, [rev]);
+  }, 
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- rev מסנכרן פרופיל/משקלים מ-localStorage
+    [rev],
+  );
 
   const totalFat = accumulation.totalAccumulatedKcal / FAT_KCAL_PER_G;
   const showAccumulation = accumulation.hasAnyClosedDay;

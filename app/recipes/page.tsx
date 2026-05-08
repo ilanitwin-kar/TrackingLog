@@ -246,7 +246,16 @@ export default function RecipesPage() {
       portionGramsText,
     };
     saveRecipesWizardDraft(payload);
-  }, [wizardReady, step]);
+  }, [
+    wizardReady,
+    step,
+    title,
+    servingsText,
+    finalCookedWeightText,
+    rows,
+    nutritionOpen,
+    portionGramsText,
+  ]);
 
   useEffect(() => {
     if (!wizardReady) return;
@@ -1443,7 +1452,8 @@ export default function RecipesPage() {
       <BarcodeScanModal
         open={scanModalOpen}
         onClose={() => setScanModalOpen(false)}
-        onApplyToHome={(name, _note) => {
+        onApplyToHome={(name, note) => {
+          void note;
           setQ(name);
           setScanModalOpen(false);
           window.requestAnimationFrame(() => focusNoScroll(qRef.current));

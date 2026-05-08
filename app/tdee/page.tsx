@@ -138,7 +138,7 @@ export default function TdeePage() {
         ? String(loaded.deficit)
         : ""
     );
-  }, []);
+  }, [router]);
 
   if (!p) {
     return (

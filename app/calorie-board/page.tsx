@@ -32,7 +32,8 @@ export default function CalorieBoardPage() {
 
   const accumulation = useMemo(
     () => buildCalorieAccumulationTable(),
-    [rev]
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- rev מסנכרן קריאה מ-localStorage אחרי אירועים
+    [rev],
   );
 
   const totalFat =

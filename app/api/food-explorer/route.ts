@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import {
   getCategories,
+  isFoodDbCategoryExcludedFromPantry,
   loadFoodDb,
   searchFoodDb,
   type FoodDbRow,
@@ -44,22 +45,31 @@ export async function GET(req: Request) {
   const pageSize = Math.min(120, Math.max(20, parseInt(searchParams.get("pageSize") ?? "60", 10) || 60));
 
   const categories = getCategories();
+  const pantrySearch = searchParams.get("pantry") === "1";
 
   let rows: FoodDbRow[];
   if (q.length >= 2) {
     rows = searchFoodDb(q, {
       category: category && category !== "הכל" ? category : undefined,
       limit: 5000,
+      pantry: pantrySearch,
     });
   } else {
     rows = loadFoodDb();
     if (category && category !== "הכל") {
       rows = rows.filter((r) => r.category === category);
     }
+    if (pantrySearch) {
+      rows = rows.filter(
+        (r) => !isFoodDbCategoryExcludedFromPantry(r.category ?? ""),
+      );
+    }
   }
 
   if (q.length >= 2) {
-    rows = rows.filter((r) => matchesAllQueryWords(r.name ?? "", q));
+    if (!pantrySearch) {
+      rows = rows.filter((r) => matchesAllQueryWords(r.name ?? "", q));
+    }
   } else {
     rows = sortRows(rows, sort);
   }

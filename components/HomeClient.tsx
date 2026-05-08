@@ -1848,6 +1848,17 @@ export function HomeClient({ mode = "dashboard" }: { mode?: "dashboard" | "journ
           </div>
         </div>
 
+        <Link
+          href="/menu-builder"
+          className="block w-full rounded-xl border-2 border-[var(--border-cherry-soft)] bg-white py-3 text-center text-sm font-extrabold text-[var(--cherry)] shadow-sm transition hover:bg-[var(--cherry-muted)]/30 active:scale-[0.99]"
+        >
+          בני לי תפריט ✨
+        </Link>
+        <p className="mt-2 text-center text-xs font-semibold leading-snug text-[var(--stem)]/70">
+          נכנסים לבונה התפריט; אם המזווה עדיין לא מלא — נעבור קודם למזווה. בסוף
+          המזווה יש כפתור לבניית התפריט.
+        </p>
+
         <CalorieHeroRing
           target={target}
           total={total}

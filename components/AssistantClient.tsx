@@ -74,6 +74,8 @@ type AssistantResult = {
         protein: number;
         carbs: number;
         fat: number;
+        isSuggested?: boolean;
+        description?: string;
       }>;
     }>;
   } | null;
@@ -235,10 +237,17 @@ function MenuDraftCard({
               <ul className="mt-2 space-y-1 text-sm text-[var(--stem)]/90">
                 {m.items.map((it, j) => (
                   <li key={`menu-meal-${idx}-it-${j}`}>
-                    <span className="font-semibold">{it.name}</span>{" "}
+                    <span className="font-semibold">
+                      {it.isSuggested ? `✨ ${it.name}` : it.name}
+                    </span>{" "}
                     <span className="text-xs font-semibold text-[var(--stem)]/65">
                       ({it.portionLabel})
                     </span>
+                    {it.description ? (
+                      <span className="mt-0.5 block text-xs text-[var(--stem)]/70">
+                        {it.description}
+                      </span>
+                    ) : null}
                   </li>
                 ))}
               </ul>
@@ -723,17 +732,7 @@ export function AssistantClient() {
         fatPer100g: d.fatPer100g,
       })),
     };
-  }, [
-    profile.firstName,
-    profile.gender,
-    profile.weightKg,
-    profile.goalWeightKg,
-    profile.heightCm,
-    profile.age,
-    profile.deficit,
-    profile.activity,
-    exerciseRev,
-  ]);
+  }, [profile, exerciseRev]);
 
   function getLastMealCardForQuickAdd(): FoodSuggestionCard | null {
     for (let i = messages.length - 1; i >= 0; i -= 1) {
