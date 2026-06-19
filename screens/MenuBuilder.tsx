@@ -3,7 +3,23 @@
 import Link from "next/link";
 import { AnimatePresence, motion } from "framer-motion";
 import { DictDominantMacroGlyph } from "@/components/DictDominantMacroGlyph";
-import { RefreshCw } from "lucide-react";
+import { RefreshCw, GripVertical } from "lucide-react";
+import {
+  DndContext,
+  DragOverlay,
+  PointerSensor,
+  TouchSensor,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+  type DragStartEvent,
+} from "@dnd-kit/core";
+import {
+  SortableContext,
+  useSortable,
+  verticalListSortingStrategy,
+} from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
 import {
   useCallback,
   useEffect,
@@ -29,6 +45,7 @@ import {
   type DictionaryItem,
   type MealPreset,
 } from "@/lib/storage";
+import { addSavedMenu } from "@/lib/menuStorage";
 import {
   allPantryDictionaryIds,
   assignTreatMealSlotsForDictionary,
@@ -136,6 +153,102 @@ function ToastBanner({ text }: { text: string }) {
     >
       {text}
     </div>
+  );
+}
+
+type SortableLineItemProps = {
+  line: { id: string; food: { food: string }; grams: number; calories: number; proteinG: number; fatG: number; carbsG: number };
+  mealIndex: number;
+  isDeleting: boolean;
+  onDelete: () => void;
+  onCancelDelete: () => void;
+  onOpenSwap: () => void;
+  onLongPressStart: () => void;
+  onLongPressEnd: () => void;
+  macroColors: { protein: string; fat: string; carbs: string; border: string; cherry: string; stemDeep: string; stem: string };
+};
+
+function SortableLineItem({
+  line,
+  isDeleting,
+  onDelete,
+  onCancelDelete,
+  onOpenSwap,
+  onLongPressStart,
+  onLongPressEnd,
+  macroColors,
+}: SortableLineItemProps) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: line.id });
+  const style: React.CSSProperties = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    borderColor: macroColors.border,
+    opacity: isDragging ? 0.4 : 1,
+  };
+
+  return (
+    <li
+      ref={setNodeRef}
+      style={style}
+      className="relative flex flex-wrap items-start justify-between gap-2 border-b border-dashed pb-2 last:border-b-0 select-none"
+      onPointerDown={onLongPressStart}
+      onPointerUp={onLongPressEnd}
+      onPointerCancel={onLongPressEnd}
+    >
+      {isDeleting ? (
+        <div className="absolute inset-0 z-10 flex items-center justify-center gap-3 rounded-xl bg-white/97">
+          <button
+            type="button"
+            className="rounded-xl px-5 py-2 text-sm font-extrabold text-white"
+            style={{ backgroundColor: macroColors.cherry }}
+            onClick={(e) => { e.stopPropagation(); onDelete(); }}
+          >
+            מחק
+          </button>
+          <button
+            type="button"
+            className="rounded-xl border-2 px-4 py-2 text-sm font-bold"
+            style={{ borderColor: macroColors.border, color: macroColors.stemDeep }}
+            onClick={(e) => { e.stopPropagation(); onCancelDelete(); }}
+          >
+            ביטול
+          </button>
+        </div>
+      ) : null}
+      <div
+        className="flex cursor-grab touch-none items-center self-center pr-1 text-gray-300 active:cursor-grabbing"
+        {...attributes}
+        {...listeners}
+        onPointerDown={(e) => {
+          e.stopPropagation();
+          if (listeners?.onPointerDown) listeners.onPointerDown(e);
+        }}
+      >
+        <GripVertical className="h-4 w-4" />
+      </div>
+      <div className="min-w-0 flex-1">
+        <p className="font-bold text-[var(--text,#333)]">{line.food.food}</p>
+        <p className="text-sm text-gray-600">
+          {line.grams} ג׳ · {line.calories} קל׳
+        </p>
+        <p className="mt-1 text-xs font-semibold">
+          <span style={{ color: macroColors.protein }}>ח׳ {line.proteinG}ג׳</span>
+          {" · "}
+          <span style={{ color: macroColors.fat }}>ש׳ {line.fatG}ג׳</span>
+          {" · "}
+          <span style={{ color: macroColors.carbs }}>פ׳ {line.carbsG}ג׳</span>
+        </p>
+      </div>
+      <button
+        type="button"
+        className="shrink-0 rounded-xl border-2 bg-white p-2 transition hover:bg-gray-50 active:scale-95"
+        style={{ borderColor: macroColors.border, color: macroColors.stem }}
+        aria-label="בחר מהמזווה"
+        onClick={(e) => { e.stopPropagation(); onOpenSwap(); }}
+      >
+        <RefreshCw className="h-5 w-5" strokeWidth={2.2} />
+      </button>
+    </li>
   );
 }
 
@@ -1767,6 +1880,16 @@ export default function MenuBuilder() {
   const [aiSwapSuggestion, setAiSwapSuggestion] = useState<NonNullable<NonNullable<AiMenuDraft>["meals"][number]["items"][number]> | null>(null);
   const [aiSwapSearch, setAiSwapSearch] = useState("");
   const [aiSwapLoading, setAiSwapLoading] = useState(false);
+  const [localSwapTarget, setLocalSwapTarget] = useState<{ mealIndex: number; lineId: string } | null>(null);
+  const [localSwapSearch, setLocalSwapSearch] = useState("");
+  const [localDeleteTarget, setLocalDeleteTarget] = useState<{ mealIndex: number; lineId: string } | null>(null);
+  const [aiDeleteTarget, setAiDeleteTarget] = useState<{ mealIndex: number; itemIndex: number } | null>(null);
+  const longPressTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [activeDragId, setActiveDragId] = useState<string | null>(null);
+  const dndSensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
+    useSensor(TouchSensor, { activationConstraint: { delay: 200, tolerance: 8 } }),
+  );
 
   const treatFiltered = useMemo(
     () => filterDict(dictionary, treatSearch).slice(0, 24),
@@ -2307,6 +2430,121 @@ export default function MenuBuilder() {
     [dictionary, presetMap],
   );
 
+  const deleteLine = useCallback((mealIndex: number, lineId: string) => {
+    setMeals((prev) => {
+      if (!prev) return prev;
+      return prev.map((m, mi) =>
+        mi !== mealIndex ? m : { ...m, lines: m.lines.filter((l) => l.id !== lineId) },
+      );
+    });
+    setLocalDeleteTarget(null);
+  }, []);
+
+  const swapLineManual = useCallback(
+    (mealIndex: number, lineId: string, food: DictionaryItem) => {
+      setMeals((prev) => {
+        if (!prev) return prev;
+        const next = prev.map((m) => ({ ...m, lines: [...m.lines] }));
+        const meal = next[mealIndex];
+        if (!meal) return prev;
+        const lineIdx = meal.lines.findIndex((l) => l.id === lineId);
+        if (lineIdx < 0) return prev;
+        const oldGrams = meal.lines[lineIdx]!.grams;
+        const newLine = lineFromItem(food, oldGrams);
+        meal.lines[lineIdx] = newLine;
+        return next;
+      });
+      setLocalSwapTarget(null);
+      setLocalSwapSearch("");
+    },
+    [],
+  );
+
+  const deleteAiItem = useCallback((mealIndex: number, itemIndex: number) => {
+    setAiMenuDraft((prev) => {
+      if (!prev) return prev;
+      const next = {
+        ...prev,
+        meals: prev.meals.map((m, mi) =>
+          mi !== mealIndex
+            ? m
+            : { ...m, items: m.items.filter((_, ii) => ii !== itemIndex) },
+        ),
+      };
+      return recalcAiMenuDraft(next);
+    });
+    setAiDeleteTarget(null);
+  }, []);
+
+  const saveLocalMenu = useCallback(() => {
+    if (!meals) return;
+    const mealData = meals.map((m) => ({
+      name: m.title,
+      calories: m.lines.reduce((s, l) => s + l.calories, 0),
+      protein: m.lines.reduce((s, l) => s + l.proteinG, 0),
+      carbs: m.lines.reduce((s, l) => s + l.carbsG, 0),
+      fat: m.lines.reduce((s, l) => s + l.fatG, 0),
+      items: m.lines.map((l) => ({
+        name: l.food.food,
+        portionLabel: `${l.grams} ג׳`,
+        calories: l.calories,
+        protein: l.proteinG,
+        carbs: l.carbsG,
+        fat: l.fatG,
+      })),
+    }));
+    addSavedMenu({
+      title: `תפריט ${new Date().toLocaleDateString("he-IL")}`,
+      meals: mealData,
+      totalCalories: mealData.reduce((t, m) => t + m.calories, 0),
+      totalProtein: mealData.reduce((t, m) => t + m.protein, 0),
+      totalCarbs: mealData.reduce((t, m) => t + m.carbs, 0),
+      totalFat: mealData.reduce((t, m) => t + m.fat, 0),
+    });
+    setToast("התפריט נשמר בהצלחה!");
+  }, [meals]);
+
+  const handleDragEnd = useCallback(
+    (event: DragEndEvent) => {
+      setActiveDragId(null);
+      const { active, over } = event;
+      if (!over || active.id === over.id) return;
+      const activeId = String(active.id);
+      const overId = String(over.id);
+      setMeals((prev) => {
+        if (!prev) return prev;
+        let sourceMealIdx = -1;
+        let sourceLineIdx = -1;
+        for (let mi = 0; mi < prev.length; mi++) {
+          const li = prev[mi]!.lines.findIndex((l) => l.id === activeId);
+          if (li >= 0) { sourceMealIdx = mi; sourceLineIdx = li; break; }
+        }
+        if (sourceMealIdx < 0) return prev;
+        let targetMealIdx = -1;
+        let targetLineIdx = -1;
+        for (let mi = 0; mi < prev.length; mi++) {
+          const li = prev[mi]!.lines.findIndex((l) => l.id === overId);
+          if (li >= 0) { targetMealIdx = mi; targetLineIdx = li; break; }
+          if (`meal-drop-${mi}` === overId) { targetMealIdx = mi; break; }
+        }
+        if (targetMealIdx < 0) return prev;
+        const next = prev.map((m) => ({ ...m, lines: [...m.lines] }));
+        const [movedLine] = next[sourceMealIdx]!.lines.splice(sourceLineIdx, 1);
+        if (!movedLine) return prev;
+        if (targetLineIdx >= 0) {
+          const insertIdx = sourceMealIdx === targetMealIdx && targetLineIdx > sourceLineIdx
+            ? targetLineIdx
+            : targetLineIdx;
+          next[targetMealIdx]!.lines.splice(insertIdx, 0, movedLine);
+        } else {
+          next[targetMealIdx]!.lines.push(movedLine);
+        }
+        return next;
+      });
+    },
+    [],
+  );
+
   useEffect(() => {
     if (step === 3 && celebrationMode !== "home") {
       setStep(4);
@@ -2569,9 +2807,41 @@ export default function MenuBuilder() {
                 {meal.items.map((it, ii) => (
                   <li
                     key={`${it.name}-${ii}`}
-                    className="flex flex-wrap items-start justify-between gap-2 border-b border-dashed pb-2 last:border-b-0"
+                    className="relative flex flex-wrap items-start justify-between gap-2 border-b border-dashed pb-2 last:border-b-0 select-none"
                     style={{ borderColor: colors.borderCherrySoft }}
+                    onPointerDown={() => {
+                      longPressTimerRef.current = setTimeout(
+                        () => setAiDeleteTarget({ mealIndex: mi, itemIndex: ii }),
+                        550,
+                      );
+                    }}
+                    onPointerUp={() => {
+                      if (longPressTimerRef.current) clearTimeout(longPressTimerRef.current);
+                    }}
+                    onPointerCancel={() => {
+                      if (longPressTimerRef.current) clearTimeout(longPressTimerRef.current);
+                    }}
                   >
+                    {aiDeleteTarget?.mealIndex === mi && aiDeleteTarget.itemIndex === ii ? (
+                      <div className="absolute inset-0 z-10 flex items-center justify-center gap-3 rounded-xl bg-white/97">
+                        <button
+                          type="button"
+                          className="rounded-xl px-5 py-2 text-sm font-extrabold text-white"
+                          style={{ backgroundColor: colors.cherry }}
+                          onClick={(e) => { e.stopPropagation(); deleteAiItem(mi, ii); }}
+                        >
+                          מחק
+                        </button>
+                        <button
+                          type="button"
+                          className="rounded-xl border-2 px-4 py-2 text-sm font-bold"
+                          style={{ borderColor: colors.borderCherrySoft, color: colors.stemDeep }}
+                          onClick={(e) => { e.stopPropagation(); setAiDeleteTarget(null); }}
+                        >
+                          ביטול
+                        </button>
+                      </div>
+                    ) : null}
                     <div className="min-w-0 flex-1">
                       <p className="font-bold text-[var(--text,#333)]">
                         {it.isSuggested ? `✨ ${it.name}` : it.name}
@@ -2627,7 +2897,8 @@ export default function MenuBuilder() {
                             color: colors.stem,
                           }}
                           aria-label="החלפה חכמה"
-                          onClick={() => {
+                          onClick={(e) => {
+                            e.stopPropagation();
                             setAiSwapTarget({ mealIndex: mi, itemIndex: ii });
                             setAiSwapSuggestion(null);
                             setAiSwapSearch("");
@@ -2977,70 +3248,94 @@ export default function MenuBuilder() {
             </ul>
           </div>
         ) : null}
-        <div className="space-y-4">
-          {meals.map((meal, mi) => {
-            const mealTotalKcal = meal.lines.reduce((s, l) => s + l.calories, 0);
-            const mealHeaderClass =
-              "text-base font-extrabold text-[var(--stem-deep)]";
-            return (
-            <div
-              key={meal.title}
-              className="rounded-2xl border-2 p-3 shadow-sm"
-              style={{
-                borderColor: colors.borderCherrySoft,
-                backgroundColor: colors.white,
-              }}
-            >
-              <div
-                className={`mb-2 flex flex-row items-center justify-between gap-2 border-b pb-2 ${mealHeaderClass}`}
-              >
-                <span>{meal.title}</span>
-                <span className="tabular-nums" dir="ltr">
-                  {mealTotalKcal} קל׳
-                </span>
-              </div>
-              <ul className="space-y-3">
-                {meal.lines.map((line) => (
-                  <li
-                    key={line.id}
-                    className="flex flex-wrap items-start justify-between gap-2 border-b border-dashed pb-2 last:border-b-0"
-                    style={{ borderColor: colors.borderCherrySoft }}
-                  >
-                    <div className="min-w-0 flex-1">
-                      <p className="font-bold text-[var(--text,#333)]">{line.food.food}</p>
-                      <p className="text-sm text-gray-600">
-                        {line.grams} ג׳ · {line.calories} קל׳
-                      </p>
-                      <p className="mt-1 text-xs font-semibold">
-                        <span style={{ color: colors.macroProtein }}>ח׳ {line.proteinG}ג׳</span>
-                        {" · "}
-                        <span style={{ color: colors.macroFat }}>ש׳ {line.fatG}ג׳</span>
-                        {" · "}
-                        <span style={{ color: colors.macroCarbs }}>פ׳ {line.carbsG}ג׳</span>
-                      </p>
+        <DndContext
+          sensors={dndSensors}
+          onDragStart={(e: DragStartEvent) => setActiveDragId(String(e.active.id))}
+          onDragEnd={handleDragEnd}
+          onDragCancel={() => setActiveDragId(null)}
+        >
+          <div className="space-y-4">
+            {meals.map((meal, mi) => {
+              const mealTotalKcal = meal.lines.reduce((s, l) => s + l.calories, 0);
+              const mealHeaderClass = "text-base font-extrabold text-[var(--stem-deep)]";
+              const lineIds = meal.lines.map((l) => l.id);
+              return (
+                <div
+                  key={meal.title}
+                  id={`meal-drop-${mi}`}
+                  className="rounded-2xl border-2 p-3 shadow-sm"
+                  style={{ borderColor: colors.borderCherrySoft, backgroundColor: colors.white }}
+                >
+                  <div className={`mb-2 flex flex-row items-center justify-between gap-2 border-b pb-2 ${mealHeaderClass}`}>
+                    <span>{meal.title}</span>
+                    <span className="tabular-nums" dir="ltr">{mealTotalKcal} קל׳</span>
+                  </div>
+                  <SortableContext items={lineIds} strategy={verticalListSortingStrategy}>
+                    <ul className="space-y-3">
+                      {meal.lines.map((line) => (
+                        <SortableLineItem
+                          key={line.id}
+                          line={line}
+                          mealIndex={mi}
+                          isDeleting={
+                            localDeleteTarget?.mealIndex === mi &&
+                            localDeleteTarget.lineId === line.id
+                          }
+                          onDelete={() => deleteLine(mi, line.id)}
+                          onCancelDelete={() => setLocalDeleteTarget(null)}
+                          onOpenSwap={() => {
+                            setLocalSwapTarget({ mealIndex: mi, lineId: line.id });
+                            setLocalSwapSearch("");
+                          }}
+                          onLongPressStart={() => {
+                            longPressTimerRef.current = setTimeout(
+                              () => setLocalDeleteTarget({ mealIndex: mi, lineId: line.id }),
+                              550,
+                            );
+                          }}
+                          onLongPressEnd={() => {
+                            if (longPressTimerRef.current) clearTimeout(longPressTimerRef.current);
+                          }}
+                          macroColors={{
+                            protein: colors.macroProtein,
+                            fat: colors.macroFat,
+                            carbs: colors.macroCarbs,
+                            border: colors.borderCherrySoft,
+                            cherry: colors.cherry,
+                            stemDeep: colors.stemDeep,
+                            stem: colors.stem,
+                          }}
+                        />
+                      ))}
+                    </ul>
+                  </SortableContext>
+                </div>
+              );
+            })}
+          </div>
+          <DragOverlay>
+            {activeDragId ? (() => {
+              for (const meal of meals) {
+                const line = meal.lines.find((l) => l.id === activeDragId);
+                if (line) {
+                  return (
+                    <div className="rounded-xl border-2 bg-white px-3 py-2 shadow-xl opacity-90" style={{ borderColor: colors.stem }}>
+                      <p className="font-bold text-sm">{line.food.food}</p>
+                      <p className="text-xs text-gray-500">{line.grams} ג׳ · {line.calories} קל׳</p>
                     </div>
-                    <button
-                      type="button"
-                      className="shrink-0 rounded-xl border-2 bg-white p-2 transition hover:bg-gray-50 active:scale-95"
-                      style={{ borderColor: colors.borderCherrySoft, color: colors.stem }}
-                      aria-label="החלפה חכמה"
-                      onClick={() => swapLine(mi, line.id)}
-                    >
-                      <RefreshCw className="h-5 w-5" strokeWidth={2.2} />
-                    </button>
-                  </li>
-                ))}
-              </ul>
-            </div>
-            );
-          })}
-        </div>
+                  );
+                }
+              }
+              return null;
+            })() : null}
+          </DragOverlay>
+        </DndContext>
         <div className="mt-6 grid grid-cols-2 gap-2">
           <button
             type="button"
             className={`rounded-xl border-2 py-3 ${typography.buttonLabel}`}
             style={{ borderColor: colors.stem, color: colors.stemDeep, backgroundColor: colors.white }}
-            onClick={() => window.alert("שמירת תפריט — יחובר בהמשך")}
+            onClick={() => saveLocalMenu()}
           >
             שמור תפריט
           </button>
@@ -3054,6 +3349,67 @@ export default function MenuBuilder() {
           </button>
         </div>
         {toast ? <ToastBanner text={toast} /> : null}
+
+        {localSwapTarget ? (
+          <div
+            className="fixed inset-0 z-[200] flex items-end justify-center bg-black/40 p-4"
+            role="dialog"
+            aria-modal="true"
+            onClick={() => { setLocalSwapTarget(null); setLocalSwapSearch(""); }}
+          >
+            <div
+              className="w-full max-w-lg rounded-2xl border-2 bg-white p-4 shadow-2xl"
+              style={{ borderColor: colors.borderCherrySoft }}
+              onClick={(e) => e.stopPropagation()}
+            >
+              <p className="mb-3 text-base font-extrabold" style={{ color: colors.stemDeep }}>
+                בחרי מנה חלופית מהמזווה
+              </p>
+              <input
+                type="search"
+                value={localSwapSearch}
+                onChange={(e) => setLocalSwapSearch(e.target.value)}
+                placeholder="חיפוש במזווה…"
+                autoFocus
+                className="mb-2 w-full rounded-xl border-2 px-3 py-2 text-sm"
+                style={{ borderColor: colors.borderCherrySoft }}
+              />
+              <ul className="max-h-64 overflow-auto rounded-xl border" style={{ borderColor: colors.borderCherrySoft }}>
+                {rankDictionaryByQuery(dictionary, localSwapSearch)
+                  .slice(0, 120)
+                  .map((d) => (
+                    <li key={`lswap-${d.id}`}>
+                      <button
+                        type="button"
+                        className="flex w-full items-center justify-between px-3 py-2.5 text-start text-sm hover:bg-gray-50 active:bg-gray-100 border-b border-dashed last:border-b-0"
+                        style={{ borderColor: colors.borderCherrySoft }}
+                        onClick={() =>
+                          swapLineManual(
+                            localSwapTarget.mealIndex,
+                            localSwapTarget.lineId,
+                            d,
+                          )
+                        }
+                      >
+                        <span className="font-semibold">{d.food}</span>
+                        <span className="shrink-0 text-xs text-gray-500">
+                          {macroKcal100(d)} קל׳ ל־100ג׳
+                        </span>
+                      </button>
+                    </li>
+                  ))}
+              </ul>
+              <button
+                type="button"
+                className="mt-3 w-full rounded-xl border-2 py-2.5 text-sm font-bold"
+                style={{ borderColor: colors.borderCherrySoft, color: colors.stemDeep }}
+                onClick={() => { setLocalSwapTarget(null); setLocalSwapSearch(""); }}
+              >
+                סגור
+              </button>
+            </div>
+          </div>
+        ) : null}
       </div>
     );
   }
