@@ -150,6 +150,7 @@ html[data-app-theme="blueberry"] input[type="checkbox"] {
 }
 
 html {
+  font-size: 18px;
   scroll-behavior: smooth;
   /** BiDi: מניעת הידחפת מותג לטיני/מספרים בין מקטעי עברית — כל האפליקציה, כל ערכות הנושא */
   unicode-bidi: isolate;

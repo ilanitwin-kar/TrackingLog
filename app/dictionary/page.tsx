@@ -2231,28 +2231,6 @@ export default function DictionaryPage() {
                               >
                                 {gf(gender, "עריכת מוצר", "עריכת מוצר")}
                               </button>
-                              <button
-                                type="button"
-                                role="menuitem"
-                                className="flex w-full px-3 py-2.5 text-start text-sm font-bold text-[var(--stem)] transition hover:bg-[var(--cherry-muted)]/45"
-                                onClick={(e) => {
-                                  e.preventDefault();
-                                  e.stopPropagation();
-                                  setDictRowMenuOpenId(null);
-                                  void onCartDictionaryItem(d);
-                                }}
-                              >
-                                {gf(
-                                  gender,
-                                  "העברה לסל הקניות",
-                                  "העברה לסל הקניות"
-                                )}
-                                {justAddedId === `shop:${d.id}` ? (
-                                  <span className="ms-1 text-xs font-extrabold text-[var(--stem)]">
-                                    ✓
-                                  </span>
-                                ) : null}
-                              </button>
                             </div>
                           ) : null}
                         </div>
@@ -2490,13 +2468,6 @@ export default function DictionaryPage() {
                   {dictionaryActionItem.food}
                 </p>
               ) : null}
-              <p className="mt-3 text-center text-xs text-[var(--text)]/75">
-                {gf(
-                  gender,
-                  "משיכה ימינה עד הסוף — מחיקה מהמילון (לחיצה ימנית כאן לאישור).",
-                  "משיכה ימינה עד הסוף — מחיקה מהמילון (לחיצה ימנית כאן לאישור)."
-                )}
-              </p>
               <div className="mt-4 space-y-2">
                 <button
                   type="button"
@@ -2504,6 +2475,19 @@ export default function DictionaryPage() {
                   onClick={() => confirmDictionaryDeleteItem()}
                 >
                   {gf(gender, "מחיקה מהמילון", "מחיקה מהמילון")}
+                </button>
+                <button
+                  type="button"
+                  className="flex w-full items-center justify-center gap-2 rounded-xl border border-[var(--border-cherry-soft)] px-3 py-3 text-sm font-bold text-[var(--stem)] transition hover:bg-[var(--cherry-muted)]/40"
+                  onClick={() => {
+                    void onCartDictionaryItem(dictionaryActionItem);
+                    setDictionaryActionItem(null);
+                  }}
+                >
+                  העברה לסל הקניות
+                  {justAddedId === `shop:${dictionaryActionItem.id}` ? (
+                    <span className="text-xs font-extrabold">✓</span>
+                  ) : null}
                 </button>
                 <button
                   type="button"
